@@ -1,0 +1,152 @@
+QUIET   ?= @
+
+cc       = avr32-gcc
+nm       = avr32-nm
+objcopy  = avr32-objcopy
+jtag     = avr32program
+dfu      = dfu-programmer
+objs     = $(SOURCES:.c=.o)
+sleepusb = 1
+
+inc_dir = $(BASE)/bins/include
+lib_dir = $(BASE)/bins/lib
+
+startup_file = $(lib_dir)/crt0.o
+
+lboard = $(shell echo $(BOARD) | tr "[:upper:]" "[:lower:]")
+target_elf = $(TARGET).elf
+target_hex = $(TARGET).hex
+libraries = $(addsuffix -$(lboard),$(LIBRARIES))
+last_goal = $(lastword $(MAKECMDGOALS))
+local_newlib = $(addsuffix -$(lboard),newlib)
+fs = $(addsuffix -$(lboard),$(findstring fat,$(libraries)))
+
+ifeq ($(BOARD),EVK1100)
+arch = ucr1
+chip = uc3a0512es
+linkfile = at32uc3a0512es.x
+# Flash memories: [{cfi|internal}@address,size]...
+flash = internal@0x80000000,512Kb
+# Clock source to use when programming: [{xtal|extclk|int}]
+prog_clock = xtal
+else
+ifeq ($(BOARD),CROONER_1_0)
+arch = ucr2
+chip = uc3a1512
+linkfile = at32uc3a1512.x
+flash = internal@0x80000000,512Kb
+prog_clock = xtal
+else
+ifeq ($(BOARD),CROONER_2_0)
+arch = ucr2
+chip = uc3a0512
+linkfile = at32uc3a0512.x
+flash = internal@0x80000000,512Kb
+prog_clock = xtal
+else
+$(error "invalid board name")
+endif
+endif
+endif
+
+cflags = \
+    -march=$(arch) \
+    -mpart=$(chip) \
+    -Wall \
+    -O0 -g \
+    -ffunction-sections \
+    -fdata-sections \
+    -D__IEEE_BIG_ENDIAN \
+    -fshort-enums \
+    -DBOARD=$(BOARD) \
+    $(CFLAGS)
+
+ldflags = \
+    -T$(linkfile) \
+    -nostartfiles \
+    $(lib_dir)/syscalls.o \
+    -L$(lib_dir) \
+    -Wl,--no-gc-sections \
+    $(addprefix -l,$(local_newlib)) \
+    $(addprefix -l,$(fs)) \
+    -Wl,--gc-sections \
+
+ifdef NANO_BUFFER
+ldflags += -Wl,--defsym -Wl,__nano_buffer_size__=$(NANO_BUFFER)
+endif
+
+ifdef SRAM_CODEC_SIZE
+ldflags += -Wl,--defsym -Wl,__sram_codec_size__=$(SRAM_CODEC_SIZE)
+endif
+
+ifdef SDRAM_CODEC_SIZE
+ldflags += -Wl,--defsym -Wl,__sdram_codec_size__=$(SDRAM_CODEC_SIZE)
+endif
+
+
+includes = \
+    -I/usr/avr32/include \
+    -I$(inc_dir)
+
+ifdef VERIFY
+verify = -v
+dfu_verify =
+else
+verify =
+dfu_verify = --suppress-validation
+endif
+
+all :: $(target_hex)
+
+$(target_hex) : $(target_elf)
+	$(QUIET)$(objcopy) -O ihex $< $@
+
+$(target_elf) : $(objs) $(addsuffix .a,$(addprefix $(lib_dir)/lib,$(libraries) $(fs) $(local_newlib))) $(BASE)/apps/make/$(linkfile)
+	$(QUIET)$(cc) $(cflags) $(ldflags) -o $@ $(objs) $(addprefix -l,$(libraries)) $(startup_file)
+
+.c.o :
+	$(QUIET)$(cc) $(cflags) -g -c $(includes) -o $@ $<
+
+.PHONY: clean
+clean ::
+	$(QUIET)rm -f $(objs) $(target_elf) $(target_hex)
+
+################################################################################
+#                          JTAG Programming / Commands                         #
+################################################################################
+simple_jtag_commands = jtag-halt jtag-cpuinfo jtag-chiperase jtag-reset jtag-secureflash jtag-run
+.PHONY: $(simple_jtag_commands)
+$(simple_jtag_commands) :
+	@echo "Performing: $@"
+	$(QUIET)$(jtag) $(subst jtag-,,$@)
+ifneq ($(filter $(last_goal),$(simple_jtag_commands)),$(last_goal))
+	$(QUIET)sleep $(sleepusb)
+endif
+
+.PHONY: jtag-program
+jtag-program : jtag-halt $(target_elf)
+	@echo "Performing: $@"
+	$(QUIET)$(jtag) --part $(chip) program -f$(flash) -c$(prog_clock) -e $(verify) -R $(if $(findstring run,$(MAKECMDGOALS)),-r) $(target_elf)
+ifneq ($(filter $(last_goal),program),$(last_goal))
+	$(QUIET)sleep $(sleepusb)
+endif
+
+################################################################################
+#                          DFU Programming / Commands                          #
+################################################################################
+.PHONY: erase
+erase :
+	@echo "Erasing..."
+	$(QUIET)$(dfu) $(addprefix at32,$(chip)) erase $(dfu_verify)
+
+.PHONY: flash
+flash : $(target_hex) erase
+	@echo "Flashing: $@"
+	$(QUIET)$(dfu) $(addprefix at32,$(chip)) flash $(dfu_verify) $(target_hex)
+
+.PHONY: run
+run : $(target_hex)
+	@echo "Starting..."
+	$(QUIET)$(dfu) $(addprefix at32,$(chip)) reset
+
+

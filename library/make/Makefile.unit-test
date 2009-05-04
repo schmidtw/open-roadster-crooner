@@ -1,0 +1,61 @@
+cc   = gcc
+gcov = gcov -c -b
+copy = cp
+rm   = rm -f
+
+cflags        = -Wall -g -fprofile-arcs -ftest-coverage
+ldflags       = -lcunit
+extension     = ut-o
+inc_suffix    = __INCLUDES
+cflags_suffix = __CFLAGS
+source_suffix = __SOURCES
+
+.DEFAULT : unit-test
+.PHONY : unit-test clean cleanall all install
+unit-test :: $(addsuffix _run,$(TESTS))
+clean     :: $(addsuffix _clean,$(TESTS))
+cleanall  :: clean
+all ::
+install ::
+
+# $(1) = test name
+# $(2) = full filename and path
+define FILES2TEST_template
+$$(addsuffix -$(1).$(extension),$$(basename $$(notdir $(2)))) : $(2)
+	$(QUIET)$(cc) $(cflags) $$($(addsuffix $(cflags_suffix),$(1))) $($(addsuffix $(inc_suffix),$(1)):%=-I%) -c -o $$@ $$<
+	$(QUIET)$(copy) $$< ./$(basename $(notdir $(2)))-$(1)$(suffix $(2))
+endef
+
+# $(1) = test name
+define TESTFILE_template
+$(1) : $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix)))))
+	$(QUIET)$(cc) $(cflags) $$($(addsuffix $(cflags_suffix),$(1))) $$($(addsuffix $(inc_suffix),$(1)):%=-I%) -o $$@ $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix))))) $(ldflags)
+endef
+
+# $(1) = test name
+define RUN_template
+.PHONY : $(1)_run
+$(1)_run : $(1)
+	./$(1)
+	$(QUIET)$(gcov) $(1) *-$(1).c
+endef
+
+# $(1) = test name
+define CLEAN_template
+.PHONY : $(1)_clean
+$(1)_clean :
+	$(QUIET)$(rm) $(1).gcda $(1).gcno $(1).c.gcov $(1) $(addsuffix -$(1).*,$(basename $(notdir $($(1)$(source_suffix)))))
+	$(QUIET)$(rm) $(addsuffix .*.gcov,$(basename $(notdir $($(1)$(source_suffix)))))
+endef
+
+# invoke the FILES2TEST_templates
+$(foreach test,$(TESTS),$(foreach file, $($(test)$(source_suffix)),$(eval $(call FILES2TEST_template,$(test),$(file)))))
+
+# invoke the TESTFILE_templates
+$(foreach test,$(TESTS),$(eval $(call TESTFILE_template,$(test))))
+
+# invoke the CLEAN_templates
+$(foreach test,$(TESTS),$(eval $(call CLEAN_template,$(test))))
+
+# invoke the RUN_templates
+$(foreach unit-test,$(TESTS),$(eval $(call RUN_template,$(unit-test))))

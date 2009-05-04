@@ -1,0 +1,22 @@
+Debug "Startup complete."
+
+LED is white for ~0.5 seconds
+LED is off for ~0.5 seconds
+LED is red for ~0.5 seconds
+LED is green for ~0.5 seconds
+LED is blue for ~0.5 seconds
+LED is yellow for ~0.5 seconds
+LED is magenta for ~0.5 seconds
+LED is cyan for ~0.5 seconds
+
+LED is blue for some period of time
+LED is yellow for some period of time
+LED is cyan for some period of time
+LED is white for some period of time
+LED is green for a short period of time
+
+If the LED is solid red for a long time, SDRAM failed.
+
+Serial text should repeat every 10 seconds.
+
+Audio should play for 1 second, then be muted for 1 second & repeat.
