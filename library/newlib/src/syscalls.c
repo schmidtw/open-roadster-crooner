@@ -52,10 +52,14 @@ static void init_debug_usart( void )
         .parity       = USART_PARITY__NONE,
         .stop_bits    = USART_STOPBITS__1,
         .mode         = USART_MODE__NORMAL,
-        .tx_only      = false,
         .hw_handshake = false,
         .map          = debug_usart_map,
-        .map_size     = sizeof(debug_usart_map) / sizeof(gpio_map_t)
+        .map_size     = sizeof(debug_usart_map) / sizeof(gpio_map_t),
+        .dir          = USART_DIRECTION__OUT,
+        .new_char_fn  = NULL,
+        .timeout_us   = 0,
+        .periodic     = false,
+        .cts_fn       = NULL
     };
 
     usart_init_rs232( DEBUG_USART, &debug_usart_options );
@@ -124,24 +128,6 @@ void _exit( int code )
 
 int _read( int file, char *ptr, int len )
 {
-    if( 0 == file ) {
-        int i, c;
-
-        for( i = 0; i < len; i++ ) {
-            if( BSP_RETURN_OK == usart_read_char(DEBUG_USART, &c) ) {
-                ptr[i] = (char) i;
-            } else {
-                return i;
-            }
-        }
-
-        return len;
-    }
-
-    if( (1 == file) || (2 == file) ) {
-        return -1;
-    }
-
     return _file_read( file, ptr, len );
 }
 

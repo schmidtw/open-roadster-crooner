@@ -61,16 +61,34 @@ typedef enum {
     USART_DATA_BITS__9  = 4
 } usart_data_bits_t;
 
+typedef enum {
+    USART_DIRECTION__IN,
+    USART_DIRECTION__OUT,
+    USART_DIRECTION__BOTH
+} usart_io_direction_t;
+
+typedef void (*usart_new_char_handler_t)( const int c );
+typedef void (*usart_cts_change_handler_t)( const bool cts );
+
 typedef struct {
+    /* Overall settings. */
     const uint32_t baudrate;
     const usart_data_bits_t data_bits;
     const usart_parity_t parity;
     const usart_stop_bits_t stop_bits;
     const usart_mode_t mode;
-    const bool tx_only;
     const bool hw_handshake;
     const size_t map_size;
     const gpio_map_t *map;
+    const usart_io_direction_t dir;
+
+    /* RX settings */
+    const usart_new_char_handler_t new_char_fn;
+    const uint32_t timeout_us;
+    const bool periodic;
+
+    /* TX settings */
+    const usart_cts_change_handler_t cts_fn;
 } usart_options_t;
 
 /**
@@ -106,7 +124,18 @@ bsp_status_t usart_init_rs232( volatile avr32_usart_t *usart,
  *      @retval true  Ready to transmit.
  *      @retval false Not ready to transmit or error.
  */
-__inline__ bool usart_tx_ready( volatile avr32_usart_t *usart );
+inline bool usart_tx_ready( volatile avr32_usart_t *usart );
+
+/**
+ *  Used to determine if the serial line is Clear To Send a character.
+ *
+ *  @param usart the USART to check
+ *
+ *  @return Status
+ *      @retval true  Clear to send.
+ *      @retval false Not Clear to send or error.
+ */
+inline bool usart_is_cts( volatile avr32_usart_t *usart );
 
 /**
  *  Used to write the character to the TX buffer if the hardware is
@@ -120,18 +149,5 @@ __inline__ bool usart_tx_ready( volatile avr32_usart_t *usart );
  *      @retval BSP_USART_TX_BUSY   USART is busy.
  */
 bsp_status_t usart_write_char( volatile avr32_usart_t *usart, int c );
-
-/**
- *  Used to read a character from the USART.
- *
- *  @param usart the USART to write to
- *  @param c the pointer to write the character to
- *
- *  @return Status
- *      @retval BSP_RETURN_OK       Success.
- *      @retval BSP_USART_RX_ERROR  There was an error reading the data.
- *      @retval BSP_USART_RX_EMPTY  No character to read.
- */
-bsp_status_t usart_read_char( volatile avr32_usart_t *usart, int *c );
 
 #endif

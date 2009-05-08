@@ -9,4 +9,5 @@ LIBRARIES = \
             file-stream \
             media-interface \
             media-flac \
+            ibus-physical \
             display
