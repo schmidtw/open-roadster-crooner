@@ -639,6 +639,7 @@ static bsp_status_t __select_and_command( const uint8_t command,
 
     MC_APPLY_Nec();
     MC_UNSELECT();
+    MC_WRITE_DUMMY();
 
     return status;
 }
@@ -650,6 +651,7 @@ static bsp_status_t __command( const uint8_t command,
     volatile avr32_pdca_channel_t *tx;
     uint8_t message[6];
     uint8_t retry;
+    uint8_t c;
 
     message[0] = 0x40 | (0x3f & command);
     message[1] = argument >> 24;
@@ -660,16 +662,12 @@ static bsp_status_t __command( const uint8_t command,
 
     transfer_done = false;
 
-    pdca_queue_buffer( PDCA_CHANNEL_ID_MC_TX, message, 6 );
-
-    tx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_TX];
-    /* Enable the transfer complete ISR */
-    tx->ier = AVR32_PDCA_TRC_MASK;
-    /* Enable the transfer. */
-    tx->cr = AVR32_PDCA_CR_ECLR_MASK | AVR32_PDCA_CR_TEN_MASK;
-    tx->isr;
-
-    MC_SUSPEND();
+    MC_WRITE( message[0] ); MC_READ8( &c );
+    MC_WRITE( message[1] ); MC_READ8( &c );
+    MC_WRITE( message[2] ); MC_READ8( &c );
+    MC_WRITE( message[3] ); MC_READ8( &c );
+    MC_WRITE( message[4] ); MC_READ8( &c );
+    MC_WRITE( message[5] ); MC_READ8( &c );
 
     /* Wait for a response - if no response has been
      * received after 8 attempts, the card has timed-out */
@@ -727,6 +725,7 @@ static bsp_status_t __send_card_to_idle_state( void )
         MC_WRITE_DUMMY();
         MC_APPLY_Nec();
         MC_UNSELECT();
+        MC_WRITE_DUMMY();
 
         if( 0x01 == r1 ) {
             return BSP_RETURN_OK;
@@ -884,6 +883,7 @@ static bsp_status_t __read_block( const uint8_t command,
 
     MC_APPLY_Nec();
     MC_UNSELECT();
+    MC_WRITE_DUMMY();
 
     return status;
 }
@@ -1092,6 +1092,7 @@ static bsp_status_t __wait_until_not_busy( void )
 
     MC_APPLY_Nec();
     MC_UNSELECT();
+    MC_WRITE_DUMMY();
 
     if( 0 == retry ) {
         return BSP_ERROR_TIMEOUT;
