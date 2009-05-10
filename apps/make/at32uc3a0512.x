@@ -279,7 +279,7 @@ SECTIONS
   .sram_heap         :
   {
     *(.sram_heap)
-    . = LENGTH(SRAM) - __stack_size__ - __sram_codec_size__ - __nano_buffer_size__ - ABSOLUTE(.);
+    . = LENGTH(SRAM) - __stack_size__ - __nano_buffer_size__ - ABSOLUTE(.);
   } >SRAM AT>SRAM :SRAM
   __sram_heap_end__ = .;
   .stack         ORIGIN(SRAM) + LENGTH(SRAM) - __stack_size__ :
