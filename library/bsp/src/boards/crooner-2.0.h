@@ -125,9 +125,9 @@
 /*----------------------------------------------------------------------------*/
 /* PDCA Interface                                                             */
 /*----------------------------------------------------------------------------*/
-#define PDCA_CHANNEL_ID_MC_RX   0
-#define PDCA_CHANNEL_ID_MC_TX   1
-#define PDCA_CHANNEL_ID_DAC     2
+#define PDCA_CHANNEL_ID_MC_RX   1
+#define PDCA_CHANNEL_ID_MC_TX   2
+#define PDCA_CHANNEL_ID_DAC     0
 #define PDCA_CHANNEL_ID_IBUS_TX 3
 
 /*----------------------------------------------------------------------------*/
