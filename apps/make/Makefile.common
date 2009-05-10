@@ -24,7 +24,6 @@ target_hex = $(TARGET).hex
 libraries = $(addsuffix -$(lboard),$(LIBRARIES))
 last_goal = $(lastword $(MAKECMDGOALS))
 local_newlib = $(addsuffix -$(lboard),newlib)
-fs = $(addsuffix -$(lboard),$(findstring fat,$(libraries)))
 
 ifeq ($(BOARD),EVK1100)
 arch = ucr1
@@ -74,7 +73,6 @@ ldflags = \
     -L$(lib_dir) \
     -Wl,--no-gc-sections \
     $(addprefix -l,$(local_newlib)) \
-    $(addprefix -l,$(fs)) \
     -Wl,--gc-sections \
 
 ifdef NANO_BUFFER
@@ -114,7 +112,7 @@ endif
 $(target_hex) : $(target_elf)
 	$(QUIET)$(objcopy) -O ihex $< $@
 
-$(target_elf) : $(objs) $(addsuffix .a,$(addprefix $(lib_dir)/lib,$(libraries) $(fs) $(local_newlib))) $(BASE)/apps/make/$(linkfile)
+$(target_elf) : $(objs) $(addsuffix .a,$(addprefix $(lib_dir)/lib,$(libraries) $(local_newlib))) $(BASE)/apps/make/$(linkfile)
 	$(QUIET)$(cc) $(cflags) $(ldflags) -o $@ $(objs) $(addprefix -l,$(libraries)) $(startup_file)
 
 $(gen_file) : $(MAKEFILE_LIST)
