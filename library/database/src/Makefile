@@ -13,6 +13,7 @@ SOURCES = \
   database_populate.c \
   database_print.c \
   database_purge.c \
+  file_os_wrapper.c \
   group.c \
   init_database.c \
   next_song.c \

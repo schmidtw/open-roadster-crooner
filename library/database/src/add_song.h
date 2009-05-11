@@ -19,11 +19,16 @@
  *        name
  * @param song pointer to the NULL terminated string representing the song
  *        name
+ * @param command_fn pointer to the function which is to be used when issuing
+ *        commands (Play/Pause/etc) for this song
+ * @param play_fn pointer to the function which is to be used when initially
+ *        playing this song
  *        
  * @return pointer to the song on Success.  On failure NULL is returned.
  */
 song_node_t * add_song_to_group( group_node_t * group,
         const char * artist, const char * album,
-        const char * song, const uint8_t track_number );
+        const char * song, const uint8_t track_number
+        );
 
 #endif /* __ADD_SONG_H__ */

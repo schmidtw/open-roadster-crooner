@@ -21,17 +21,20 @@
 #include "group.h"
 #include "add_song.h"
 #include "database_print.h"
+#include "file_os_wrapper.h"
+
+#include <media-interface/media-interface.h>
 
 bool setup_group_name( const char * name );
 group_node_t * find_group_node( const char * dir_name );
-void place_songs_into_group( group_node_t * gn, char * dir_name, DirList * dlist, FileSystem *fs );
+void place_songs_into_group( group_node_t * gn, char * dir_name );
 bool get_last_dir_name( char * dest, char * src );
-void append_dir_name( char * dest, const char * src, size_t max_characters );
-void local_memcpy( char * dest, const char * src, size_t max_characters );
-bool iterate_to_dir_entry( const char * dir_name, DirList * list );
+void append_dir_name( char * dest, const char * src );
+bool iterate_to_dir_entry( const char * dir_name );
 
 #define FILENAME_LENGTH 11
 #define FILENAME_LENGTH_WITH_NULL (FILENAME_LENGTH + 1)
+#define MAX_ABS_FILE_NAME_W_NULL 257
 
 /**
  * The structure of the pools are:
@@ -64,17 +67,16 @@ bool iterate_to_dir_entry( const char * dir_name, DirList * list );
  *              parameter.
  * @param RootDirectory the identifier which is the location of the root
  *        filesystem.  NULL terminated string.
- * @param fs pointer to the Filesystem which has been opened.
  *        
  * @return true if the database was properly created and setup.  False
  *         otherwise.
  */
 bool populate_database( const char ** directory,
                         const uint8_t num_directories,
-                        const char * RootDirectory,
-                        FileSystem *fs )
+                        const char * RootDirectory )
 {
     uint8_t ii;
+    
     database_purge();
     
     ll_init_list( &(rdn.groups) );
@@ -94,45 +96,54 @@ bool populate_database( const char ** directory,
     }
     rdn.size_list++;
     {
-        DirList dir_list;
-        if( 0 != rdn.openDir(&dir_list, fs, "/") ) {
+        char base_dir[MAX_ABS_FILE_NAME_W_NULL];
+        file_info_t file_info;
+        size_t num_chars_base_dir;
+        
+        strcpy( base_dir, RootDirectory );
+        num_chars_base_dir = strlen( base_dir );
+        if( FRV_RETURN_GOOD != open_directory( base_dir ) ) {
             goto failure;
         }
-        while( 0 == rdn.openNext(&dir_list) ) {
-            char filename[FILENAME_LENGTH_WITH_NULL];
-            char dir_name[FILENAME_LENGTH_WITH_NULL];
-            char extension[4];
-            char full_filename[FILENAME_LENGTH_WITH_NULL+2];
-            dir_name[0] = '\0';
-            snprintf(filename, 9, "%s", dir_list.currentEntry.FileName);
-            filename[9] = '\0';
-            snprintf(extension, 4, "%s", &(dir_list.currentEntry.FileName[8]));
-            extension[3] = '\0';
-            
-            if( ATTR_DIRECTORY & dir_list.currentEntry.Attribute ) {
+        
+        while( FRV_RETURN_GOOD == get_next_element_in_directory( &file_info ) ) {
+            /* append the file/dir name to the base dir.  This absolute path
+             * is critical in opening this file/dir for metadata or searching
+             * for more files.
+             */
+            base_dir[num_chars_base_dir] = '/';
+            strcpy( &(base_dir[num_chars_base_dir+1]), file_info.short_filename );
+            if( true == file_info.is_dir ) {
                 /* this is a directory, search for the group.  Once we have
                  * the group, call a subroutine which will place all files
                  * in this directory into the correct group.
                  */
-                local_memcpy(dir_name, filename, FILENAME_LENGTH);
-                place_songs_into_group( find_group_node(filename),
-                                        filename,
-                                        &dir_list,
-                                        fs);
-                if( 0 != rdn.openDir(&dir_list, fs, "/") ) {
+                place_songs_into_group( find_group_node(file_info.short_filename),
+                                        base_dir );
+                /* Reopen the root directory */
+                base_dir[num_chars_base_dir] = '\0';
+                if( FRV_RETURN_GOOD != open_directory( base_dir ) ) {
                     goto failure;
                 }
-                iterate_to_dir_entry( dir_name, &dir_list );
+                iterate_to_dir_entry( file_info.short_filename );
             } else { /* This is a file */
-                if( (ATTR_VOLUME_ID | ATTR_SYSTEM ) & dir_list.currentEntry.Attribute ) {
-                    continue;
-                }
+//                media_status_t rv;
+//                media_metadata_t *metadata_fn;
+//                media_command_fn_t *command_fn;
+//                media_play_fn_t *play_fn;
                 /* Place this file into the miscellaneous group */
-                sprintf(full_filename, "%s.%s", filename, extension);
+//                sprintf(full_filename, "%s.%s", filename, extension);
+//                rv = mi_get_information( full_filename, 
+//                media_status_t mi_get_information( const char *filename,
+//                                                   EmbeddedFile *file,
+//                                                   media_metadata_t *metadata,
+//                                                   media_command_fn_t *command_fn,
+//                                                   media_play_fn_t *play_fn );
+//                MI_RETURN_OK
                 add_song_to_group( (group_node_t *)rdn.groups.tail->data,
                                    "Fake Artist\0",
                                    "Root Directory\0",
-                                   full_filename,
+                                   file_info.short_filename,
                                    2 );
             }
         }
@@ -184,51 +195,52 @@ group_node_t * find_group_node( const char * dir_name )
     return gn;
 }
 
-void place_songs_into_group( group_node_t * gn, char * dir_name, DirList * list, FileSystem *fs )
+void place_songs_into_group( group_node_t * gn, char * dir_name )
 {
     char last_dir[FILENAME_LENGTH_WITH_NULL];
-    char full_path[257];
+    char full_path[MAX_ABS_FILE_NAME_W_NULL];
     
-    if(    ( NULL == gn )
-        || ( NULL == list ) ) {
+    if( NULL == gn ) {
         return;
     }
 //    snprintf(dir_name, "/%s/", dlist->currentEntry.FileName);
     full_path[0] = '\0';
-    
-    append_dir_name( full_path, dir_name, FILENAME_LENGTH );
-    if( 0 != rdn.openDir(list, fs, full_path) ) {
+    strcpy( full_path, dir_name );
+    /* Open the full_path directory for populating */
+    if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
         return;
     }
     while( 1 ) {
-        if( 0 != rdn.openNext(list) ) {
+        file_info_t file_info;
+        /* Open the next element in this directory */
+        file_return_value rv = get_next_element_in_directory( &file_info ); 
+        
+        if( FRV_END_OF_ENTRIES == rv ) {
             /* We don't have any more files in this directory.
              */
-            if( false == get_last_dir_name(last_dir, full_path) ) {
+            if( false == get_last_dir_name( last_dir, full_path ) ) {
                 return;
             }
             /* If we have a last_dir, then we should
              * go up a directory and continue searching for files
              * after this directory name
              */
-            if( 0 != rdn.openDir(list, fs, full_path) ) {
+            /* Open the parent directory */
+            if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
                 return;
             }
-            if( false == iterate_to_dir_entry(last_dir, list) ) {
+            if( false == iterate_to_dir_entry( last_dir ) ) {
                 return;
             }
-        } else {
-            char filename[FILENAME_LENGTH_WITH_NULL];
-            memcpy( filename, list->currentEntry.FileName, FILENAME_LENGTH );
-            filename[FILENAME_LENGTH] = '\0';
-            if( ATTR_DIRECTORY & list->currentEntry.Attribute ) {
+        } else if( FRV_RETURN_GOOD == rv ) {
+            if( true == file_info.is_dir ) {
                 /* this is a directory, search for the group.  Once we have
                  * the group, call a subroutine which will place all files
                  * in this directory into the correct group.
                  */
-                append_dir_name(full_path, list->currentEntry.FileName, FILENAME_LENGTH);
-                fflush(stdout);
-                if( 0 != rdn.openDir(list, fs, full_path) ) {
+                append_dir_name(full_path, file_info.short_filename );
+                /* open the found directory for searching */
+                if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
                     return;
                 }
             } else { /* This is a file */
@@ -236,21 +248,22 @@ void place_songs_into_group( group_node_t * gn, char * dir_name, DirList * list,
                 add_song_to_group( (group_node_t *)rdn.groups.tail->data,
                                    "Fake Artist\0",
                                    dir_name,
-                                   filename,
+                                   file_info.short_filename,
                                    2 );
             }
         }
     }
 }
 
-bool iterate_to_dir_entry( const char * dir_name, DirList * list )
+bool iterate_to_dir_entry( const char * dir_name )
 {
-    char current_dir[FILENAME_LENGTH_WITH_NULL];
-    
-    while( 0 == rdn.openNext(list) ) {
-        if( ATTR_DIRECTORY & list->currentEntry.Attribute ) {
-            local_memcpy( current_dir, list->currentEntry.FileName, FILENAME_LENGTH);
-            if( 0 == strcmp(current_dir, dir_name) ) {
+    file_info_t file_info;
+    /* Open directory elements until we get to the element which
+     * we are trying to find
+     */
+    while( FRV_RETURN_GOOD == get_next_element_in_directory( &file_info ) ) {
+        if( true == file_info.is_dir ) {
+            if( 0 == strcmp(file_info.short_filename, dir_name) ) {
                 return true;
             }
         }
@@ -303,26 +316,23 @@ bool get_last_dir_name( char * dest, char * src )
 }
 
 /**
- * Will place the src string (up to max_characters) plus a '/' onto
+ * Will place the src string plus a '/' onto
  * the end of the dest string.
  * 
  * ex: dest * = /blue/black
  *      src * = green
  * result:
- *     dest * = /blue/black/green 
- * 
- * @param max_characters number of characters to be read from the src
+ *     dest * = /blue/black/green
+ *     
  * @param dest a buffer large enough to support max_characters+1 more
  *             characters
  * @param src buffer which contains the new string
  */
-void append_dir_name( char * dest, const char * src, size_t max_characters )
+void append_dir_name( char * dest, const char * src )
 {
-    size_t ii;
     char *i_dst;
     if(    (NULL == dest)
-        || (NULL == src)
-        || (0 == max_characters) ) {
+        || (NULL == src) ) {
         return;
     }
     
@@ -331,33 +341,5 @@ void append_dir_name( char * dest, const char * src, size_t max_characters )
         i_dst++;
     }
     *i_dst++ = '/';
-    local_memcpy( i_dst, src, max_characters );
-}
-
-void local_memcpy( char * dest, const char * src, size_t max_characters )
-{
-    size_t ii;
-    char *i_src;
-    char *i_dst;
-    if(    (NULL == dest)
-        || (NULL == src)
-        || (0 == max_characters) ) {
-        return;
-    }
-    i_src = src;
-    i_dst = dest;
-    for( ii = 0; ii < max_characters; ii++ ) {
-        if(    ('\0' == *i_src)
-            || (' ' == *i_src) ) {
-            *i_dst = '\0';
-            return;
-        }
-       *i_dst++ = *i_src++;
-    }
-    /* At this point we know that the last character was not a terminating
-     * character.  So we must decrement i_dst because it points one position
-     * past our limit, and then terminate this string.
-     */
-    i_dst--;
-    *i_dst = '\0';
+    strcpy( i_dst, src );
 }

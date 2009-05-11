@@ -24,18 +24,10 @@
 root_database_node_t rdn;
 
 /* See database.h for information */
-bool init_database( const openDir_fct openDir,
-                    const getNext_fct openNext,
-                    const fclose_fct file_close,
-                    const fopen_fct file_open
+bool init_database( void
                     /* function for metadata */
                     )
 {
-    rdn.openDir = openDir;
-    rdn.openNext = openNext;
-    rdn.fclose = file_close;
-    rdn.fopen = file_open;
-    
     rdn.initialized = true;
     
     return true;

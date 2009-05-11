@@ -3,11 +3,10 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <linked-list/linked-list.h>
-#include <efsl/fs.h>
-#include <efsl/ls.h>
-#include <efsl/file.h>
+#include <media-interface/media-interface.h>
 
 #define MAX_GROUP_NAME           260
 #define MAX_GROUP_NAME_W_NULL    (MAX_GROUP_NAME + 1)
@@ -17,6 +16,10 @@
 #define MAX_ALBUM_TITLE_W_NULL   (MAX_ALBUM_TITLE + 1)
 #define MAX_SONG_TITLE           127
 #define MAX_SONG_TITLE_W_NULL    (MAX_SONG_TITLE + 1)
+
+
+#define MAX_FAT_SHORT_NAME_FILE_NAME        260
+#define MAX_FAT_SHORT_NAME_FILE_NAME_W_NULL (MAX_FAT_SHORT_NAME_FILE_NAME + 1)
 
 typedef struct {
     char name[MAX_GROUP_NAME_W_NULL];
@@ -44,9 +47,11 @@ typedef struct {
 typedef struct {
     char title[MAX_SONG_TITLE_W_NULL];
     ll_node_t node;
-    File file_location;
+    char file_location[MAX_FAT_SHORT_NAME_FILE_NAME_W_NULL];
     album_node_t * album;
     uint8_t track_number;
+    media_command_fn_t *command_fn;
+    media_play_fn_t *play_fn;
 } song_node_t;
 
 typedef enum {
@@ -68,27 +73,14 @@ typedef enum {
     DS_FAILURE
 } db_status_t;
 
-typedef int8_t (*openDir_fct)(DirList *dlist, FileSystem *fs, char *dirname);
-typedef int8_t (*getNext_fct)(DirList *dlist);
-typedef int8_t (*fclose_fct)(File *file);
-typedef int8_t (*fopen_fct)(File *file, FileSystem *fs,char *filename, char mode);
-
 /**
  * Sets up the database function pointers for use.
  * 
- * @param openDir This is to be the same as the efsl implementation.
- * @param openNext This is to be the same as the efsl implementation.
- * @param file_close This is to be the same as the efsl implementation.
- * @param file_open This is to be the same as the efsl implementation.
- *   
  * @return true if the database initialized properly.  False if the passed
  *              in strings are too long or if an error occurs while
  *              initializing
  */
-bool init_database( const openDir_fct openDir,
-                    const getNext_fct openNext,
-                    const fclose_fct file_close,
-                    const fopen_fct file_open
+bool init_database( void
                     /* function for metadata */
                     );
 
@@ -176,7 +168,6 @@ void database_purge( void );
  */
 bool populate_database( const char ** directory,
                         const uint8_t num_directories,
-                        const char * RootDirectory,
-                        FileSystem *fs );
+                        const char * RootDirectory );
 
 #endif /* __DATABASE_H__ */

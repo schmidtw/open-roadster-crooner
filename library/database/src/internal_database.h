@@ -8,11 +8,6 @@
 #define MAX_NUMBER_GROUPS 6
 
 typedef struct {
-    openDir_fct openDir;
-    getNext_fct openNext;
-    fclose_fct fclose;
-    fopen_fct fopen;
-    
     ll_list_t groups;
     uint32_t size_list;
     bool initialized;
