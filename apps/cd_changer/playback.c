@@ -25,15 +25,14 @@
 #include <bsp/memcard.h>
 #include <bsp/abdac.h>
 #include <bsp/pm.h>
+#include <fatfs/ff.h>
 #include <media-flac/media-flac.h>
-#include <efsl/efs.h>
-#include <efsl/ls.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <util/xxd.h>
 
 #include "blu.h"
-#include "wav.h"
+//#include "wav.h"
 //#include "mp3.h"
 
 /*----------------------------------------------------------------------------*/
@@ -44,15 +43,13 @@
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
-typedef struct {
-    bool dac_setup;
-    EmbeddedFile file;
-} pb_cb_info_t;
+/* none */
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static void __pb_task( void *params );
+void list_dirs( void );
 void play( void );
 static void mc_suspend( void );
 static void mc_resume( void );
@@ -91,6 +88,7 @@ void playback_init( void )
 /*----------------------------------------------------------------------------*/
 static void __pb_task( void *params )
 {
+    FATFS fs;
     bool card_present;
 
     card_present = false;
@@ -109,6 +107,9 @@ static void __pb_task( void *params )
                 msg->disc_status = BLU_DISC_STATUS__MAGAZINE_PRESENT | BLU_DISC_STATUS__DISC_2;
                 blu_message_post( msg );
 
+                printf( "f_mount: %d\n", f_mount(0, &fs) );
+
+                list_dirs();
                 play();
             }
         } else {
@@ -117,6 +118,7 @@ static void __pb_task( void *params )
 
                 /* State change - card removed. */
                 printf( "card removed.\n" );
+                printf( "f_mount: %d\n", f_mount(0, NULL) );
                 card_present = false;
 
                 msg = disc_status_message_alloc();
@@ -129,42 +131,65 @@ static void __pb_task( void *params )
     }
 }
 
-void play( void )
+void list_dirs( void )
 {
-    bsp_status_t status;
-    status = mc_mount();
-    printf( "mount status: 0x%08x\n", status );
-    if( BSP_RETURN_OK == status ) {
-        EmbeddedFileSystem efs;
-        int8_t res;
-        res = efs_init( &efs, "/dev/sd0" );
-        printf( "res: %d\n", res );
-        if( 0 == res ) {
-            DirList list;
-            pb_cb_info_t info;
+    DIR dir;
+    FILINFO info;
+    bool done;
+    char filename[20];
+    BYTE rv;
+#if _USE_LFN
+    char lfn[_MAX_LFN * (_DF1S ? 2 : 1) + 1];
+
+    info.lfname = lfn;
+    info.lfsize = sizeof(lfn);
+#endif
 
             led_on( led_blue );
 
-            ls_openDir( &list, &efs.myFs, "/2" );
-            while( 0 == ls_getNext(&list) ) {
-                list.currentEntry.FileName[LIST_MAXLENFILENAME-1] = '\0';
-                printf( "%c %8lu %s\n", (ATTR_DIRECTORY & list.currentEntry.Attribute) ? 'd' : 'f', list.currentEntry.FileSize, list.currentEntry.FileName );
-                fflush( stdout );
+    rv = f_opendir( &dir, "/" );
+    printf( "f_opendir: %d\n", rv );
+    if( 0 != rv ) {
+        return;
             }
-            printf( "done\n" );
-            fflush( stdout );
 
-            info.dac_setup = false;
-#if 1
+    done = false;
+    while( false == done ) {
+        f_readdir( &dir, &info );
+        if( '\0' == info.fname[0] ) {
+            //done = true;
+        } else {
+            char *name = info.fname;
+#if _USE_LFN
+            name = info.lfname;
+#endif
+            if( AM_DIR == (AM_DIR & info.fattrib) ) {
+                printf( "/%s\n", name );
+            } else {
+                printf( "%u f '%s' '%s'\n", info.fsize, info.fname, name );
+                filename[0] = '/';
+                //filename[1] = '3';
+                //filename[2] = '/';
+                strcpy( &filename[1], name );
+                media_flac_play( "/3/01-RAD~1.FLA", codec_suspend, codec_resume );
+                while( 1 ) {;}
+            }
+        }
+    }
+}
+
+void play( void )
+{
             while( 1 ) {
                 int i;
-                for( i = 0; i < 13; i++ ) {
+        for( i = 1; i < 13; i++ ) {
                     char *name;
 
                     switch( i ) {
-                        //case 0: name = "/2/01-RAD~1.FLA"; break;
-                        case 0: name = "/1.FLA"; break;
-                        case 1: name = "/2.FLA"; break;
+                case 0: name = "/2/01-RAD~1.FLA"; break;
+                case 1: name = "/2/02-PIL~1.FLA"; break;
+                //case 0: name = "/1.FLA"; break;
+                //case 1: name = "/2.FLA"; break;
                         case 2: name = "/4.FLA"; break;
                         case 3: name = "/5.FLA"; break;
                         case 4: name = "/5.FLA"; break;
@@ -178,6 +203,10 @@ void play( void )
                         case 12: name = "/PUPPY~1.FLA"; break;
                     }
 
+            printf( "Playing file: '%s'\n", name );
+            media_flac_play( name, codec_suspend, codec_resume );
+        }
+/*
                     if( 0 == file_fopen(&info.file, &efs.myFs, name, 'r') ) {
                         printf( "Wts\n" );
                         media_flac_play( &info.file, codec_suspend, codec_resume );
@@ -192,35 +221,7 @@ void play( void )
                     }
                 }
             }
-#else
-            //res = file_fopen( &info.file, &efs.myFs, "END.WAV", 'r' );
-            //res = file_fopen( &info.file, &efs.myFs, "SWING2.WAV", 'r' );
-            //res = file_fopen( &info.file, &efs.myFs, "SILENCE.WAV", 'r' );
-            //if( 0 == res ) {
-                while( 1 ) {
-                    if( 0 == file_fopen(&info.file, &efs.myFs, "1.WAV", 'r') ) {
-                        wav_play( &info.file );
-                        file_fclose( &info.file );
-                        printf( "wav_file done.\n" );
-                    }
-                    if( 0 == file_fopen(&info.file, &efs.myFs, "PUPPY.WAV", 'r') ) {
-                        wav_play( &info.file );
-                        file_fclose( &info.file );
-                        printf( "wav_file done.\n" );
-                    }
-                    if( 0 == file_fopen(&info.file, &efs.myFs, "END.WAV", 'r') ) {
-                        wav_play( &info.file );
-                        file_fclose( &info.file );
-                        printf( "wav_file done.\n" );
-                    }
-                    //file_setpos( &info.file, 0 );
-                    //printf( "file closed" );
-                }
-            //}
-#endif
-        }
-
-        printf( "mc_unmount: 0x%08x\n", mc_unmount() );
+*/
     }
 //#endif
 }

@@ -29,6 +29,7 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <ibus-physical/ibus-physical.h>
 
 #include "messages.h"
 
@@ -40,9 +41,9 @@
 #define DEBUG_IBUS  0
 
 #define IBUS_RX_TASK_STACK_SIZE 1000
-#define IBUS_TX_TASK_STACK_SIZE 100
-#define IBUS_RX_TASK_PRIORITY   (tskIDLE_PRIORITY+2)
-#define IBUS_TX_TASK_PRIORITY   (tskIDLE_PRIORITY+2)
+#define IBUS_TX_TASK_STACK_SIZE 1000
+#define IBUS_RX_TASK_PRIORITY   (tskIDLE_PRIORITY+1)
+#define IBUS_TX_TASK_PRIORITY   (tskIDLE_PRIORITY+1)
 #define IBUS_TX_PDCA_CHANNEL    5
 
 #define IBUS_MAX_TX_LENGTH      20
@@ -88,16 +89,24 @@ typedef struct {
     ibus_tx_message_t tx;
 } ibus_tx_message_wrapper_t;
 
+typedef enum {
+    IBUS_TX_STATUS__IDLE,
+    IBUS_TX_STATUS__WAITING_FOR_CTS,
+    IBUS_TX_STATUS__SENDING,
+    IBUS_TX_STATUS__INTERRUPTED,
+    IBUS_TX_STATUS__COMPLETE
+} ibus_tx_status_t;
+
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static uint8_t __rx_msg_buffer[IBUS_MESSAGE_MAX_SIZE];
 static ibus_tx_message_wrapper_t __tx[IBUS_MAX_TX_MESSAGES];
 static ibus_rx_message_wrapper_t __rx[IBUS_MAX_RX_MESSAGES];
 static xSemaphoreHandle __ibus_mutex;
 static xQueueHandle __ibus_listener;
 static xQueueHandle __ibus_queue;
 
+volatile ibus_tx_status_t __tx_status;
 volatile bool __tx_complete;
 volatile bool __tx_interrupted;
 
@@ -106,52 +115,22 @@ volatile bool __tx_interrupted;
 /*----------------------------------------------------------------------------*/
 static void __ibus_task_rx( void *data );
 static void __ibus_task_tx( void *data );
-static uint8_t *__process_message( uint8_t *msg );
+static void __process_message( ibus_io_msg_t *msg );
 ibus_rx_message_t *__get_rx_message( void );
 void __ibus_send_msg( const uint8_t src, const uint8_t dst,
                       const uint8_t *msg, const uint8_t length );
-__attribute__((__interrupt__))
-static void __tx_msg_sent( void );
-__attribute__((__interrupt__))
-static void __tx_msg_interrupted( void );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
 void ibus_init( void )
 {
-    static const gpio_map_t ibus_pins_map[] =
-    {
-        { .pin = IBUS_RX_PIN,  .function = IBUS_RX_FUNCTION  },
-        { .pin = IBUS_TX_PIN,  .function = IBUS_TX_FUNCTION  },
-        { .pin = IBUS_CTS_PIN, .function = IBUS_CTS_FUNCTION }
-    };
-
-    /* These are the iBus settings. */
-    static const usart_options_t ibus_options = {
-        .baudrate     = 9600,
-        .data_bits    = USART_DATA_BITS__8,
-        .parity       = USART_PARITY__EVEN,
-        .stop_bits    = USART_STOPBITS__1,
-        .mode         = USART_MODE__NORMAL,
-        .tx_only      = false,
-        .hw_handshake = true,
-        .map_size     = sizeof(ibus_pins_map) / sizeof(gpio_map_t),
-        .map          = ibus_pins_map
-    };
+    ibus_physical_init();
 
     __ibus_mutex = xSemaphoreCreateMutex();
+
     __ibus_queue = xQueueCreate( IBUS_MAX_MESSAGES, sizeof(void*) );
 
-    /* ISR for the PDCA/DMA complete */
-    intc_register_isr( &__tx_msg_sent, PDCA_GET_ISR_NAME(IBUS_TX_PDCA_CHANNEL), ISR_LEVEL__1 );
-
-    /* ISR for the CTS state change */
-    intc_register_isr( &__tx_msg_interrupted, IBUS_USART_ISR, ISR_LEVEL__1 );
-
-    pdca_channel_init( IBUS_TX_PDCA_CHANNEL, IBUS_TX_PDCA_PID, 8 );
-
-    usart_init_rs232( IBUS_USART, &ibus_options );
 
     xTaskCreate( __ibus_task_rx, ( signed portCHAR *) "iBrx",
                  IBUS_RX_TASK_STACK_SIZE, NULL, IBUS_RX_TASK_PRIORITY, NULL );
@@ -257,68 +236,12 @@ size_t ibus_print( char * text )
 /*----------------------------------------------------------------------------*/
 static void __ibus_task_rx( void *data )
 {
-    size_t first_free;
-    portTickType last_char_time;
-    portTickType current_timer;
-
-    first_free = 0;
-
-    last_char_time = 0;
-
     while( 1 ) {
-        int c;
-        bool got_character;
+        ibus_io_msg_t *msg;
 
-        got_character = false;
-
-        while( BSP_RETURN_OK == usart_read_char(IBUS_USART, &c) )
-        {
-            __rx_msg_buffer[first_free] = 0xff & c;
-            first_free++;
-            got_character = true;
-        }
-
-        /* The time of the last character or first failure */
-        current_timer = xTaskGetTickCount();
-
-        if( true == got_character ) {
-            last_char_time = current_timer;
-        } else {
-            /* No characters this time through. */
-
-            if( 0 != first_free ) {
-                portTickType tmp;
-
-                /* We're receiving a message and may time out. */
-                if( current_timer < last_char_time ) {
-                    tmp = last_char_time - current_timer;
-                } else {
-                    tmp = current_timer - last_char_time ;
-                }
-
-                if( IBUS_MESSAGE_TIMEOUT < tmp ) {
-                    uint8_t *p;
-
-#if (0 < DEBUG_IBUS)
-                    size_t i;
-
-                    printf( "iBus Message: " );
-                    for( i = 0; i < first_free; i++ ) {
-                        printf( "%02x ", __rx_msg_buffer[i] );
-                    }
-                    printf( "\n" );
-#endif
-                    p = __rx_msg_buffer;
-
-                    do {
-                        p = __process_message( p );
-                    } while( (NULL != p) && (p < &__rx_msg_buffer[first_free]) );
-
-                    first_free = 0;
-                }
-            }
-            vTaskDelay( 1 );
-        }
+        msg = ibus_physical_get_message();  /* Blocks thread */
+        __process_message( msg );
+        ibus_physical_release_message( msg );
     }
 }
 
@@ -425,48 +348,44 @@ static void __ibus_task_tx( void *data )
             msg_text[0] = 0x23;
             msg_text[1] = 0x42;
             msg_text[2] = 0x07;
-            strcpy( &(msg_text[3]), msg->d.msg_text );
+            strcpy( (char*) &(msg_text[3]), msg->d.msg_text );
             __ibus_send_msg( 0xc8, 0x80, msg_text, strlen( msg->d.msg_text )+3 );
             ibus_message_free( msg );
         }
     }
 }
 
-/**
- *  @return the pointer to the next message in the buffer, NULL
- *          means no message was found, or we had bogus data
- *          before the first message
- */
-static uint8_t *__process_message( uint8_t *msg )
+static void __process_message( ibus_io_msg_t *msg )
 {
-    uint8_t *p;
+    uint8_t *payload;
     uint8_t checksum, src, dst;
     size_t i, length;
 
     _D2( "%s()\n", __FUNCTION__ );
 
-    if( NULL == msg ) {
-        return NULL;
-    }
-
-    p = msg;
-    src = *p++;
-    length = *p++;
-    dst = *p++;
-
-    if( 0 == length ) {
-        return NULL;
+    if( (NULL == msg) ||
+        (IBUS_IO_STATUS__OK != msg->status) ||
+        (msg->size < 5) ) /* Min: src|len|dst|payload|chksum */
+    {
+        return;
     }
 
     /* See if the message is valid */
-    length += 2;    /* the total checksum length is larger than the length */
-    for( checksum = 0, i = 0; i < length; i++ ) {
-        checksum ^= msg[i];
+    for( checksum = 0, i = 0; i < msg->size; i++ ) {
+        checksum ^= msg->buffer[i];
     }
-    length -= 2;
 
     if( 0 != checksum ) {
-        return NULL;
+        return;
+    }
+
+    src = msg->buffer[0];
+    length = msg->buffer[1];
+    dst = msg->buffer[2];
+    payload = &msg->buffer[3];
+
+    if( 0 == length ) {
+        return;
     }
 
     /* We have a valid message... do something with it. */
@@ -481,7 +400,7 @@ static uint8_t *__process_message( uint8_t *msg )
 
         rx = __get_rx_message();
 
-        if( (3 == length) && (1 == *p) ) {
+        if( (3 == length) && (1 == *payload) ) {
             rx->cmd = IBUS_RX_CMD__POLL;
             if( NULL != __ibus_listener ) {
                 _D2( "I sent the message\n" );
@@ -489,11 +408,10 @@ static uint8_t *__process_message( uint8_t *msg )
             } else {
                 ibus_message_free( rx );
             }
-            goto done;
-        } else if( (5 == length) && (0x38 == *p) ) {    /* Radio command */
-            p++;
-            rx->cmd = (ibus_rx_cmd_t) *p++;
-            switch( *p ) {
+        } else if( (5 == length) && (0x38 == *payload) ) {    /* Radio command */
+            payload++;
+            rx->cmd = (ibus_rx_cmd_t) *payload++;
+            switch( *payload ) {
                 case IBUS_RX_CMD__STATUS:
                 case IBUS_RX_CMD__STOP:
                 case IBUS_RX_CMD__PAUSE:
@@ -502,32 +420,32 @@ static uint8_t *__process_message( uint8_t *msg )
                     break;
 
                 case IBUS_RX_CMD__SEEK:
-                    if( (0 == *p) || (1 == *p) ) {
-                        rx->d.seek = (ibus_direction_t) *p;
+                    if( (0 == *payload) || (1 == *payload) ) {
+                        rx->d.seek = (ibus_direction_t) *payload;
                     } else {
                         invalid_msg = true;
                     }
                     break;
 
                 case IBUS_RX_CMD__CHANGE_DISC:
-                    if( 0 != (~IBUS_DISC_STATUS__DISC_ANY & *p) ) {
-                        rx->d.disc = IBUS_DISC_STATUS__DISC_ANY & *p;
+                    if( 0 != (~IBUS_DISC_STATUS__DISC_ANY & *payload) ) {
+                        rx->d.disc = IBUS_DISC_STATUS__DISC_ANY & *payload;
                     } else {
                         invalid_msg = true;
                     }
                     break;
 
                 case IBUS_RX_CMD__SCAN_DISC:
-                    if( (0 == *p) || (1 == *p) ) {
-                        rx->d.scan_disc = (ibus_on_off_t) *p;
+                    if( (0 == *payload) || (1 == *payload) ) {
+                        rx->d.scan_disc = (ibus_on_off_t) *payload;
                     } else {
                         invalid_msg = true;
                     }
                     break;
 
                 case IBUS_RX_CMD__RANDOMIZE:
-                    if( (0 == *p) || (1 == *p) ) {
-                        rx->d.randomize = (ibus_on_off_t) *p;
+                    if( (0 == *payload) || (1 == *payload) ) {
+                        rx->d.randomize = (ibus_on_off_t) *payload;
                     } else {
                         invalid_msg = true;
                     }
@@ -553,10 +471,6 @@ static uint8_t *__process_message( uint8_t *msg )
             }
         }
     }
-
-done:
-
-    return &msg[length + 2];
 }
 
 ibus_rx_message_t *__get_rx_message( void )
@@ -588,85 +502,28 @@ void __ibus_send_msg( const uint8_t src, const uint8_t dst,
     size_t i;
     uint8_t checksum;
     uint16_t full_length;
-    static volatile uint8_t __tx_msg_buffer[IBUS_MAX_TX_LENGTH + 4];
+    uint8_t buffer[IBUS_MAX_TX_LENGTH + 4];
 
     if( (NULL == msg) || (length < 1) || (IBUS_MAX_TX_LENGTH < length)) {
         return;
     }
 
-    __tx_msg_buffer[0] = src;
-    __tx_msg_buffer[1] = length + 2;
-    __tx_msg_buffer[2] = dst;
+    buffer[0] = src;
+    buffer[1] = length + 2;
+    buffer[2] = dst;
 
     checksum = 0;
     for( i = 0; i < 3; i++ ) {
-        checksum ^= __tx_msg_buffer[i];
+        checksum ^= buffer[i];
     }
     for( i = 0; i < length; i++ ) {
-        __tx_msg_buffer[3 + i] = msg[i];
+        buffer[3 + i] = msg[i];
         checksum ^= msg[i];
     }
 
-    __tx_msg_buffer[3 + i] = checksum;
+    buffer[3 + i] = checksum;
 
     full_length = length + 4;
 
-    /* Send the message */
-    do {
-        __tx_complete = false;
-        __tx_interrupted = false;
-
-        pdca_isr_enable( IBUS_TX_PDCA_CHANNEL, PDCA_ISR__TRANSFER_COMPLETE );
-        pdca_queue_buffer( IBUS_TX_PDCA_CHANNEL, __tx_msg_buffer, full_length );
-
-        /* Wait for the coast to clear. */
-        while( 0 != IBUS_USART->CSR.cts ) {
-            vTaskDelay( 1 );
-        }
-
-        ENABLE_CTS_ISR();
-        pdca_enable( IBUS_TX_PDCA_CHANNEL );
-
-        while( (false == __tx_complete) && (false == __tx_interrupted) ) {
-            vTaskDelay( 1 );
-        }
-    } while( false == __tx_complete );
-}
-
-__attribute__((__interrupt__))
-static void __tx_msg_sent( void )
-{
-    bool interrupts;
-
-    interrupts_save_and_disable( interrupts );
-
-    pdca_isr_disable( IBUS_TX_PDCA_CHANNEL, PDCA_ISR__TRANSFER_COMPLETE );
-    DISABLE_CTS_ISR();
-
-    /* Read & clear any csr data. */
-    IBUS_USART->csr;
-
-    __tx_complete = true;
-
-    interrupts_restore( interrupts );
-}
-
-__attribute__((__interrupt__))
-static void __tx_msg_interrupted( void )
-{
-    bool interrupts;
-
-    interrupts_save_and_disable( interrupts );
-
-    DISABLE_CTS_ISR();
-
-    pdca_disable( IBUS_TX_PDCA_CHANNEL );
-    pdca_isr_disable( IBUS_TX_PDCA_CHANNEL, PDCA_ISR__TRANSFER_COMPLETE );
-
-    /* Read & clear any csr data. */
-    IBUS_USART->csr;
-
-    __tx_interrupted = true;
-
-    interrupts_restore( interrupts );
+    ibus_physical_send_message( buffer, full_length );
 }

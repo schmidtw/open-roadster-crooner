@@ -9,16 +9,17 @@ SOURCES = \
           main.c
 
 LIBRARIES = \
-            freertos \
-            efsl \
             media-interface \
             media-flac \
             file-stream \
+            ibus-physical \
+            fatfs \
+            freertos \
             linked-list \
             display \
             bsp \
             util
 
 OPTIMIZATIONS = -O0
-
+SRAM_CODEC_SIZE=512
 include $(BASE)/apps/make/Makefile.common
