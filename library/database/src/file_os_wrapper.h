@@ -2,9 +2,7 @@
 #define __FILE_OS_WRAPPER_H__
 
 #include <stdbool.h>
-
-#define MAX_SHORT_FILENAME        12
-#define MAX_SHORT_FILENAME_W_NULL ( MAX_SHORT_FILENAME + 1 )
+#include "database.h"
 
 typedef enum {
     FRV_RETURN_GOOD,

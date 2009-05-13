@@ -17,10 +17,10 @@
 #define MAX_SONG_TITLE           127
 #define MAX_SONG_TITLE_W_NULL    (MAX_SONG_TITLE + 1)
 
-#define MAX_SHORT_FILE_NAME                 12
-#define MAX_SHORT_FILE_NAME_W_NULL          (MAX_SHORT_FILE_NAME + 1)
-#define MAX_FAT_SHORT_NAME_FILE_NAME        260
-#define MAX_FAT_SHORT_NAME_FILE_NAME_W_NULL (MAX_FAT_SHORT_NAME_FILE_NAME + 1)
+#define MAX_SHORT_FILENAME                 12
+#define MAX_SHORT_FILENAME_W_NULL          (MAX_SHORT_FILENAME + 1)
+#define MAX_SHORT_FILENAME_PATH            260
+#define MAX_SHORT_FILENAME_PATH_W_NULL     (MAX_SHORT_FILENAME_PATH + 1)
 
 typedef struct {
     char name[MAX_GROUP_NAME_W_NULL];
@@ -48,7 +48,7 @@ typedef struct {
 typedef struct {
     char title[MAX_SONG_TITLE_W_NULL];
     ll_node_t node;
-    char file_location[MAX_FAT_SHORT_NAME_FILE_NAME_W_NULL];
+    char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
     album_node_t * album;
     uint8_t track_number;
     media_command_fn_t *command_fn;

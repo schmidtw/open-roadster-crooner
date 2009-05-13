@@ -33,10 +33,6 @@ bool get_last_dir_name( char * dest, char * src );
 void append_to_path( char * dest, const char * src );
 bool iterate_to_dir_entry( const char * dir_name );
 
-#define FILENAME_LENGTH 11
-#define FILENAME_LENGTH_WITH_NULL (FILENAME_LENGTH + 1)
-#define MAX_ABS_FILE_NAME_W_NULL 257
-
 /**
  * The structure of the pools are:
  * Root[1] -> Groups[6] -> Artist[0-N] -> Albums[0-N] -> Song[1]
@@ -92,12 +88,12 @@ bool populate_database( const char ** directory,
     /* Create an extra group which will be the tail of the list
      * and will receive all of the unsorted media files
      */
-    if( false == setup_group_name("") ) {
+    if( false == setup_group_name("Unknown Group\0") ) {
         goto failure;
     }
     rdn.size_list++;
     {
-        char base_dir[MAX_ABS_FILE_NAME_W_NULL];
+        char base_dir[MAX_SHORT_FILENAME_PATH_W_NULL];
         file_info_t file_info;
         size_t num_chars_base_dir;
         
@@ -128,25 +124,24 @@ bool populate_database( const char ** directory,
                 iterate_to_dir_entry( file_info.short_filename );
             } else { /* This is a file */
                 media_status_t rv;
-                media_metadata_t *metadata;
-                media_command_fn_t *command_fn;
-                media_play_fn_t *play_fn;
+                media_metadata_t metadata;
+                media_command_fn_t command_fn;
+                media_play_fn_t play_fn;
                 /* Place this file into the miscellaneous group */
-                rv = mi_get_information( base_dir, metadata,
-                        command_fn, play_fn );
+                rv = mi_get_information( base_dir, &metadata,
+                        &command_fn, &play_fn );
                 if( MI_RETURN_OK == rv ) {
                     add_song_to_group( (group_node_t *)rdn.groups.tail->data,
-                            metadata->artist, metadata->album,
-                            metadata->title, metadata->track_number,
-                            command_fn, play_fn, base_dir );
+                            metadata.artist, metadata.album,
+                            metadata.title, metadata.track_number,
+                            &command_fn, &play_fn, base_dir );
                 }
             }
         }
-        goto failure;
     }
+    database_print();
     return true;
 failure:
-    database_print();
     database_purge();
     return false;
 }
@@ -192,13 +187,12 @@ group_node_t * find_group_node( const char * dir_name )
 
 void place_songs_into_group( group_node_t * gn, char * dir_name )
 {
-    char last_dir[FILENAME_LENGTH_WITH_NULL];
-    char full_path[MAX_ABS_FILE_NAME_W_NULL];
+    char last_dir[MAX_SHORT_FILENAME_W_NULL];
+    char full_path[MAX_SHORT_FILENAME_PATH_W_NULL];
     
     if( NULL == gn ) {
         return;
     }
-//    snprintf(dir_name, "/%s/", dlist->currentEntry.FileName);
     full_path[0] = '\0';
     strcpy( full_path, dir_name );
     /* Open the full_path directory for populating */
@@ -247,17 +241,17 @@ void place_songs_into_group( group_node_t * gn, char * dir_name )
                 }
             } else { /* This is a file */
                 media_status_t rv;
-                media_metadata_t *metadata;
-                media_command_fn_t *command_fn;
-                media_play_fn_t *play_fn;
-                char junk_filename[MAX_SHORT_FILE_NAME_W_NULL];
+                media_metadata_t metadata;
+                media_command_fn_t command_fn;
+                media_play_fn_t play_fn;
+                char junk_filename[MAX_SHORT_FILENAME_W_NULL];
                 /* Place this file into the miscellaneous group */
-                rv = mi_get_information( full_path, metadata,
-                        command_fn, play_fn );
+                rv = mi_get_information( full_path, &metadata,
+                        &command_fn, &play_fn );
                 if( MI_RETURN_OK == rv ) {
-                    add_song_to_group( gn, metadata->artist, metadata->album,
-                            metadata->title, metadata->track_number,
-                            command_fn, play_fn, full_path );
+                    add_song_to_group( gn, metadata.artist, metadata.album,
+                            metadata.title, metadata.track_number,
+                            &command_fn, &play_fn, full_path );
                 }
                 get_last_dir_name( junk_filename, full_path );
             }

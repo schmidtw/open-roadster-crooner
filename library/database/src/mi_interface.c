@@ -22,8 +22,6 @@ bool mi_init( void )
     }
     mi_is_initialized = true;
     
-    printf("Media_flac:\n\tcommand (%08x)\n\tplay (%08x)\n\ttype (%08x)\n\tmetadata (%08x)\n",
-            media_flac_command, media_flac_play, media_flac_get_type, media_flac_get_metadata);
     rv = media_register_codec( mi_list, "flac", media_flac_command,
                                media_flac_play, media_flac_get_type,
                                media_flac_get_metadata );
