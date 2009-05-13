@@ -27,29 +27,24 @@ file_return_value get_next_element_in_directory( file_info_t * f_info )
         return FRV_INVALID_PARAMETER;
     }
     
-    while( 1 ) {
-        rv = f_readdir(&cur_dir, &file_info);
-        if( FR_OK != rv ) {
-            return FRV_ERROR;
-        }
-        if( file_info.fname[0] == '\0' ) {
-            return FRV_END_OF_ENTRIES;
-        }
-        /* The fatfs will have the null terminated character at the end of the
-         * fname field.  So we don't have to do any manipulation to make sure
-         * the string is properly terminated.  Also the fname is hardcoded to
-         * 13 characters, which is large enough to handle the 8.3 plus NULL
-         * format.
-         */
-        strcpy(f_info->short_filename, file_info.fname );
-        f_info->is_dir = ( file_info.fattrib & AM_DIR );
-        /* If the file attributes are anything but DIR, then we don't want
-         * to pass this file entry back.  Otherwise we want to send the file
-         * information back.
-         */
-        if( 0 == ( file_info.fattrib & ( AM_MASK ^ AM_DIR ) ) ) {
-            break;
-        }
+    rv = f_readdir(&cur_dir, &file_info);
+    if( FR_OK != rv ) {
+        return FRV_ERROR;
     }
+    if( file_info.fname[0] == '\0' ) {
+        return FRV_END_OF_ENTRIES;
+    }
+    /* The fatfs will have the null terminated character at the end of the
+     * fname field.  So we don't have to do any manipulation to make sure
+     * the string is properly terminated.  Also the fname is hardcoded to
+     * 13 characters, which is large enough to handle the 8.3 plus NULL
+     * format.
+     */
+    strcpy(f_info->short_filename, file_info.fname );
+    f_info->is_dir = ( file_info.fattrib & AM_DIR );
+    /* If the file attributes are anything but DIR, then we don't want
+     * to pass this file entry back.  Otherwise we want to send the file
+     * information back.
+     */
     return FRV_RETURN_GOOD;
 }

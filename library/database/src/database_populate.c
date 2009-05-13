@@ -111,8 +111,7 @@ bool populate_database( const char ** directory,
              * is critical in opening this file/dir for metadata or searching
              * for more files.
              */
-            base_dir[num_chars_base_dir] = '/';
-            strcpy( &(base_dir[num_chars_base_dir+1]), file_info.short_filename );
+            append_dir_name( base_dir, file_info.short_filename );
             if( true == file_info.is_dir ) {
                 /* this is a directory, search for the group.  Once we have
                  * the group, call a subroutine which will place all files
@@ -218,6 +217,12 @@ void place_songs_into_group( group_node_t * gn, char * dir_name )
         if( FRV_END_OF_ENTRIES == rv ) {
             /* We don't have any more files in this directory.
              */
+            if( 0 == strcmp( full_path, dir_name ) ) {
+                /* This is the base directory which was passed in.  We
+                 * don't want to search folders below this.
+                 */
+                return;
+            }
             if( false == get_last_dir_name( last_dir, full_path ) ) {
                 return;
             }
@@ -247,7 +252,7 @@ void place_songs_into_group( group_node_t * gn, char * dir_name )
                 /* Place this file into the miscellaneous group */
                 add_song_to_group( (group_node_t *)rdn.groups.tail->data,
                                    "Fake Artist\0",
-                                   dir_name,
+                                   full_path,
                                    file_info.short_filename,
                                    2 );
             }
@@ -331,6 +336,7 @@ bool get_last_dir_name( char * dest, char * src )
 void append_dir_name( char * dest, const char * src )
 {
     char *i_dst;
+    bool add_trailing_slash = true;
     if(    (NULL == dest)
         || (NULL == src) ) {
         return;
@@ -338,8 +344,11 @@ void append_dir_name( char * dest, const char * src )
     
     i_dst = dest;
     while( '\0' != *i_dst ) {
+        add_trailing_slash = ( '/' != *i_dst );
         i_dst++;
     }
-    *i_dst++ = '/';
+    if( true == add_trailing_slash ) {
+        *i_dst++ = '/';
+    }
     strcpy( i_dst, src );
 }
