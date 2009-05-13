@@ -20,6 +20,7 @@
 #include "database.h"
 #include "internal_database.h"
 #include "group.h"
+#include "mi_interface.h"
 
 root_database_node_t rdn;
 
@@ -28,6 +29,9 @@ bool init_database( void
                     /* function for metadata */
                     )
 {
+    if( false == mi_init() ) {
+        return false;
+    }
     rdn.initialized = true;
     
     return true;

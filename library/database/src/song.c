@@ -21,11 +21,17 @@
 #include "album.h"
 #include "w_malloc.h"
 
-ll_node_t * get_new_song_and_node( const char * name, const uint8_t track_number );
+ll_node_t * get_new_song_and_node(
+        const char * name, const uint8_t track_number,
+        media_command_fn_t *command_fn, media_play_fn_t *play_fn,
+        const char * file_location );
 
 song_node_t * find_or_create_song( album_node_t * album,
                                    const char * song,
-                                   const uint8_t track_number )
+                                   const uint8_t track_number,
+                                   media_command_fn_t *command_fn,
+                                   media_play_fn_t *play_fn,
+                                   const char * file_location )
 {
     song_node_t * so_n;
     ll_node_t * node_before_new_node = NULL;
@@ -81,7 +87,7 @@ song_node_t * find_or_create_song( album_node_t * album,
         }
     }
     
-    node = get_new_song_and_node(song, track_number);
+    node = get_new_song_and_node(song, track_number, command_fn, play_fn, file_location);
     if( NULL == node ) {
         return NULL;
     }
@@ -93,11 +99,17 @@ song_node_t * find_or_create_song( album_node_t * album,
     return so_n;
 }
 
-ll_node_t * get_new_song_and_node( const char * name, const uint8_t track_number )
+ll_node_t * get_new_song_and_node( const char * name,
+        const uint8_t track_number, media_command_fn_t *command_fn,
+        media_play_fn_t *play_fn, const char * file_location )
 {
     song_node_t * sn;
     
-    if( NULL == name ) {
+    if(    ( NULL == name )
+        || ( NULL == command_fn )
+        || ( NULL == play_fn )
+        || ( NULL == file_location ) )
+    {
         return NULL;
     }
     
@@ -110,6 +122,9 @@ ll_node_t * get_new_song_and_node( const char * name, const uint8_t track_number
     strncpy( sn->title, name, sizeof(char) * MAX_SONG_TITLE);
     sn->title[MAX_SONG_TITLE] = '\0';
     sn->track_number = track_number;
+    sn->command_fn = command_fn;
+    sn->play_fn = play_fn;
+    strcpy(sn->file_location, file_location);
     
     return &(sn->node);
 }

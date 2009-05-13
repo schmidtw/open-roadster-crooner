@@ -22,6 +22,7 @@
 #include "add_song.h"
 #include "database_print.h"
 #include "file_os_wrapper.h"
+#include "mi_interface.h"
 
 #include <media-interface/media-interface.h>
 
@@ -29,7 +30,7 @@ bool setup_group_name( const char * name );
 group_node_t * find_group_node( const char * dir_name );
 void place_songs_into_group( group_node_t * gn, char * dir_name );
 bool get_last_dir_name( char * dest, char * src );
-void append_dir_name( char * dest, const char * src );
+void append_to_path( char * dest, const char * src );
 bool iterate_to_dir_entry( const char * dir_name );
 
 #define FILENAME_LENGTH 11
@@ -111,7 +112,7 @@ bool populate_database( const char ** directory,
              * is critical in opening this file/dir for metadata or searching
              * for more files.
              */
-            append_dir_name( base_dir, file_info.short_filename );
+            append_to_path( base_dir, file_info.short_filename );
             if( true == file_info.is_dir ) {
                 /* this is a directory, search for the group.  Once we have
                  * the group, call a subroutine which will place all files
@@ -126,24 +127,19 @@ bool populate_database( const char ** directory,
                 }
                 iterate_to_dir_entry( file_info.short_filename );
             } else { /* This is a file */
-//                media_status_t rv;
-//                media_metadata_t *metadata_fn;
-//                media_command_fn_t *command_fn;
-//                media_play_fn_t *play_fn;
+                media_status_t rv;
+                media_metadata_t *metadata;
+                media_command_fn_t *command_fn;
+                media_play_fn_t *play_fn;
                 /* Place this file into the miscellaneous group */
-//                sprintf(full_filename, "%s.%s", filename, extension);
-//                rv = mi_get_information( full_filename, 
-//                media_status_t mi_get_information( const char *filename,
-//                                                   EmbeddedFile *file,
-//                                                   media_metadata_t *metadata,
-//                                                   media_command_fn_t *command_fn,
-//                                                   media_play_fn_t *play_fn );
-//                MI_RETURN_OK
-                add_song_to_group( (group_node_t *)rdn.groups.tail->data,
-                                   "Fake Artist\0",
-                                   "Root Directory\0",
-                                   file_info.short_filename,
-                                   2 );
+                rv = mi_get_information( base_dir, metadata,
+                        command_fn, play_fn );
+                if( MI_RETURN_OK == rv ) {
+                    add_song_to_group( (group_node_t *)rdn.groups.tail->data,
+                            metadata->artist, metadata->album,
+                            metadata->title, metadata->track_number,
+                            command_fn, play_fn, base_dir );
+                }
             }
         }
         goto failure;
@@ -238,23 +234,32 @@ void place_songs_into_group( group_node_t * gn, char * dir_name )
                 return;
             }
         } else if( FRV_RETURN_GOOD == rv ) {
+            append_to_path(full_path, file_info.short_filename );
             if( true == file_info.is_dir ) {
                 /* this is a directory, search for the group.  Once we have
                  * the group, call a subroutine which will place all files
                  * in this directory into the correct group.
                  */
-                append_dir_name(full_path, file_info.short_filename );
+                
                 /* open the found directory for searching */
                 if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
                     return;
                 }
             } else { /* This is a file */
+                media_status_t rv;
+                media_metadata_t *metadata;
+                media_command_fn_t *command_fn;
+                media_play_fn_t *play_fn;
+                char junk_filename[MAX_SHORT_FILE_NAME_W_NULL];
                 /* Place this file into the miscellaneous group */
-                add_song_to_group( (group_node_t *)rdn.groups.tail->data,
-                                   "Fake Artist\0",
-                                   full_path,
-                                   file_info.short_filename,
-                                   2 );
+                rv = mi_get_information( full_path, metadata,
+                        command_fn, play_fn );
+                if( MI_RETURN_OK == rv ) {
+                    add_song_to_group( gn, metadata->artist, metadata->album,
+                            metadata->title, metadata->track_number,
+                            command_fn, play_fn, full_path );
+                }
+                get_last_dir_name( junk_filename, full_path );
             }
         }
     }
@@ -333,7 +338,7 @@ bool get_last_dir_name( char * dest, char * src )
  *             characters
  * @param src buffer which contains the new string
  */
-void append_dir_name( char * dest, const char * src )
+void append_to_path( char * dest, const char * src )
 {
     char *i_dst;
     bool add_trailing_slash = true;

@@ -17,7 +17,9 @@
  *         parameter.  Or NULL if there was an error.
  */
 song_node_t * find_or_create_song( album_node_t * group,
-        const char * song, const uint8_t track_number );
+        const char * song, const uint8_t track_number,
+        media_command_fn_t *command_fn, media_play_fn_t *play_fn,
+        const char * file_location );
 
 void delete_song(ll_node_t *node, volatile void *user_data);
 

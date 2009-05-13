@@ -16,6 +16,7 @@ SOURCES = \
   file_os_wrapper.c \
   group.c \
   init_database.c \
+  mi_interface.c \
   next_song.c \
   song.c \
   w_malloc.c

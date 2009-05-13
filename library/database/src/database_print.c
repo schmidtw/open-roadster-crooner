@@ -27,6 +27,7 @@
 #define MAX_DISPLAY_ALBUM_LEN   20
 #define MAX_DISPLAY_SONG_LEN    30
 #define MAX_TRACK_DIGITS        3
+#define MAX_FILE_NAME           35
 
 
 void database_print( void )
@@ -108,8 +109,9 @@ void album_print( album_node_t * album, int spaces )
 
 void song_print( song_node_t * song, int spaces )
 {
-    printf("%*.*s %*.*d.) %-*.*s\n",
+    printf("%*.*s %*.*d.) %-*.*s  -- %*.*s\n",
             spaces, spaces, " ",
             MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, song->track_number,
-            MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->title );
+            MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->title,
+            MAX_FILE_NAME, MAX_FILE_NAME, song->file_location );
 }
