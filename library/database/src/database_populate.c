@@ -16,6 +16,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <media-interface/media-interface.h>
+
 #include "database.h"
 #include "internal_database.h"
 #include "group.h"
@@ -24,11 +26,10 @@
 #include "file_os_wrapper.h"
 #include "mi_interface.h"
 
-#include <media-interface/media-interface.h>
 
 bool setup_group_name( const char * name );
 group_node_t * find_group_node( const char * dir_name );
-void place_songs_into_group( group_node_t * gn, char * dir_name );
+bool place_songs_into_group( group_node_t * gn, char * dir_name );
 bool get_last_dir_name( char * dest, char * src );
 void append_to_path( char * dest, const char * src );
 bool iterate_to_dir_entry( const char * dir_name );
@@ -76,6 +77,10 @@ bool populate_database( const char ** directory,
     
     database_purge();
     
+    if( NULL == RootDirectory ) {
+        goto failure;
+    }
+    
     ll_init_list( &(rdn.groups) );
     for(ii=0;ii<num_directories;ii++) {
         if( NULL != directory[ii] ) {
@@ -88,7 +93,7 @@ bool populate_database( const char ** directory,
     /* Create an extra group which will be the tail of the list
      * and will receive all of the unsorted media files
      */
-    if( false == setup_group_name("Unknown Group\0") ) {
+    if( false == setup_group_name("Unknown Group") ) {
         goto failure;
     }
     rdn.size_list++;
@@ -110,18 +115,23 @@ bool populate_database( const char ** directory,
              */
             append_to_path( base_dir, file_info.short_filename );
             if( true == file_info.is_dir ) {
+                bool rv;
                 /* this is a directory, search for the group.  Once we have
                  * the group, call a subroutine which will place all files
                  * in this directory into the correct group.
                  */
-                place_songs_into_group( find_group_node(file_info.short_filename),
-                                        base_dir );
-                /* Reopen the root directory */
-                base_dir[num_chars_base_dir] = '\0';
-                if( FRV_RETURN_GOOD != open_directory( base_dir ) ) {
+                rv = place_songs_into_group(
+                        find_group_node(file_info.short_filename),
+                        base_dir );
+                if( false == rv ) {
                     goto failure;
                 }
-                iterate_to_dir_entry( file_info.short_filename );
+                /* Reopen the root directory */
+                base_dir[num_chars_base_dir] = '\0';
+                if(    ( FRV_RETURN_GOOD != open_directory( base_dir ) )
+                    || ( false == iterate_to_dir_entry( file_info.short_filename ) ) ) {
+                    goto failure;
+                }
             } else { /* This is a file */
                 media_status_t rv;
                 media_metadata_t metadata;
@@ -136,6 +146,11 @@ bool populate_database( const char ** directory,
                             metadata.title, metadata.track_number,
                             &command_fn, &play_fn, base_dir );
                 }
+                /* After sending the fully qualified path into add the song
+                 * to the group, move the end of the string back to the
+                 * proper location
+                 */
+                base_dir[num_chars_base_dir] = '\0';
             }
         }
     }
@@ -185,19 +200,19 @@ group_node_t * find_group_node( const char * dir_name )
     return gn;
 }
 
-void place_songs_into_group( group_node_t * gn, char * dir_name )
+bool place_songs_into_group( group_node_t * gn, char * dir_name )
 {
     char last_dir[MAX_SHORT_FILENAME_W_NULL];
     char full_path[MAX_SHORT_FILENAME_PATH_W_NULL];
     
     if( NULL == gn ) {
-        return;
+        return false;
     }
     full_path[0] = '\0';
     strcpy( full_path, dir_name );
     /* Open the full_path directory for populating */
     if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
-        return;
+        return false;
     }
     while( 1 ) {
         file_info_t file_info;
@@ -211,21 +226,19 @@ void place_songs_into_group( group_node_t * gn, char * dir_name )
                 /* This is the base directory which was passed in.  We
                  * don't want to search folders below this.
                  */
-                return;
+                return true;
             }
             if( false == get_last_dir_name( last_dir, full_path ) ) {
-                return;
+                return false;
             }
             /* If we have a last_dir, then we should
              * go up a directory and continue searching for files
              * after this directory name
              */
             /* Open the parent directory */
-            if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
-                return;
-            }
-            if( false == iterate_to_dir_entry( last_dir ) ) {
-                return;
+            if(    ( FRV_RETURN_GOOD != open_directory( full_path ) )
+                || ( false == iterate_to_dir_entry( last_dir ) ) ) {
+                return false;
             }
         } else if( FRV_RETURN_GOOD == rv ) {
             append_to_path(full_path, file_info.short_filename );
@@ -237,7 +250,7 @@ void place_songs_into_group( group_node_t * gn, char * dir_name )
                 
                 /* open the found directory for searching */
                 if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
-                    return;
+                    return false;
                 }
             } else { /* This is a file */
                 media_status_t rv;
@@ -253,7 +266,9 @@ void place_songs_into_group( group_node_t * gn, char * dir_name )
                             metadata.title, metadata.track_number,
                             &command_fn, &play_fn, full_path );
                 }
-                get_last_dir_name( junk_filename, full_path );
+                if( false == get_last_dir_name( junk_filename, full_path ) ) {
+                    return false;
+                }
             }
         }
     }
