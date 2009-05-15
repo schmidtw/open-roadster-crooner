@@ -51,8 +51,8 @@ typedef struct {
     char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
     album_node_t * album;
     uint8_t track_number;
-    media_command_fn_t *command_fn;
-    media_play_fn_t *play_fn;
+    media_command_fn_t command_fn;
+    media_play_fn_t play_fn;
 } song_node_t;
 
 typedef enum {

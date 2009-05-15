@@ -144,7 +144,7 @@ bool populate_database( const char ** directory,
                     add_song_to_group( (group_node_t *)rdn.groups.tail->data,
                             metadata.artist, metadata.album,
                             metadata.title, metadata.track_number,
-                            &command_fn, &play_fn, base_dir );
+                            command_fn, play_fn, base_dir );
                 }
                 /* After sending the fully qualified path into add the song
                  * to the group, move the end of the string back to the
@@ -264,7 +264,7 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
                 if( MI_RETURN_OK == rv ) {
                     add_song_to_group( gn, metadata.artist, metadata.album,
                             metadata.title, metadata.track_number,
-                            &command_fn, &play_fn, full_path );
+                            command_fn, play_fn, full_path );
                 }
                 if( false == get_last_dir_name( junk_filename, full_path ) ) {
                     return false;
