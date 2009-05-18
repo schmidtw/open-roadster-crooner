@@ -17,7 +17,6 @@ bool mi_init( void )
     
     mi_list = media_new();
     if( NULL == mi_list ) {
-        printf("mi_list is NULL in mi_init\n");
         return false;
     }
     mi_is_initialized = true;
