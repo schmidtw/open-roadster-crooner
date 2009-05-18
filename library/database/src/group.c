@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <linked-list/linked-list.h>
 #include "database.h"
+#include "internal_database.h"
 #include "group.h"
 #include "artist.h"
 #include "w_malloc.h"
@@ -49,4 +50,5 @@ void delete_group(ll_node_t *node, volatile void *user_data)
     gn = (group_node_t *)node->data;
     ll_delete_list(&gn->artists, delete_artist, NULL);
     free(gn);
+    rdn.size_list--;
 }

@@ -34,6 +34,7 @@ void database_print( void )
 {
     group_node_t * gn;
     
+    printf("==== Database ==========================\n");
     if( NULL != rdn.groups.head ) {
         gn = (group_node_t *)rdn.groups.head->data;
         while( NULL != gn ) {
@@ -41,6 +42,7 @@ void database_print( void )
             if( NULL != gn->node.next ) {
                 gn = (group_node_t *)gn->node.next->data;
                 printf("------------------------------\n");
+                fflush(stdout);
             } else {
                 break;
             }
@@ -56,7 +58,7 @@ void group_print( group_node_t * group, int spaces )
     printf("%*.*s Group: %-*.*s\n",
             spaces, spaces, " ",
             MAX_DISPLAY_GROUP_LEN, MAX_DISPLAY_GROUP_LEN, group->name );
-    
+    fflush(stdout);
     while( NULL != ar_n ) {
         artist_print( ar_n, (spaces + MAX_DISPLAY_GROUP_LEN + 8 ) );
         if( NULL != ar_n->node.next ) {
@@ -72,11 +74,10 @@ void artist_print( artist_node_t * artist, int spaces )
     album_node_t *al_n;
     
     al_n = (album_node_t *)artist->albums.head->data;
-    
     printf("%*.*s %-*.*s\n",
             spaces, spaces, " ",
             MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name );
-    
+    fflush(stdout);
     while( NULL != al_n ) {
         album_print( al_n, (spaces + MAX_DISPLAY_ARTIST_LEN) );
         if( NULL != al_n->node.next ) {
@@ -96,7 +97,7 @@ void album_print( album_node_t * album, int spaces )
     printf("%*.*s %-*.*s\n",
             spaces, spaces, " ",
             MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name );
-    
+    fflush(stdout);
     while( NULL != so_n ) {
         song_print( so_n, (spaces + MAX_DISPLAY_ARTIST_LEN) );
         if( NULL != so_n->node.next ) {
@@ -114,4 +115,5 @@ void song_print( song_node_t * song, int spaces )
             MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, song->track_number,
             MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->title,
             MAX_FILE_NAME, MAX_FILE_NAME, song->file_location );
+    fflush(stdout);
 }

@@ -17,6 +17,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <media-interface/media-interface.h>
+#include <stdlib.h>
+#include <linked-list/linked-list.h>
 
 #include "database.h"
 #include "internal_database.h"
@@ -33,6 +35,7 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name );
 bool get_last_dir_name( char * dest, char * src );
 void append_to_path( char * dest, const char * src );
 bool iterate_to_dir_entry( const char * dir_name );
+ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data );
 
 /**
  * The structure of the pools are:
@@ -142,8 +145,8 @@ bool populate_database( const char ** directory,
                         &command_fn, &play_fn );
                 if( MI_RETURN_OK == rv ) {
                     add_song_to_group( (group_node_t *)rdn.groups.tail->data,
-                            metadata.artist, metadata.album,
-                            metadata.title, metadata.track_number,
+                            (char *)metadata.artist, (char *)metadata.album,
+                            (char *)metadata.title, metadata.track_number,
                             command_fn, play_fn, base_dir );
                 }
                 /* After sending the fully qualified path into add the song
@@ -154,11 +157,23 @@ bool populate_database( const char ** directory,
             }
         }
     }
+    ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_group, NULL);
     database_print();
     return true;
 failure:
     database_purge();
     return false;
+}
+
+ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data )
+{
+    group_node_t *gn;
+    
+    gn = (group_node_t *)node->data;
+    if( NULL == gn->artists.head  ) {
+        return LL_IR__DELETE_AND_CONTINUE;
+    }
+    return LL_IR__CONTINUE;
 }
 
 bool setup_group_name( const char * name )
@@ -218,7 +233,6 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
         file_info_t file_info;
         /* Open the next element in this directory */
         file_return_value rv = get_next_element_in_directory( &file_info ); 
-        
         if( FRV_END_OF_ENTRIES == rv ) {
             /* We don't have any more files in this directory.
              */
@@ -262,8 +276,8 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
                 rv = mi_get_information( full_path, &metadata,
                         &command_fn, &play_fn );
                 if( MI_RETURN_OK == rv ) {
-                    add_song_to_group( gn, metadata.artist, metadata.album,
-                            metadata.title, metadata.track_number,
+                    add_song_to_group( gn, (char *)metadata.artist, (char *)metadata.album,
+                            (char *)metadata.title, metadata.track_number,
                             command_fn, play_fn, full_path );
                 }
                 if( false == get_last_dir_name( junk_filename, full_path ) ) {
