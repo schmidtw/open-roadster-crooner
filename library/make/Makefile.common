@@ -25,6 +25,9 @@ dirs_needed = $(sort $(dir $(HEADERS)))
 lib_name = lib$(TARGET)-$(lboard).a
 lib_temp_location = $(gen_dir)/$(lib_name)
 
+fillout_dependency_file = $(BASE)/tools/make_empty_dependencies.pl
+makefile_dependency = $(filter %Makefile.common %Makefile,$(MAKEFILE_LIST))
+
 ifeq ($(BOARD),EVK1100)
 chip = uc3a0512es
 arch = ucr1
@@ -81,12 +84,14 @@ $(gen_file) :
 	$(QUIET)mkdir -p $(dir $@)
 	$(QUIET)touch $@
 
-$(gen_dir)/%.o : %.c $(gen_file)
+$(gen_dir)/%.o : %.c $(gen_file) $(makefile_dependency)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -MM -MT $@ -MF $(@:%.o=%.d) $<
+	$(QUIET)perl $(fillout_dependency_file) $(@:%.o=%.d)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -o $@ $<
 
-$(gen_dir)/%.o : %.S $(gen_file)
+$(gen_dir)/%.o : %.S $(gen_file) $(makefile_dependency)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -MM -MT $@ -MF $(@:%.o=%.d) $<
+	$(QUIET)perl $(fillout_dependency_file) $(@:%.o=%.d)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -o $@ $<
 
 .PHONY: clean
