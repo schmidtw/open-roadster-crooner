@@ -12,6 +12,8 @@ sleepusb     = 1
 empty_file   = .auto_gen_file
 gen_dir      = objs
 gen_file     = $(gen_dir)/$(empty_file)
+fillout_dependency_file = $(BASE)/tools/make_empty_dependencies.pl
+makefile_dependency = $(filter %Makefile.common %Makefile,$(MAKEFILE_LIST))
 
 inc_dir = $(BASE)/bins/include
 lib_dir = $(BASE)/bins/lib
@@ -119,8 +121,9 @@ $(gen_file) : $(MAKEFILE_LIST)
 	$(QUIET)mkdir -p $(dir $@)
 	$(QUIET)touch $@
 
-$(gen_dir)/%.o : %.c $(gen_file)
+$(gen_dir)/%.o : %.c $(gen_file) $(makefile_dependency)
 	$(QUIET)$(cc) $(cflags) $(includes) -MM -MT $@ -MF $(@:%.o=%.d) $<
+	$(QUIET)perl $(fillout_dependency_file) $(@:%.o=%.d)
 	$(QUIET)$(cc) $(cflags) $(OPTIMIZATIONS) -g -c $(includes) -o $@ $<
 
 $(gen_dir)/%.o : %.S $(gen_file) 
