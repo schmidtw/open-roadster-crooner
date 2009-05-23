@@ -46,9 +46,24 @@ bsp_status_t spi_reset( volatile avr32_spi_t *spi );
  *      @retval BSP_RETURN_OK
  *      @retval BSP_ERROR_PARAMETER
  */
-bsp_status_t spi_set_baudrate(  volatile avr32_spi_t *spi,
-                                const uint8_t chip,
-                                const uint32_t max_frequency );
+bsp_status_t spi_set_baudrate( volatile avr32_spi_t *spi,
+                               const uint8_t chip,
+                               const uint32_t max_frequency );
+
+/**
+ *  Used to get the current baudrate for a particular chip.
+ *
+ *  @param spi the SPI module to inspect
+ *  @param chip the chip index [0-3]
+ *  @param baud_rate the current baud rate of the chip
+ *
+ *  @return Status
+ *      @retval BSP_RETURN_OK
+ *      @retval BSP_ERROR_PARAMETER
+ */
+bsp_status_t spi_get_baudrate( volatile avr32_spi_t *spi,
+                               const uint8_t chip,
+                               uint32_t *baud_rate );
 
 /**
  *  Used to enable an SPI module.

@@ -126,6 +126,40 @@ bsp_status_t spi_set_baudrate(  volatile avr32_spi_t *spi,
 }
 
 /* See spi.h for details. */
+bsp_status_t spi_get_baudrate( volatile avr32_spi_t *spi,
+                               const uint8_t chip,
+                               uint32_t *baud_rate )
+{
+    uint32_t pba_hz;
+
+#if (0 < STRICT_PARAMS)
+    if( (NULL == spi) || (NULL == baud_rate) || (3 < chip) ) {
+        return BSP_ERROR_PARAMETER;
+    }
+#endif
+
+    pba_hz = pm_get_frequency( PM__PBA );
+
+#if (0 < STRICT_PARAMS)
+    if( 0 == pba_hz ) {
+        return BSP_ERROR_PARAMETER;
+    }
+#endif
+
+    if( 0 == chip ) {
+        *baud_rate = pba_hz / spi->CSR0.scbr;
+    } else if( 1 == chip ) {
+        *baud_rate = pba_hz / spi->CSR1.scbr;
+    } else if( 2 == chip ) {
+        *baud_rate = pba_hz / spi->CSR2.scbr;
+    } else {
+        *baud_rate = pba_hz / spi->CSR3.scbr;
+    }
+
+    return BSP_RETURN_OK;
+}
+
+/* See spi.h for details. */
 bsp_status_t spi_enable( volatile avr32_spi_t *spi )
 {
 #if (0 < STRICT_PARAMS)
