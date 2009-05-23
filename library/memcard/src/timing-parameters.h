@@ -32,9 +32,9 @@
  *
  *  f = clock frequency
  *
- *  * = [10 * ((TAAC * f) + (100 * NSAC)) / 8] for MMC
- *  * = min[ ((TAAC * f) + (100 *NSAC)) / 8 or (100ms * f) / 8)] for SD
- *  * = [(100ms * f) / 8] for SD20
+ *  * = [10 * ((TAAC * f) + (100 * NSAC))] for MMC
+ *  * = min[ ((TAAC * f) + (100 * NSAC)) or (100ms * f)] for SD
+ *  * = [(100ms * f)] for SD20
  */
 #define MC_Ncs  1
 #define MC_Ncr  10
