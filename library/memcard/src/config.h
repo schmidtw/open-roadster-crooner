@@ -25,4 +25,6 @@
 #define MC_BAUDRATE_INITIALIZATION  200000
 #define MC_BAUDRATE_MAX             16500000
 
+#define MC_VOLTAGE  3300
+
 #endif

@@ -28,8 +28,8 @@ typedef struct {
     uint64_t taac;          /** The TAAC in ps. */
     uint32_t nsac;          /** The NSAC in cycles. */
     uint32_t max_speed;     /** The maximum transfer speed in Hz. */
-    uint32_t block_size;    /** The read block size in bytes. */
-    uint64_t total_blocks;  /** Total block count. */
+    uint32_t block_size;    /** The current read block size in bytes. */
+    uint64_t total_size;    /** Total size in bytes. */
     uint32_t min_read;      /** Minimum current draw (uA) during reading. */
     uint32_t max_read;      /** Maximum current draw (uA) during reading. */
     uint32_t min_write;     /** Minimum current draw (uA) during writing. */
@@ -59,8 +59,8 @@ typedef struct {
 mc_status_t mc_go_idle_state( void );
 
 /**
- *  Used to determine if the card supports the voltage the system is running
- *  at.
+ *  Used to determine interface condition the card supports the voltage the
+ *  system is running at.
  *
  *  @note CMD8
  *

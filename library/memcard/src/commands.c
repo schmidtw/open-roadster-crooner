@@ -172,7 +172,7 @@ mc_status_t mc_send_sd_op_cond( const bool support_hc, bool *card_ready )
         return MC_ERROR_TIMEOUT;
     }
 
-    *card_ready = (MC_R1_IN_IDLE_STATE == (MC_R1_IN_IDLE_STATE & r1)) ? true : false;
+    *card_ready = (0 == r1) ? true : false;
 
     return MC_RETURN_OK;
 }

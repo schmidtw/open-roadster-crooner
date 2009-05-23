@@ -18,7 +18,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <stdio.h>
 
 #include "commands.h"
@@ -33,15 +32,15 @@
 #define CSD_STRUCTURE_MASK          0xc0
 #define CSD_STRUCTURE_SHIFT         6
 
-#define CSD_TAAC_UNIT_MASK          0xe0
-#define CSD_TAAC_UNIT_SHIFT         5
-#define CSD_TAAC_VALUE_MASK         0x1e
-#define CSD_TAAC_VALUE_SHIFT        1
+#define CSD_TAAC_UNIT_MASK          0x03
+#define CSD_TAAC_UNIT_SHIFT         0
+#define CSD_TAAC_VALUE_MASK         0x78
+#define CSD_TAAC_VALUE_SHIFT        3
 
-#define CSD_TRAN_UNIT_MASK          0xe0
-#define CSD_TRAN_UNIT_SHIFT         5
-#define CSD_TRAN_VALUE_MASK         0x1e
-#define CSD_TRAN_VALUE_SHIFT        1
+#define CSD_TRAN_UNIT_MASK          0x03
+#define CSD_TRAN_UNIT_SHIFT         0
+#define CSD_TRAN_VALUE_MASK         0x78
+#define CSD_TRAN_VALUE_SHIFT        3
 
 #define CSD_READ_BL_LEN_MASK        0x0f
 #define CSD_READ_BL_LEN_SHIFT       0
@@ -66,6 +65,8 @@
 #define MMC_V1_2    2
 
 #define MC_BLOCK_START  0xfe
+
+#define MC_CSD_BUFFER_SIZE  15
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -106,7 +107,7 @@ static size_t __csd_get_read_block_len( const uint8_t *buffer );
 #ifdef SUPPORT_WRITING
 static size_t __csd_get_write_block_len( const uint8_t *buffer );
 #endif
-static uint64_t __csd_get_total_blocks( const uint8_t *buffer );
+static uint64_t __csd_get_total_size( const uint8_t *buffer );
 static uint32_t __csd_get_r2w_factor( const uint8_t *buffer );
 static uint32_t __csd_get_min_r_ua_draw( const uint8_t *buffer );
 static uint32_t __csd_get_max_r_ua_draw( const uint8_t *buffer );
@@ -128,7 +129,7 @@ static mc_status_t __get_csd_data( uint8_t *buffer );
 mc_status_t mc_get_csd( mc_csd_t *csd, const uint32_t clock )
 {
     mc_status_t status;
-    uint8_t buffer[15];
+    uint8_t buffer[MC_CSD_BUFFER_SIZE];
 
     if( (NULL == csd) || (0 == clock) ) {
         return MC_ERROR_PARAMETER;
@@ -143,7 +144,7 @@ mc_status_t mc_get_csd( mc_csd_t *csd, const uint32_t clock )
     csd->nsac = __csd_get_nsac( buffer );
     csd->max_speed = __csd_get_tran_speed( buffer );
     csd->block_size = __csd_get_read_block_len( buffer );
-    csd->total_blocks = __csd_get_total_blocks( buffer );
+    csd->total_size = __csd_get_total_size( buffer );
     csd->min_read = __csd_get_min_r_ua_draw( buffer );
     csd->max_read = __csd_get_max_r_ua_draw( buffer );
     csd->min_write = __csd_get_min_w_ua_draw( buffer );
@@ -152,11 +153,23 @@ mc_status_t mc_get_csd( mc_csd_t *csd, const uint32_t clock )
     csd->nac_write = __csd_get_nac_write( buffer, clock );
     csd->nac_erase = __csd_get_nac_erase( buffer, clock );
 
+    printf( "csd->taac: %llu ps\n", csd->taac );
+    printf( "csd->nsac: %lu cycles\n", csd->nsac );
+    printf( "csd->max_speed: %lu Hz\n", csd->max_speed );
+    printf( "csd->block_size: %lu bytes\n", csd->block_size );
+    printf( "csd->total_size: %llu bytes\n", csd->total_size );
+    printf( "csd->min_read: %lu uA\n", csd->min_read );
+    printf( "csd->max_read: %lu uA\n", csd->max_read );
+    printf( "csd->min_write: %lu uA\n", csd->min_write );
+    printf( "csd->max_write: %lu uA\n", csd->max_write );
+    printf( "csd->nac_read: %lu cycles\n", csd->nac_read );
+    printf( "csd->nac_write: %lu cycles\n", csd->nac_write );
+    printf( "csd->nac_erase: %lu cycles\n", csd->nac_erase );
+
     if( (0 == csd->taac) ||
-        (0 == csd->nsac) ||
         (0 == csd->max_speed) ||
         (0 == csd->block_size) ||
-        (0 == csd->total_blocks) ||
+        (0 == csd->total_size) ||
         (0 == csd->nac_read) ||
         (0 == csd->nac_write) ||
         (0 == csd->nac_erase) )
@@ -284,20 +297,22 @@ static size_t __csd_get_write_block_len( const uint8_t *buffer )
 #endif
 
 /**
- *  Used to get the total number of blocks on the card.
+ *  Used to get the total size of the card in bytes.
  *
  *  @param buffer the data to process
  *
- *  @return total number of blocks on the card, or 0 on error
+ *  @return total size of the card in bytes, or 0 on error
  */
-static uint64_t __csd_get_total_blocks( const uint8_t *buffer )
+static uint64_t __csd_get_total_size( const uint8_t *buffer )
 {
     uint64_t blocks;
     uint32_t structure;
+    uint32_t block_size;
 
     blocks = 0;
 
     structure = __get_csd_structure( buffer );
+    block_size = __csd_get_read_block_len( buffer );
 
     if( (SD_V1 == structure) || (MMC_V1_2 == structure) ) {
         uint32_t c_size, c_size_mult;
@@ -321,7 +336,7 @@ static uint64_t __csd_get_total_blocks( const uint8_t *buffer )
         blocks = (1 + c_size) * 1024;
     }
 
-    return blocks;
+    return (blocks * block_size);
 }
 
 /**
@@ -453,6 +468,7 @@ static uint32_t __csd_get_max_w_ua_draw( const uint8_t *buffer )
 static uint32_t __csd_get_nac_read( const uint8_t *buffer,
                                     const uint32_t clock )
 {
+#ifdef USE_COMPLICATED_NAC_CALC
     uint32_t nac;
     uint32_t structure;
     uint64_t taac;
@@ -465,18 +481,22 @@ static uint32_t __csd_get_nac_read( const uint8_t *buffer,
     structure = __get_csd_structure( buffer );
 
     if( (SD_V1 == structure) || (MMC_V1_2 == structure) ) {
-        if( (0 < taac) && (0 < nsac) ) {
+        if( 0 < taac ) {
             uint64_t tmp;
 
             tmp = taac * ((uint64_t) clock);
+            tmp += 999999999999ULL;
             tmp /= 1000000000000ULL;
             tmp += nsac;
-            tmp *= 100;
 
             if( tmp < ((clock + 9) / 10) ) {
                 nac = (uint32_t) tmp;
             } else {
                 nac = (clock + 9) / 10;
+            }
+
+            if( 0 == nac ) {
+                nac = 1;
             }
         }
     } else if( SD_V2 == structure ) {
@@ -484,6 +504,9 @@ static uint32_t __csd_get_nac_read( const uint8_t *buffer,
     }
 
     return nac;
+#else
+    return ((clock + 9) / 10);
+#endif
 }
 
 /**
@@ -583,7 +606,7 @@ static mc_status_t __get_csd_data( uint8_t *buffer )
 csd_start:
     status = MC_CRC_FAILURE;
 
-    for( i = 0; i < sizeof(buffer); i++ ) {
+    for( i = 0; i < MC_CSD_BUFFER_SIZE; i++ ) {
         io_send_read( 0xff, &buffer[i] );
     }
     io_send_read( 0xff, &crc );
@@ -592,8 +615,9 @@ csd_start:
         goto error;
     }
 
+
     crc >>= 1;
-    if( crc != crc7(buffer, sizeof(buffer)) ) {
+    if( crc != crc7(buffer, MC_CSD_BUFFER_SIZE) ) {
         goto error;
     }
 
@@ -623,16 +647,16 @@ error:
  *             |      reserved      |      |     reserved     |
  *             |      reserved      |      |     reserved     |
  *             +--------------------+------+------------------+
- *             |      taac_unit     |      |
- *             |      taac_unit     |      |
- *             |      taac_unit     |      |
+ *             |      reserved      |      |
  *             +--------------------+      |
+ *             |     taac_value     |      |
  *             |     taac_value     |      |
  *             |     taac_value     |  1   |
  *             |     taac_value     |      |
- *             |     taac_value     |      |
  *             +--------------------+      |
- *             |      reserved      |      |
+ *             |      taac_unit     |      |
+ *             |      taac_unit     |      |
+ *             |      taac_unit     |      |
  *             +--------------------+------+
  *             |       nsac         |      |
  *             |       nsac         |      |
@@ -643,16 +667,16 @@ error:
  *             |       nsac         |      |
  *             |       nsac         |      |
  *             +--------------------+------+
- *             |      tran_unit     |      |
- *             |      tran_unit     |      |
- *             |      tran_unit     |      |
+ *             |      reserved      |      |
  *             +--------------------+      |
+ *             |     tran_value     |      |
  *             |     tran_value     |      |
  *             |     tran_value     |  3   |
  *             |     tran_value     |      |
- *             |     tran_value     |      |
  *             +--------------------+      |
- *             |      reserved      |      |
+ *             |      tran_unit     |      |
+ *             |      tran_unit     |      |
+ *             |      tran_unit     |      |
  *             +--------------------+------+
  *             |        ccc         |      |
  *             |        ccc         |      |

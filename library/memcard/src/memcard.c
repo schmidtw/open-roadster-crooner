@@ -30,8 +30,10 @@
 #include <bsp/spi.h>
 #include <bsp/pdca.h>
 
+#include <freertos/portmacro.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
+#include <util/xxd.h>
 
 #include "config.h"
 #include "memcard.h"
@@ -42,6 +44,8 @@
 #include "fast-fill.h"
 #include "io.h"
 
+//#define MEMCARD_DEBUG   10
+
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
@@ -50,15 +54,29 @@
 
 #define MC_BLOCK_START  0xFE
 
+#define MC_READ_SINGLE_BLOCK 17
+#define MC_COMMAND_BUFFER_SIZE  (MC_Ncs + 6 + MC_Ncr)
+#define MC_BLOCK_BUFFER_SIZE    (512 + 10)
+
 #define MIN( a, b )     ((a) < (b)) ? (a) : (b)
-#define MC_LOCK()
-#define MC_UNLOCK()
-#define MC_SLEEP( ms )
-#define MC_SUSPEND()
-#define MC_RESUME()
+
 
 #define __MC_CSR( index )   MC_SPI->CSR##index
 #define MC_CSR( index )     __MC_CSR( index )
+
+#define _D1(...)
+#define _D2(...)
+
+#ifdef MEMCARD_DEBUG
+#if (0 < MEMCARD_DEBUG)
+#undef  _D1
+#define _D1(...) printf( __VA_ARGS__ )
+#endif
+#if (1 < MEMCARD_DEBUG)
+#undef  _D2
+#define _D2(...) printf( __VA_ARGS__ )
+#endif
+#endif
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -69,23 +87,40 @@ typedef enum { MCT_UNKNOWN = 0x00,
                MCT_SD_20   = 0x21,
                MCT_SDHC    = 0x22 } mc_card_type_t;
 
-typedef enum { MVL_27 = 0x00008000,
-               MVL_28 = 0x00018000,
-               MVL_29 = 0x00030000,
-               MVL_30 = 0x00060000,
-               MVL_31 = 0x000C0000,
-               MVL_32 = 0x00180000,
-               MVL_33 = 0x00300000,
-               MVL_34 = 0x00600000,
-               MVL_35 = 0x00C00000,
-               MVL_36 = 0x00800000 } mc_voltage_levels_t;
+typedef enum {
+    MCS_NO_CARD,
+    MCS_CARD_DETECTED,
+    MCS_POWERED_ON,
+    MCS_ASSERT_SPI_MODE,
+    MCS_INTERFACE_CONDITION_CHECK,
+    MCS_INTERFACE_CONDITION_SUCCESS,
+    MCS_INTERFACE_CONDITION_FAILURE,
+    MCS_SD10_COMPATIBLE_VOLTAGE,
+    MCS_SD20_COMPATIBLE_VOLTAGE,
+    MCS_SD10_CARD_READY,
+    MCS_SD20_CARD_READY,
+    MCS_MMC_CARD,
+    MCS_DETERMINE_METRICS,
+    MCS_SET_BLOCK_SIZE,
+    MCS_CARD_READY,
+    MCS_CARD_UNUSABLE
+} mc_mount_state_t;
 
-typedef enum { MC_CRC_NONE,
-               MC_CRC_7,
-               MC_CRC_16 } mc_crc_type_t;
+typedef enum {
+    MRS_QUEUED,
+    MRS_COMMAND_SENT,
+    MRS_LOOKING_FOR_BLOCK,
+    MRS_BLOCK_START_FOUND,
+    MRS_SUCCESS,
+    MRS_TIMEOUT
+} mc_request_state_t;
 
 typedef struct {
+    uint8_t command[MC_COMMAND_BUFFER_SIZE];
     uint8_t *buffer;
+    uint32_t length;
+    mc_request_state_t state;
+    uint32_t nac;
 } mc_message_t;
 
 /*----------------------------------------------------------------------------*/
@@ -93,38 +128,90 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 static mc_card_type_t mc_type;
 static bool mc_mounted;
-static uint32_t mc_Nac_read;    /**< In SPI clock cycles. */
-static uint32_t mc_Nac_write;   /**< In SPI clock cycles. */
-static uint32_t mc_Nac_erase;   /**< In SPI clock cycles. */
-static uint32_t mc_blocks;
+static uint64_t mc_size;
+static uint32_t mc_Nac_read;
 static uint32_t mc_block_size;  /**< In bytes. */
-static uint32_t mc_baud_rate;   /**< In Hz. */
-
-static volatile bool transfer_done; /* Only used by block transfer & ISR. */
 
 static xQueueHandle __idle;
 static xQueueHandle __pending;
 static xQueueHandle __complete;
 static mc_message_t __messages[MC_MSG_MAX];
-static uint8_t *__fast_buffer;
-static volatile uint32_t __last_Nac_wait_time;
-static volatile uint32_t __last_bytes_sent;
-static volatile uint32_t __total_bytes_sent;
+static uint8_t *__command_buffer;
+static uint8_t *__block_buffer;
+
+/*----------------------------------------------------------------------------*/
+/*                                  Constants                                 */
+/*----------------------------------------------------------------------------*/
+#if (522 != MC_BLOCK_BUFFER_SIZE)
+#error Need to update the __dummy_data
+#endif
+static const uint8_t __dummy_data[MC_BLOCK_BUFFER_SIZE] =
+{
+    /* 512 */
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,
+
+    /* 10 */
+    0xff, 0xff, 0xff, 0xff,  0xff, 0xff, 0xff, 0xff,  0xff, 0xff
+};
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static mc_status_t __send_card_to_idle_state( void );
 static mc_status_t __is_card_voltage_compat( void );
-static mc_status_t __is_sd_card( void );
-static mc_status_t __complete_init( void );
+static void __fast_read_single_block( mc_message_t *msg );
+static void __fast_process_block( void );
 static mc_status_t __determine_metrics( void );
-static mc_status_t __wait_until_not_busy( void );
 static mc_status_t __set_block_size( void );
 __attribute__((__interrupt__))
 static void __card_ejected( void );
 __attribute__((__interrupt__))
 static void __fast_read_handler( void );
+static inline void __queue_and_send( const uint8_t *send,
+                                     uint8_t *receive,
+                                     const size_t length,
+                                     const bool select );
+static inline uint32_t __find_and_process_block_start( mc_message_t *msg,
+                                                       const uint8_t *start,
+                                                       const size_t len );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -132,8 +219,9 @@ static void __fast_read_handler( void );
 /* See memcard.h for details. */
 mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
 {
+    int32_t i;
+
     mc_mounted = false;
-    mc_type = MCT_UNKNOWN;
 
     /* Create an interrupt on the card ejection. */
     gpio_set_options( MC_CD_PIN,
@@ -151,11 +239,15 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
     __pending = xQueueCreate( MC_MSG_MAX, sizeof(mc_message_t*) );
     __complete = xQueueCreate( MC_MSG_MAX, sizeof(mc_message_t*) );
 
-    __fast_buffer = (uint8_t *) (*fast_malloc_fn)( MC_FAST_BUFFER_SIZE );
+    __command_buffer = (uint8_t *) (*fast_malloc_fn)( MC_COMMAND_BUFFER_SIZE );
+    __block_buffer = (uint8_t *) (*fast_malloc_fn)( MC_BLOCK_BUFFER_SIZE );
+
+    for( i = 0; i < MC_MSG_MAX; i++ ) {
+        xQueueSendToBack( __idle, &__messages[i], 0 );
+    }
 
     intc_register_isr( &__card_ejected, MC_CD_ISR, ISR_LEVEL__2 );
-    //intc_register_isr( &__pdca_block_read_handler, MC_RX_ISR, ISR_LEVEL__1 );
-    //intc_register_isr( &__pdca_block_read_handler, MC_TX_ISR, ISR_LEVEL__1 );
+    intc_register_isr( &__fast_read_handler, MC_RX_ISR, ISR_LEVEL__1 );
 
     pdca_channel_init( PDCA_CHANNEL_ID_MC_RX, MC_PDCA_RX_PERIPHERAL_ID, 8 );
     pdca_channel_init( PDCA_CHANNEL_ID_MC_TX, MC_PDCA_TX_PERIPHERAL_ID, 8 );
@@ -176,49 +268,40 @@ bool mc_present( void )
 /* See memcard.h for details. */
 mc_status_t mc_mount( void )
 {
+    mc_mount_state_t mount_state;
+    int retries;
     static const gpio_map_t map[] = { { MC_SCK_PIN,  MC_SCK_FUNCTION  },
                                       { MC_MISO_PIN, MC_MISO_FUNCTION },
                                       { MC_MOSI_PIN, MC_MOSI_FUNCTION },
                                       { MC_CS_PIN,   MC_CS_FUNCTION   } };
 
-    mc_status_t status;
-    int retries;
-    int i;
-    bool legal_command;
-
     retries = 10;
 
-    MC_LOCK();
-
     if( true == mc_mounted ) {
-        status = MC_IN_USE;
-        goto done;
+        return MC_IN_USE;
     }
-
-retry:
-
-    /* Make sure the power is stable. */
-    MC_SLEEP( 250 ); /* 250 ms */
 
     /* Initialize the hardware. */
     gpio_enable_module( map, sizeof(map)/sizeof(gpio_map_t) );
 
     spi_reset( MC_SPI );
 
-    MC_SPI->MR.mstr = 1;      /* master mode */
-    MC_SPI->MR.modfdis = 1;   /* ignore faults */
+    MC_SPI->MR.mstr = 1;    /* master mode */
+    MC_SPI->MR.modfdis = 1; /* ignore faults */
+    MC_SPI->MR.dlybcs = 8;  /* make sure there is a delay between CSs */
 
     if( MC_RETURN_OK !=
             spi_set_baudrate(MC_SPI, MC_CS, MC_BAUDRATE_INITIALIZATION) )
     {
-        status = MC_INIT_ERROR;
-        goto done;
+        return MC_INIT_ERROR;
     }
 
     /* Allow 8 clock cycles of up time for the chip select
      * prior to enabling/disabling it */
-    (MC_CSR(MC_CS)).dlybct = 8;
     (MC_CSR(MC_CS)).dlybs  = 8;
+
+    /* No need for delays between byte data transfers */
+    (MC_CSR(MC_CS)).dlybct = 0;
 
     /* scbr is set by spi_set_baudrate() */
 
@@ -228,107 +311,233 @@ retry:
     (MC_CSR(MC_CS)).ncpha  = 1;
     (MC_CSR(MC_CS)).cpol   = 0;
 
-    spi_enable( MC_SPI );
+    mount_state = MCS_NO_CARD;
 
-    /* Send 74+ clock cycles. */
-    for( i = 0; i < 10; i++ ) {
-        io_send_dummy();
-    }
+    while( 1 ) {
+        switch( mount_state ) {
+            case MCS_NO_CARD:
+                _D2( "MCS_NO_CARD:\n" );
+                mc_type = MCT_UNKNOWN;
+                if( true == mc_present() ) {
+                    _D2( "MCS_NO_CARD -> MCS_CARD_DETECTED\n" );
+                    mount_state = MCS_CARD_DETECTED;
+                } else {
+                    _D2( "MCS_NO_CARD -> Exit: MC_NOT_MOUNTED\n" );
+                    return MC_NOT_MOUNTED;
+                }
+                break;
 
-    /* Initialize the card into idle state. */
-    status = __send_card_to_idle_state();
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
+            case MCS_CARD_DETECTED:
+                _D2( "MCS_CARD_DETECTED:\n" );
+                /* Make sure the power is stable. */
+                vTaskDelay( TASK_DELAY_MS(250) );
+                _D2( "MCS_CARD_DETECTED -> MCS_POWERED_ON\n" );
+                mount_state = MCS_POWERED_ON;
+                break;
 
-    /* See if this card is an SD 2.00 compliant card. */
-    status = mc_send_if_cond( 3300, &legal_command );
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
+            case MCS_POWERED_ON:
+            {
+                int i;
+                _D2( "MCS_POWERED_ON:\n" );
+                spi_enable( MC_SPI );
 
-    if( false == legal_command ) {
-        mc_type = MCT_SD;
-    }
+                /* Send 74+ clock cycles. */
+                for( i = 0; i < 10; i++ ) {
+                    io_send_dummy();
+                }
 
-    /* See if this card has a compatible voltage range. */
-    status = __is_card_voltage_compat();
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
+                _D2( "MCS_POWERED_ON -> MCS_ASSERT_SPI_MODE\n" );
+                mount_state = MCS_ASSERT_SPI_MODE;
+                break;
+            }
 
-    /* See if the card is an SD card. */
-    status = __is_sd_card();
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
+            case MCS_ASSERT_SPI_MODE:
+                _D2( "MCS_ASSERT_SPI_MODE:\n" );
+                /* Initialize the card into idle state. */
+                if( MC_RETURN_OK == __send_card_to_idle_state() ) {
+                    _D2( "MCS_ASSERT_SPI_MODE -> MCS_INTERFACE_CONDITION_CHECK\n" );
+                    mount_state = MCS_INTERFACE_CONDITION_CHECK;
+                } else {
+                    _D2( "MCS_ASSERT_SPI_MODE -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
 
-    status = __complete_init();
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
+            case MCS_INTERFACE_CONDITION_CHECK:
+            {
+                bool legal_command;
 
-    if( MCT_SDHC == mc_type ) {
-        mc_ocr_t ocr;
+                _D2( "MCS_INTERFACE_CONDITION_CHECK:\n" );
+                /* See if this card is an SD 2.00 compliant card. */
+                if( MC_RETURN_OK == mc_send_if_cond(MC_VOLTAGE, &legal_command) ) {
+                    if( true == legal_command ) {
+                        _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_INTERFACE_CONDITION_SUCCESS\n" );
+                        mount_state = MCS_INTERFACE_CONDITION_SUCCESS;
+                    } else {
+                        _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_INTERFACE_CONDITION_FAILURE\n" );
+                        mount_state = MCS_INTERFACE_CONDITION_FAILURE;
+                    }
+                } else {
+                    _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+            }
 
-        status = mc_read_ocr( &ocr );
-        if( MC_RETURN_OK != status ) {
-            status = MC_INIT_ERROR;
-            goto done;
+            case MCS_INTERFACE_CONDITION_SUCCESS:
+                _D2( "MCS_INTERFACE_CONDITION_SUCCESS:\n" );
+                /* See if this card has a compatible voltage range. */
+                if( MC_RETURN_OK == __is_card_voltage_compat() ) {
+                    _D2( "MCS_INTERFACE_CONDITION_SUCCESS -> MCS_SD20_COMPATIBLE_VOLTAGE\n" );
+                    mount_state = MCS_SD20_COMPATIBLE_VOLTAGE;
+                } else {
+                    _D2( "MCS_INTERFACE_CONDITION_SUCCESS -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_INTERFACE_CONDITION_FAILURE:
+                _D2( "MCS_INTERFACE_CONDITION_FAILURE:\n" );
+                /* See if this card has a compatible voltage range. */
+                if( MC_RETURN_OK == __is_card_voltage_compat() ) {
+                    _D2( "MCS_INTERFACE_CONDITION_FAILURE -> MCS_SD10_COMPATIBLE_VOLTAGE\n" );
+                    mount_state = MCS_SD10_COMPATIBLE_VOLTAGE;
+                } else {
+                    _D2( "MCS_INTERFACE_CONDITION_FAILURE -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_SD10_COMPATIBLE_VOLTAGE:
+            {
+                bool ready;
+
+                _D2( "MCS_SD10_COMPATIBLE_VOLTAGE:\n" );
+                do {
+                    if( MC_RETURN_OK != mc_send_sd_op_cond(false, &ready) ) {
+                        _D2( "MCS_SD10_COMPATIBLE_VOLTAGE -> MCS_MMC_CARD\n" );
+                        mount_state = MCS_MMC_CARD;
+                        break;
+                    }
+                } while( false == ready );
+                _D2( "MCS_SD10_COMPATIBLE_VOLTAGE -> MCS_SD10_CARD_READY\n" );
+                mount_state = MCS_SD10_CARD_READY;
+                break;
+            }
+
+            case MCS_SD20_COMPATIBLE_VOLTAGE:
+            {
+                bool ready;
+
+                _D2( "MCS_SD20_COMPATIBLE_VOLTAGE:\n" );
+                do {
+                    if( MC_RETURN_OK != mc_send_sd_op_cond(true, &ready) ) {
+                        _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_CARD_UNUSABLE\n" );
+                        mount_state = MCS_CARD_UNUSABLE;
+                        break;
+                    }
+                } while( false == ready );
+                _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_SD20_CARD_READY\n" );
+                mount_state = MCS_SD20_CARD_READY;
+                break;
+            }
+
+            case MCS_SD10_CARD_READY:
+                _D2( "MCS_SD10_CARD_READY:\n" );
+                mc_type = MCT_SD;
+                _D2( "MCS_SD10_CARD_READY -> MCS_DETERMINE_METRICS\n" );
+                mount_state = MCS_DETERMINE_METRICS;
+                break;
+
+            case MCS_SD20_CARD_READY:
+            {
+                mc_ocr_t ocr;
+
+                _D2( "MCS_SD20_CARD_READY:\n" );
+                if( MC_RETURN_OK == mc_read_ocr(&ocr) ) {
+                    if( true == ocr.card_capacity_status ) {
+                        mc_type = MCT_SDHC;
+                    } else {
+                        mc_type = MCT_SD_20;
+                    }
+                    _D2( "MCS_SD20_CARD_READY -> MCS_DETERMINE_METRICS\n" );
+                    mount_state = MCS_DETERMINE_METRICS;
+                } else {
+                    _D2( "MCS_SD20_CARD_READY -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+            }
+
+            case MCS_MMC_CARD:
+                _D2( "MCS_MMC_CARD:\n" );
+                if( MC_RETURN_OK == __send_card_to_idle_state() ) {
+                    _D2( "MCS_MMC_CARD -> MCS_INTERFACE_CONDITION_CHECK\n" );
+                    mount_state = MCS_INTERFACE_CONDITION_CHECK;
+                } else {
+                    _D2( "MCS_MMC_CARD -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_DETERMINE_METRICS:
+                _D2( "MCS_DETERMINE_METRICS:\n" );
+                if( MC_RETURN_OK == __determine_metrics() ) {
+                    _D2( "MCS_DETERMINE_METRICS -> MCS_SET_BLOCK_SIZE\n" );
+                    mount_state = MCS_SET_BLOCK_SIZE;
+                } else {
+                    _D2( "MCS_DETERMINE_METRICS -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_SET_BLOCK_SIZE:
+                _D2( "MCS_SET_BLOCK_SIZE:\n" );
+                if( MC_RETURN_OK == __set_block_size() ) {
+                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_READY\n" );
+                    mount_state = MCS_CARD_READY;
+                } else {
+                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_CARD_READY:
+                _D2( "MCS_CARD_READY:\n" );
+                mc_mounted = true;
+
+                _D1( "Mounted Card type: " );
+                switch( mc_type ) {
+                    case MCT_UNKNOWN:   _D1( "Unknown" ); break;
+                    case MCT_MMC:       _D1( "MMC"     ); break;
+                    case MCT_SD:        _D1( "SD"      ); break;
+                    case MCT_SD_20:     _D1( "SD 2.0"  ); break;
+                    case MCT_SDHC:      _D1( "SDHC"    ); break;
+                }
+
+                _D1( " Size: %llu\n", mc_size );
+
+                _D2( "MCS_CARD_READY -> Exit: MC_RETURN_OK\n" );
+                return MC_RETURN_OK;
+                
+            case MCS_CARD_UNUSABLE:
+                _D2( "MCS_CARD_UNUSABLE: (%d)\n", retries );
+                /* I don't like retrying, but for now it works. */
+                if( 0 < retries-- ) {
+                    _D2( "MCS_CARD_UNUSABLE -> MCS_NO_CARD\n" );
+                    mount_state = MCS_NO_CARD;
+                } else {
+                    _D2( "MCS_CARD_UNUSABLE -> Exit: MC_NOT_MOUNTED\n" );
+                    return MC_NOT_MOUNTED;
+                }
+                break;
         }
-
-        if( false == ocr.card_capacity_status ) {
-            mc_type = MCT_SD_20;
-        }
     }
-
-    mc_Nac_read = MC_Ncr;
-
-    status = __determine_metrics();
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
-
-    status = __wait_until_not_busy();
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
-
-    status = __set_block_size();
-    if( MC_RETURN_OK != status ) {
-        goto done;
-    }
-
-    mc_mounted = true;
-
-    printf( "Mounted Card type: " );
-    switch( mc_type ) {
-        case MCT_UNKNOWN:   printf( "Unknown" ); break;
-        case MCT_MMC:       printf( "MMC" ); break;
-        case MCT_SD:        printf( "SD" ); break;
-        case MCT_SD_20:     printf( "SD 2.0" ); break;
-        case MCT_SDHC:      printf( "SDHC" ); break;
-    }
-
-    printf( " Size: %llu mc_Nac_read: %lu\n", (512ULL * (uint64_t)mc_blocks), mc_Nac_read );
-
-    status = MC_RETURN_OK;
-
-done:
-    /* I don't like retrying, but for now it works. */
-    if( (MC_RETURN_OK != status) && (0 < retries--) ) {
-        goto retry;
-    }
-
-    MC_UNLOCK();
-    return status;
 }
 
 /* See memcard.h for details. */
 mc_status_t mc_unmount( void )
 {
-    MC_LOCK();
-
     gpio_reset_pin( MC_SCK_PIN );
     gpio_reset_pin( MC_MISO_PIN );
     gpio_reset_pin( MC_MOSI_PIN );
@@ -337,13 +546,10 @@ mc_status_t mc_unmount( void )
     io_unselect();
 
     if( false == mc_mounted ) {
-        MC_UNLOCK();
         return MC_NOT_MOUNTED;
     }
 
     mc_mounted = false;
-
-    MC_UNLOCK();
 
     return MC_RETURN_OK;
 }
@@ -352,7 +558,8 @@ mc_status_t mc_unmount( void )
 mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
 {
     uint32_t address = lba;
-    mc_status_t status;
+    mc_message_t *msg;
+    int32_t i;
 
 #if (0 < STRICT_PARAMS)
     if( NULL == buffer ) {
@@ -360,10 +567,7 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
     }
 #endif
 
-    MC_LOCK();
-
     if( false == mc_mounted ) {
-        MC_UNLOCK();
         return MC_NOT_MOUNTED;
     }
 
@@ -371,30 +575,60 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
         address <<= 9;
     }
 
-    status = __wait_until_not_busy();
-    if( MC_ERROR_TIMEOUT == status ) {
-        MC_UNLOCK();
-        return status;
+    xQueueReceive( __idle, &msg, portMAX_DELAY );
+
+    /* Fill MC_Ncs bytes worth of data with 0xff.
+     * This is needed for the timing. */
+    for( i = 0; i < MC_Ncs; i++ ) {
+        msg->command[i] = 0xff;
     }
 
-    /* Do something */
+    /* Calculate the command sequence */
+    msg->command[i++] = 0x40 | (0x3f & MC_READ_SINGLE_BLOCK);
+    msg->command[i++] = address >> 24;
+    msg->command[i++] = 0xff & (address >> 16);
+    msg->command[i++] = 0xff & (address >> 8);
+    msg->command[i++] = 0xff & address;
+    msg->command[i++] = (crc7(&msg->command[MC_Ncs], 5) << 1) | 0x01;
 
-    MC_UNLOCK();
+    memset( &msg->command[i], 0xff, (MC_COMMAND_BUFFER_SIZE - i) );
 
-    return status;
+    msg->buffer = buffer;
+    msg->length = 0;
+    msg->state = MRS_QUEUED;
+    msg->nac = 0;
+
+    _D2( "Getting ready to read...\n" );
+    taskENTER_CRITICAL();
+    {
+        /* Need to use ISR versions since we're in a critcal section. */
+        portBASE_TYPE yield;
+        xQueueSendToBackFromISR( __pending, &msg, &yield );
+
+        if( 1 == uxQueueMessagesWaitingFromISR(__pending) ) {
+            __fast_read_single_block( msg );
+        }
+
+    }
+    taskEXIT_CRITICAL();
+
+    _D2( "Waiting...\n" );
+    xQueueReceive( __complete, &msg, portMAX_DELAY );
+    _D2( "Got response: 0x%08x\n", msg->state );
+
+    if( MRS_SUCCESS == msg->state ) {
+        return MC_RETURN_OK;
+    }
+
+    return MC_ERROR_TIMEOUT;
 }
 
 /* See memcard.h for details. */
 mc_status_t mc_write_block( const uint32_t lba, const uint8_t *buffer )
 {
-    MC_LOCK();
-
     if( false == mc_mounted ) {
-        MC_UNLOCK();
         return MC_NOT_MOUNTED;
     }
-
-    MC_UNLOCK();
 
     return MC_NOT_SUPPORTED;
 }
@@ -413,7 +647,7 @@ mc_status_t mc_get_block_count( uint32_t *blocks )
         return MC_NOT_MOUNTED;
     }
 
-    *blocks = mc_blocks;
+    *blocks = (uint32_t) (mc_size / 512ULL);
 
     return MC_RETURN_OK;
 }
@@ -439,173 +673,113 @@ static mc_status_t __is_card_voltage_compat( void )
     return MC_RETURN_OK;
 }
 
-static mc_status_t __is_sd_card( void )
+static void __fast_read_single_block( mc_message_t *msg )
 {
-    bool ready;
+    memcpy( __command_buffer, msg->command, MC_COMMAND_BUFFER_SIZE );
 
-    do {
-        mc_status_t status;
+    __queue_and_send( __command_buffer, __command_buffer,
+                      MC_COMMAND_BUFFER_SIZE, true );
 
-        status = mc_send_sd_op_cond( (MCT_SDHC == mc_type), &ready );
-        if( MC_ERROR_TIMEOUT == status ) {
-            /* Not an SD card - it must be a MMC card. */
-            mc_type = MCT_MMC;
-            return __send_card_to_idle_state();
-        }
-    } while( false == ready );
-
-    return MC_RETURN_OK;
+    msg->state = MRS_COMMAND_SENT;
 }
 
-static mc_status_t __complete_init( void )
+static void __fast_process_block( void )
 {
-    int i;
-
-    for( i = 0; i < 50000; i++ ) {
-        mc_status_t status;
-        bool ready;
-
-        status = mc_send_op_cond( (MCT_SDHC == mc_type), &ready );
-        if( MC_ERROR_TIMEOUT == status ) {
-            return MC_ERROR_TIMEOUT;
-        }
-
-        if( true == ready ) {
-            return MC_RETURN_OK;
-        }
-    }
-
-    return MC_ERROR_TIMEOUT;
-}
-
-static mc_status_t __fast_read_single_block( const uint32_t lba )
-{
-#define MC_READ_SINGLE_BLOCK 17
-
-    uint8_t *buffer;
-    uint32_t __last_bytes_sent;
-    volatile avr32_pdca_channel_t *rx, *tx;
-
-    buffer = __fast_buffer;
-
-    fast_fill( buffer );
-
-    __total_bytes_sent = 0;
-    __last_bytes_sent = MC_Ncs; /* Skip this number of bytes for this timing parameter. */
-
-    buffer[__last_bytes_sent++] = 0x40 | (0x3f & MC_READ_SINGLE_BLOCK);
-    buffer[__last_bytes_sent++] = lba >> 24;
-    buffer[__last_bytes_sent++] = 0xff & (lba >> 16);
-    buffer[__last_bytes_sent++] = 0xff & (lba >> 8);
-    buffer[__last_bytes_sent++] = 0xff & lba;
-    buffer[__last_bytes_sent++] = (crc7(&buffer[MC_Ncs], 5) << 1) | 0x01;
-
-    __last_bytes_sent += MC_Ncr;                /* Includes R1 response */
-    __last_bytes_sent += __last_Nac_wait_time;  /* Delay until we get the payload */
-    __last_bytes_sent += 10;                    /* Give us some wiggle room from the Nac */
-    __last_bytes_sent += 512;                   /* payload */
-
-    /* Don't overrun the buffer */
-    __last_bytes_sent = MIN( __last_bytes_sent, MC_FAST_BUFFER_SIZE );
-
-    intc_register_isr( &__fast_read_handler, MC_RX_ISR, ISR_LEVEL__1 );
-
-    pdca_queue_buffer( PDCA_CHANNEL_ID_MC_RX, buffer, __last_bytes_sent );
-    /* Q: Why (length - 1)?
-     * A: Because we do an extra write to start with, the
-     * DMA controller does this: [R][W]......[R][W][R]  Since
-     * we start and end with reading a byte, the writes must
-     * be 1 less.
-     */
-    pdca_queue_buffer( PDCA_CHANNEL_ID_MC_TX, &buffer[1], (__last_bytes_sent - 1) );
-
-    io_select();
-    io_send_dummy();
-
-    rx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_RX];
-    tx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_TX];
-
-    /* Enable the transfer complete ISR */
-    rx->ier = AVR32_PDCA_TRC_MASK;
-
-    /* Enable the transfer. */
-    rx->cr = AVR32_PDCA_CR_ECLR_MASK | AVR32_PDCA_CR_TEN_MASK;
-    tx->cr = AVR32_PDCA_CR_ECLR_MASK | AVR32_PDCA_CR_TEN_MASK;
-
-    rx->isr;
-    tx->isr;
-
-    return MC_RETURN_OK;
-}
-
-static mc_status_t __fast_process_block( void )
-{
-    uint8_t *buffer, *end;
     portBASE_TYPE yield;
     mc_message_t *msg;
 
-    /* 6 is the size of the command buffer sent */
-    buffer = &__fast_buffer[MC_Ncs + 6];
-    end = &__fast_buffer[__last_bytes_sent];
+process_next:
 
-    buffer = memchr( buffer, 0, MC_Ncr );
-    if( NULL == buffer ) {
-        io_clean_unselect();
+    if( pdTRUE == xQueueReceiveFromISR(__pending, &msg, &yield) ) {
+        bool requeue;
 
-        return MC_ERROR_TIMEOUT;
+        requeue = false;
+
+        if( MRS_QUEUED == msg->state ) {
+            _D2( "MRS_QUEUED\n" );
+            __fast_read_single_block( msg );
+            msg->state = MRS_COMMAND_SENT;
+            requeue = true;
+        } else if( MRS_COMMAND_SENT == msg->state ) {
+            uint8_t *r1, *end;
+
+            _D2( "MRS_COMMAND_SENT\n" );
+            end = &__command_buffer[MC_COMMAND_BUFFER_SIZE];
+
+            //xxd( __command_buffer, MC_COMMAND_BUFFER_SIZE );
+            r1 = memchr( __command_buffer, 0, MC_COMMAND_BUFFER_SIZE );
+            if( NULL == r1 ) {
+                msg->state = MRS_TIMEOUT;
+                /* We're done... */
+            } else {
+                msg->state = MRS_LOOKING_FOR_BLOCK;
+
+                __find_and_process_block_start( msg, r1, (end - r1) );
+
+                requeue = true;
+
+                __queue_and_send( __dummy_data, __block_buffer,
+                                  MC_BLOCK_BUFFER_SIZE, false );
+            }
+        } else if( MRS_LOOKING_FOR_BLOCK == msg->state ) {
+            uint32_t left;
+            uint32_t send;
+            bool done;
+
+            _D2( "MRS_LOOKING_FOR_BLOCK\n" );
+            send = MC_BLOCK_BUFFER_SIZE;
+            left = __find_and_process_block_start( msg, __block_buffer,
+                                                   MC_BLOCK_BUFFER_SIZE );
+
+            done = false;
+            if( MRS_LOOKING_FOR_BLOCK == msg->state ) {
+                if( mc_Nac_read < msg->nac ) {
+                    msg->state = MRS_TIMEOUT;
+                    done = true;
+                }
+            } else {
+                if( msg->length < 512 ) {
+                    send = 512 - msg->length;
+                    send += 2; /* For the CRC */
+                } else if( 2 <= left ) {
+                    msg->state = MRS_SUCCESS;
+                    done = true;
+                } else {
+                    /* Need to get the CRC, then we're done. */
+                    send = (2 - left);
+                }
+            }
+
+            if( false == done ) {
+                requeue = true;
+                __queue_and_send( __dummy_data, __block_buffer, send, false );
+            }
+        } else if( MRS_BLOCK_START_FOUND == msg->state ) {
+            _D2( "MRS_BLOCK_START_FOUND\n" );
+            if( msg->length < 512 ) {
+                uint32_t copy_length;
+
+                copy_length = 512 - msg->length;
+
+                /* Need to copy more of the message */
+                memcpy( &msg->buffer[msg->length], __block_buffer, copy_length );
+                msg->length += copy_length;
+            }
+
+            msg->state = MRS_SUCCESS;
+            /* We're done... */
+        }
+
+        if( true == requeue ) {
+            /* Re-queue the message at the front. */
+            xQueueSendToFrontFromISR( __pending, &msg, &yield );
+        } else {
+            io_clean_unselect();
+            xQueueSendToBackFromISR( __complete, &msg, &yield );
+            _D2( "Goto process_next\n" );
+            goto process_next;
+        }
     }
-    buffer++;
-
-    buffer = memchr( buffer, MC_BLOCK_START, (end - buffer) );
-    if( NULL == buffer ) {
-        /* For now, bail. */
-        io_clean_unselect();
-
-        return MC_ERROR_TIMEOUT;
-#if 0
-        /* We didn't get the starting data byte yet. */
-        __total_bytes_sent += (end - buffer);
-        fast_fill( __fast_buffer );
-        __last_bytes_sent = MC_FAST_BUFFER_SIZE;
-
-        pdca_queue_buffer( PDCA_CHANNEL_ID_MC_RX, buffer, __last_bytes_sent );
-        pdca_queue_buffer( PDCA_CHANNEL_ID_MC_TX, &buffer[1], (__last_bytes_sent - 1) );
-
-        rx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_RX];
-        tx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_TX];
-
-        /* Enable the transfer complete ISR */
-        rx->ier = AVR32_PDCA_TRC_MASK;
-
-        /* Enable the transfer. */
-        rx->cr = AVR32_PDCA_CR_ECLR_MASK | AVR32_PDCA_CR_TEN_MASK;
-        tx->cr = AVR32_PDCA_CR_ECLR_MASK | AVR32_PDCA_CR_TEN_MASK;
-
-        rx->isr;
-        tx->isr;
-        return MC_STILL_WAITING;
-#endif
-    }
-
-    if( (end - buffer) < 514 ) {    /* 512 + CRC */
-        /* For now, bail. */
-        io_clean_unselect();
-
-        return MC_ERROR_TIMEOUT;
-    }
-    buffer++;
-
-    io_clean_unselect();
-
-    if( pdTRUE != xQueueReceiveFromISR(__pending, &msg, &yield) ) {
-        return MC_ERROR_MODE;
-    }
-
-    memcpy( msg->buffer, buffer, 512 );
-
-    xQueueSendToBackFromISR( __complete, &msg, &yield );
-
-    return MC_RETURN_OK;
 }
 
 static mc_status_t __determine_metrics( void )
@@ -613,6 +787,7 @@ static mc_status_t __determine_metrics( void )
     mc_csd_t csd;
     uint32_t pba_hz;
     mc_status_t status;
+    uint32_t baud_rate;
 
     pba_hz = pm_get_frequency( PM__PBA );
 
@@ -621,62 +796,25 @@ static mc_status_t __determine_metrics( void )
         return status;
     }
 
-    mc_block_size = csd.block_size;
-    if( 512 != mc_block_size ) {
-        return MC_UNUSABLE;
-    }
-
-    mc_blocks = csd.total_blocks;
-    mc_Nac_read = csd.nac_read;
-    mc_Nac_write = csd.nac_write;
-    mc_Nac_erase = csd.nac_erase;
-
-    if( (0 == mc_blocks) || (0 == mc_Nac_read) ||
-        (0 == mc_Nac_write) || (0 == mc_Nac_erase) )
+    if( (0 == csd.max_speed) ||
+        (0 == csd.total_size) ||
+        (0 == csd.block_size) )
     {
         return MC_UNUSABLE;
     }
 
-    /* Convert the clock cycles into bytes & make
-     * sure the timeout is at least 1 */
-    mc_Nac_read  = mc_Nac_read / 8 + 1;
-    mc_Nac_write = mc_Nac_write / 8 + 1;
-    mc_Nac_erase = mc_Nac_erase / 8 + 1;
+    baud_rate = csd.max_speed;
+    mc_block_size = csd.block_size;
+    mc_size = csd.total_size;
+    mc_Nac_read = csd.nac_read;
 
-    mc_baud_rate = csd.max_speed;
-    if( 0 == mc_baud_rate ) {
-        return MC_UNUSABLE;
-    }
-
-    if( MC_BAUDRATE_MAX < mc_baud_rate ) {
-        mc_baud_rate = MC_BAUDRATE_MAX;
-    }
-
-    spi_set_baudrate( MC_SPI, MC_CS, mc_baud_rate );
+    spi_set_baudrate( MC_SPI, MC_CS, baud_rate );
+    spi_get_baudrate( MC_SPI, MC_CS, &baud_rate );
+    printf( "Actual baud rate: %lu\n", baud_rate );
 
     return MC_RETURN_OK;
 }
 
-static mc_status_t __wait_until_not_busy( void )
-{
-    uint8_t tmp;
-    size_t retry = 50000;
-
-    io_clean_select();
-
-    tmp = 0;
-    while( (0 < retry--) && (0xff != tmp) ) {
-        io_send_read( 0xff, &tmp );
-    }
-
-    io_clean_unselect();
-
-    if( 0 == retry ) {
-        return MC_ERROR_TIMEOUT;
-    }
-
-    return MC_RETURN_OK;
-}
 
 static mc_status_t __set_block_size( void )
 {
@@ -695,34 +833,6 @@ static mc_status_t __set_block_size( void )
 
     return MC_INIT_ERROR;
 }
-
-#if 0
-__attribute__((__interrupt__))
-static void __pdca_block_read_handler( void )
-{
-    volatile avr32_pdca_channel_t *tx, *rx;
-
-    tx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_TX];
-    rx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_RX];
-
-    /* Disable 'transfer complete' */
-    tx->idr = AVR32_PDCA_TRC_MASK;
-    rx->idr = AVR32_PDCA_TRC_MASK;
-
-    /* Clear the ISR values */
-    tx->isr;
-    rx->isr;
-
-    /* Disable 'tx' pdca channel */
-    tx->cr = AVR32_PDCA_CR_TDIS_MASK;
-
-    /* Disable 'rx' pdca channel */
-    rx->cr = AVR32_PDCA_CR_TDIS_MASK;
-
-    transfer_done = true;
-    MC_RESUME();
-}
-#endif
 
 __attribute__((__interrupt__))
 static void __card_ejected( void )
@@ -743,6 +853,8 @@ static void __fast_read_handler( void )
 {
     volatile avr32_pdca_channel_t *tx, *rx;
 
+    _D2( "__fast_read_handler()\n" );
+
     tx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_TX];
     rx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_RX];
 
@@ -760,6 +872,86 @@ static void __fast_read_handler( void )
     /* Disable 'rx' pdca channel */
     rx->cr = AVR32_PDCA_CR_TDIS_MASK;
 
-    transfer_done = true;
-    MC_RESUME();
+    __fast_process_block();
+}
+
+static inline void __queue_and_send( const uint8_t *send,
+                                     uint8_t *receive,
+                                     const size_t length,
+                                     const bool select )
+{
+    volatile avr32_pdca_channel_t *rx, *tx;
+    uint8_t s0;
+
+    s0 = send[0];
+
+    pdca_queue_buffer( PDCA_CHANNEL_ID_MC_RX, receive, length );
+
+    /* Q: Why (length - 1)?
+     * A: Because we do an extra write to start with, the
+     * DMA controller does this: [R][W]......[R][W][R]  Since
+     * we start and end with reading a byte, the writes must
+     * be 1 less.
+     */
+    pdca_queue_buffer( PDCA_CHANNEL_ID_MC_TX, (uint8_t*) &send[1], (length - 1) );
+
+    if( true == select ) {
+        io_select();
+    }
+
+    io_send( s0 );
+
+    rx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_RX];
+    tx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_TX];
+
+    /* Enable the transfer complete ISR */
+    rx->ier = AVR32_PDCA_TRC_MASK;
+
+    /* Enable the transfer. */
+    rx->cr = AVR32_PDCA_CR_ECLR_MASK | AVR32_PDCA_CR_TEN_MASK;
+    tx->cr = AVR32_PDCA_CR_ECLR_MASK | AVR32_PDCA_CR_TEN_MASK;
+
+    rx->isr;
+    tx->isr;
+}
+
+static inline uint32_t __find_and_process_block_start( mc_message_t *msg,
+                                                       const uint8_t *start,
+                                                       const size_t len )
+{
+    uint8_t *block_start;
+    uint32_t left;
+
+    _D2( "%s( msg, start, %d )\n", __func__, len );
+
+    //xxd( start, len );
+
+    left = len;
+
+    block_start = memchr( start, MC_BLOCK_START, len );
+
+    if( NULL == block_start ) {
+        msg->nac += len;
+        left -= len;
+    } else {
+        uint32_t nac;
+
+        nac = (block_start - start);
+        msg->nac += nac;
+        left -= nac;
+
+        if( 0 < left ) {
+            left--;
+            block_start++;
+
+            memcpy( msg->buffer, block_start, MIN(512, left) );
+
+            msg->length = MIN( 512, left );
+            left -= msg->length;
+        }
+        msg->state = MRS_BLOCK_START_FOUND;
+    }
+
+    _D2( "left: %lu\n", left );
+    return left;
 }
