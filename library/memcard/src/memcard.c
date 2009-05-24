@@ -33,7 +33,6 @@
 #include <freertos/portmacro.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
-#include <util/xxd.h>
 
 #include "config.h"
 #include "memcard.h"
@@ -119,6 +118,8 @@ typedef struct {
     uint8_t command[MC_COMMAND_BUFFER_SIZE];
     uint8_t *buffer;
     uint32_t length;
+    uint8_t crc[2];
+    uint32_t crc_length;
     mc_request_state_t state;
     uint32_t nac;
 } mc_message_t;
@@ -300,8 +301,9 @@ mc_status_t mc_mount( void )
      * prior to enabling/disabling it */
     (MC_CSR(MC_CS)).dlybs  = 8;
 
-    /* No need for delays between byte data transfers */
-    (MC_CSR(MC_CS)).dlybct = 0;
+    /* We need a small delay between bytes, otherwise we seem to
+     * get data corruption unless we are going really slow. */
+    (MC_CSR(MC_CS)).dlybct = 1;
 
     /* scbr is set by spi_set_baudrate() */
 
@@ -557,6 +559,7 @@ mc_status_t mc_unmount( void )
 /* See memcard.h for details. */
 mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
 {
+    mc_status_t status;
     uint32_t address = lba;
     mc_message_t *msg;
     int32_t i;
@@ -597,6 +600,7 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
     msg->length = 0;
     msg->state = MRS_QUEUED;
     msg->nac = 0;
+    msg->crc_length = 0;
 
     _D2( "Getting ready to read...\n" );
     taskENTER_CRITICAL();
@@ -614,13 +618,11 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
 
     _D2( "Waiting...\n" );
     xQueueReceive( __complete, &msg, portMAX_DELAY );
-    _D2( "Got response: 0x%08x\n", msg->state );
+    status = (MRS_SUCCESS == msg->state) ? MC_RETURN_OK : MC_ERROR_TIMEOUT;
+    xQueueSendToBack( __idle, &msg, 0 );
 
-    if( MRS_SUCCESS == msg->state ) {
-        return MC_RETURN_OK;
-    }
-
-    return MC_ERROR_TIMEOUT;
+    _D2( "Got response: 0x%04x\n", status );
+    return status;
 }
 
 /* See memcard.h for details. */
@@ -690,6 +692,7 @@ static void __fast_process_block( void )
 
 process_next:
 
+    taskENTER_CRITICAL();
     if( pdTRUE == xQueueReceiveFromISR(__pending, &msg, &yield) ) {
         bool requeue;
 
@@ -706,16 +709,15 @@ process_next:
             _D2( "MRS_COMMAND_SENT\n" );
             end = &__command_buffer[MC_COMMAND_BUFFER_SIZE];
 
-            //xxd( __command_buffer, MC_COMMAND_BUFFER_SIZE );
             r1 = memchr( __command_buffer, 0, MC_COMMAND_BUFFER_SIZE );
             if( NULL == r1 ) {
                 msg->state = MRS_TIMEOUT;
                 /* We're done... */
+                _D2( "Command TIMEOUT\n" );
             } else {
                 msg->state = MRS_LOOKING_FOR_BLOCK;
 
                 __find_and_process_block_start( msg, r1, (end - r1) );
-
                 requeue = true;
 
                 __queue_and_send( __dummy_data, __block_buffer,
@@ -733,20 +735,21 @@ process_next:
 
             done = false;
             if( MRS_LOOKING_FOR_BLOCK == msg->state ) {
+                _D2( "Still MRS_LOOKING_FOR_BLOCK\n" );
                 if( mc_Nac_read < msg->nac ) {
+                    _D2( "NAC Timeout.\n" );
                     msg->state = MRS_TIMEOUT;
                     done = true;
                 }
             } else {
-                if( msg->length < 512 ) {
+                _D2( "found block\n" );
+                if( (msg->length < 512) || (msg->crc_length < 2) ) {
                     send = 512 - msg->length;
-                    send += 2; /* For the CRC */
-                } else if( 2 <= left ) {
-                    msg->state = MRS_SUCCESS;
-                    done = true;
+                    send += 2 - msg->crc_length;
                 } else {
-                    /* Need to get the CRC, then we're done. */
-                    send = (2 - left);
+                    msg->state = MRS_SUCCESS;
+                    _D2( "Got entire block\n" );
+                    done = true;
                 }
             }
 
@@ -764,6 +767,10 @@ process_next:
                 /* Need to copy more of the message */
                 memcpy( &msg->buffer[msg->length], __block_buffer, copy_length );
                 msg->length += copy_length;
+            
+                msg->crc[0] = __block_buffer[copy_length];
+                msg->crc[1] = __block_buffer[copy_length + 1];
+                msg->crc_length = 2;
             }
 
             msg->state = MRS_SUCCESS;
@@ -774,12 +781,14 @@ process_next:
             /* Re-queue the message at the front. */
             xQueueSendToFrontFromISR( __pending, &msg, &yield );
         } else {
-            io_clean_unselect();
+            io_unselect();
             xQueueSendToBackFromISR( __complete, &msg, &yield );
             _D2( "Goto process_next\n" );
+            taskEXIT_CRITICAL();
             goto process_next;
         }
     }
+    taskEXIT_CRITICAL();
 }
 
 static mc_status_t __determine_metrics( void )
@@ -853,8 +862,6 @@ static void __fast_read_handler( void )
 {
     volatile avr32_pdca_channel_t *tx, *rx;
 
-    _D2( "__fast_read_handler()\n" );
-
     tx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_TX];
     rx = &AVR32_PDCA.channel[PDCA_CHANNEL_ID_MC_RX];
 
@@ -924,8 +931,6 @@ static inline uint32_t __find_and_process_block_start( mc_message_t *msg,
 
     _D2( "%s( msg, start, %d )\n", __func__, len );
 
-    //xxd( start, len );
-
     left = len;
 
     block_start = memchr( start, MC_BLOCK_START, len );
@@ -948,6 +953,16 @@ static inline uint32_t __find_and_process_block_start( mc_message_t *msg,
 
             msg->length = MIN( 512, left );
             left -= msg->length;
+        }
+        if( 0 < left ) {
+            msg->crc[0] = block_start[512];
+            left--;
+            msg->crc_length++;
+            if( 0 < left ) {
+                msg->crc[1] = block_start[513];
+                left--;
+                msg->crc_length++;
+            }
         }
         msg->state = MRS_BLOCK_START_FOUND;
     }
