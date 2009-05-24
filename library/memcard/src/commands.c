@@ -219,6 +219,26 @@ mc_status_t mc_set_block_size( const uint32_t block_size )
     return MC_ERROR_PARAMETER;
 }
 
+/** See commands.h for detail. */
+mc_status_t mc_set_crc( const bool enable )
+{
+    mc_status_t status;
+    uint8_t r1;
+
+    status = mc_select_and_command( MCMD__CRC_ON_OFF,
+                                    (true == enable) ? 1 : 0,
+                                    MRT_R1, &r1 );
+
+    if( MC_RETURN_OK != status ) {
+        return MC_ERROR_TIMEOUT;
+    }
+
+    if( (0 == r1) || (MC_R1_IN_IDLE_STATE == r1) ) {
+        return MC_RETURN_OK;
+    }
+
+    return MC_ERROR_PARAMETER;
+}
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/

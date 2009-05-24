@@ -31,7 +31,8 @@ typedef enum {
     MCMD__SET_BLOCKLEN      = 16,
     MCMD__SD_SEND_OP_COND   = 41,
     MCMD__APP_CMD           = 55,
-    MCMD__READ_OCR          = 58
+    MCMD__READ_OCR          = 58,
+    MCMD__CRC_ON_OFF        = 59
 } mc_cmd_type_t;
 
 /**

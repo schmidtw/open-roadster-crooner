@@ -157,4 +157,15 @@ mc_status_t mc_set_block_size( const uint32_t block_size );
  */
 mc_status_t mc_get_csd( mc_csd_t *csd, const uint32_t clock );
 
+/**
+ *  Enable or disable CRC checking for the chip & host.
+ *
+ *  @note CMD59
+ *
+ *  @param enable If true, enables CRC checking, false disables
+ *  @return Status
+ *      @retval MC_RETURN_OK        Success, the card is compatible
+ *      @retval MC_ERROR_TIMEOUT    Failure due to timeout
+ */
+mc_status_t mc_set_crc( const bool enable );
 #endif
