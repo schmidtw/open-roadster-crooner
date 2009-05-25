@@ -4,9 +4,9 @@ LIBRARIES = \
             util \
             bsp \
             newlib \
+            freertos \
             memcard \
             fatfs \
-            freertos \
             file-stream \
             media-interface \
             media-flac \
