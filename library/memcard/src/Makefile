@@ -11,7 +11,6 @@ SOURCES = \
     csd.c \
     io.c \
     crc.c \
-    fast-fill.c \
     commands.c \
     command.c \
     memcard.c
