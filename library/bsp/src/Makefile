@@ -9,7 +9,6 @@ CFLAGS = -DSTRICT_PARAMS=1
 HEADERS = \
     abdac.h \
     bsp_errors.h \
-    crc.h \
     delay.h \
     gpio.h \
     pm.h \
@@ -17,7 +16,6 @@ HEADERS = \
     intc.h \
     pdca.h \
     spi.h \
-    memcard.h \
     led.h \
     boards/boards.h \
     boards/evk1100.h \
@@ -25,7 +23,6 @@ HEADERS = \
     boards/crooner-2.0.h
 
 SOURCES = \
-    crc.c \
     abdac.c \
     delay.c \
     gpio.c \
@@ -35,7 +32,6 @@ SOURCES = \
     intc.c \
     pdca.c \
     spi.c \
-    memcard.c \
     led.c
 
 include ../../make/Makefile.common

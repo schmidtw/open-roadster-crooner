@@ -22,7 +22,6 @@
 #include <bsp/boards/boards.h>
 #include <bsp/led.h>
 #include <bsp/gpio.h>
-#include <bsp/memcard.h>
 #include <bsp/abdac.h>
 #include <bsp/pm.h>
 #include <fatfs/ff.h>
@@ -30,6 +29,7 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <util/xxd.h>
+#include <memcard/memcard.h>
 
 #include "blu.h"
 //#include "wav.h"
@@ -67,17 +67,11 @@ static volatile xSemaphoreHandle __codec_semaphore;
 /*----------------------------------------------------------------------------*/
 void playback_init( void )
 {
-    bsp_status_t status;
-
     printf( "playback_init()\n" );
 
     vSemaphoreCreateBinary( __mc_semaphore );
     xSemaphoreTake( __mc_semaphore, 0 );
     vSemaphoreCreateBinary( __codec_semaphore );
-
-    status = mc_init( NULL, NULL, vTaskDelay, mc_suspend, mc_resume, NULL );
-
-    printf( "mc_init: 0x%08x\n", status );
 
     xTaskCreate( __pb_task, ( signed portCHAR *) "PLYB",
                  PB_TASK_STACK_SIZE, NULL, PB_TASK_PRIORITY, NULL );

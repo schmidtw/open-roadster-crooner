@@ -10,6 +10,7 @@
 #include <freertos/semphr.h>
 #include <file-stream/file-stream.h>
 #include <reent.h>
+#include <memcard/memcard.h>
 
 #include "ibus.h"
 #include "blu.h"
@@ -49,6 +50,7 @@ int main( void )
 {
     printf( "--------------------------------------------------------------------------------\n" );
 
+    mc_init( pvPortMalloc );
     ibus_init();
     blu_init();
     playback_init();

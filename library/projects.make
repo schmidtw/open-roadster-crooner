@@ -6,6 +6,7 @@ LIBRARIES = \
             newlib \
             fatfs \
             freertos \
+            memcard \
             file-stream \
             media-interface \
             media-flac \

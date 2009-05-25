@@ -32,14 +32,6 @@ typedef enum {
 
     BSP_SPI_MODE_FAULT                  = 0x0200,
 
-    BSP_MEMCARD_IN_USE                  = 0x0300,
-    BSP_MEMCARD_INIT_ERROR              = 0x0301,
-    BSP_MEMCARD_UNUSABLE                = 0x0302,
-    BSP_MEMCARD_ERROR_MODE              = 0x0303,
-    BSP_MEMCARD_CRC_FAILURE             = 0x0304,
-    BSP_MEMCARD_NOT_SUPPORTED           = 0x0305,
-    BSP_MEMCARD_NOT_MOUNTED             = 0x0306,
-
     BSP_PDCA_QUEUE_FULL                 = 0x0400,
 
     BSP_ABDAC_SILENCE_ALREADY_IN_USE    = 0x0500

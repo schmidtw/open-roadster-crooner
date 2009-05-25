@@ -3,7 +3,7 @@
  */
 
 #include <stddef.h>
-#include <bsp/memcard.h>
+#include <memcard/memcard.h>
 
 #include "diskio.h"
 
@@ -36,7 +36,7 @@ DSTATUS disk_initialize( BYTE drv )
         return STA_NOINIT;
     }
 
-    if( (true == mc_present()) && (BSP_RETURN_OK == mc_mount()) ) {
+    if( (true == mc_present()) && (MC_RETURN_OK == mc_mount()) ) {
         return STA_PROTECT;
     }
 
@@ -59,7 +59,7 @@ DRESULT disk_read( BYTE drv, BYTE *buf, DWORD lba, BYTE sector_count )
     }
 
     while( 0 < sector_count ) {
-        if( BSP_RETURN_OK != mc_read_block(lba, buf) ) {
+        if( MC_RETURN_OK != mc_read_block(lba, buf) ) {
             return RES_ERROR;
         }
         sector_count--;
@@ -79,7 +79,7 @@ DRESULT disk_ioctl( BYTE drv, BYTE ctrl, void *buf )
         case GET_SECTOR_COUNT:
         {
             uint32_t blocks;
-            if( BSP_RETURN_OK == mc_get_block_count(&blocks) ) {
+            if( MC_RETURN_OK == mc_get_block_count(&blocks) ) {
                 return RES_ERROR;
             }
             *((DWORD*) buf) = (DWORD) blocks;

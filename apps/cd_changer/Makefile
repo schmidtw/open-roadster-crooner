@@ -17,6 +17,7 @@ LIBRARIES = \
             freertos \
             linked-list \
             display \
+            memcard \
             bsp \
             util
 
