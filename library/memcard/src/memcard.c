@@ -819,7 +819,7 @@ static mc_status_t __determine_metrics( void )
 
     spi_set_baudrate( MC_SPI, MC_CS, baud_rate );
     spi_get_baudrate( MC_SPI, MC_CS, &baud_rate );
-    printf( "Actual baud rate: %lu\n", baud_rate );
+    _D2( "Actual baud rate: %lu\n", baud_rate );
 
     return MC_RETURN_OK;
 }

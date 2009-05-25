@@ -68,6 +68,20 @@
 
 #define MC_CSD_BUFFER_SIZE  15
 
+#define _D1(...)
+#define _D2(...)
+
+#ifdef CSD_DEBUG
+#if (0 < CSD_DEBUG)
+#undef  _D1
+#define _D1(...) printf( __VA_ARGS__ )
+#endif
+#if (1 < CSD_DEBUG)
+#undef  _D2
+#define _D2(...) printf( __VA_ARGS__ )
+#endif
+#endif
+
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
@@ -153,18 +167,18 @@ mc_status_t mc_get_csd( mc_csd_t *csd, const uint32_t clock )
     csd->nac_write = __csd_get_nac_write( buffer, clock );
     csd->nac_erase = __csd_get_nac_erase( buffer, clock );
 
-    printf( "csd->taac: %llu ps\n", csd->taac );
-    printf( "csd->nsac: %lu cycles\n", csd->nsac );
-    printf( "csd->max_speed: %lu Hz\n", csd->max_speed );
-    printf( "csd->block_size: %lu bytes\n", csd->block_size );
-    printf( "csd->total_size: %llu bytes\n", csd->total_size );
-    printf( "csd->min_read: %lu uA\n", csd->min_read );
-    printf( "csd->max_read: %lu uA\n", csd->max_read );
-    printf( "csd->min_write: %lu uA\n", csd->min_write );
-    printf( "csd->max_write: %lu uA\n", csd->max_write );
-    printf( "csd->nac_read: %lu cycles\n", csd->nac_read );
-    printf( "csd->nac_write: %lu cycles\n", csd->nac_write );
-    printf( "csd->nac_erase: %lu cycles\n", csd->nac_erase );
+    _D1( "csd->taac: %llu ps\n", csd->taac );
+    _D1( "csd->nsac: %lu cycles\n", csd->nsac );
+    _D1( "csd->max_speed: %lu Hz\n", csd->max_speed );
+    _D1( "csd->block_size: %lu bytes\n", csd->block_size );
+    _D1( "csd->total_size: %llu bytes\n", csd->total_size );
+    _D1( "csd->min_read: %lu uA\n", csd->min_read );
+    _D1( "csd->max_read: %lu uA\n", csd->max_read );
+    _D1( "csd->min_write: %lu uA\n", csd->min_write );
+    _D1( "csd->max_write: %lu uA\n", csd->max_write );
+    _D1( "csd->nac_read: %lu cycles\n", csd->nac_read );
+    _D1( "csd->nac_write: %lu cycles\n", csd->nac_write );
+    _D1( "csd->nac_erase: %lu cycles\n", csd->nac_erase );
 
     if( (0 == csd->taac) ||
         (0 == csd->max_speed) ||
