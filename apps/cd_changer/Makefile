@@ -9,6 +9,7 @@ SOURCES = \
           main.c
 
 LIBRARIES = \
+            database \
             media-interface \
             media-flac \
             file-stream \
