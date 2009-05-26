@@ -10,6 +10,9 @@
 #include <freertos/semphr.h>
 #include <file-stream/file-stream.h>
 #include <reent.h>
+#include <display/display.h>
+#include <database/database.h>
+#include <media-interface/media-interface.h>
 #include <memcard/memcard.h>
 
 #include "ibus.h"
@@ -54,7 +57,8 @@ int main( void )
     ibus_init();
     blu_init();
     playback_init();
-    //display_init( ibus_print , 5000, 15000, 10000, 1, true);
+//    display_init( ibus_print , 5000, 15000, 10000, 1, true);
+    init_database();
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );
     /* Start the RTOS - never returns. */
     vTaskStartScheduler();

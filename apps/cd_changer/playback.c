@@ -30,6 +30,7 @@
 #include <freertos/semphr.h>
 #include <util/xxd.h>
 #include <memcard/memcard.h>
+#include <database/database.h>
 
 #include "blu.h"
 //#include "wav.h"
@@ -103,8 +104,10 @@ static void __pb_task( void *params )
 
                 printf( "f_mount: %d\n", f_mount(0, &fs) );
 
-                list_dirs();
-                play();
+//                list_dirs();
+                if( true == populate_database(NULL, 0, "/") ) {
+                    play();
+                }
             }
         } else {
             if( true == card_present ) {
@@ -118,6 +121,7 @@ static void __pb_task( void *params )
                 msg = disc_status_message_alloc();
                 msg->disc_status = BLU_DISC_STATUS__NO_MAGAZINE;
                 blu_message_post( msg );
+                database_purge();
 
             }
         }
@@ -174,50 +178,28 @@ void list_dirs( void )
 
 void play( void )
 {
-            while( 1 ) {
-                int i;
-        for( i = 1; i < 13; i++ ) {
-                    char *name;
-
-                    switch( i ) {
-                case 0: name = "/2/01-RAD~1.FLA"; break;
-                case 1: name = "/2/02-PIL~1.FLA"; break;
-                //case 0: name = "/1.FLA"; break;
-                //case 1: name = "/2.FLA"; break;
-                        case 2: name = "/4.FLA"; break;
-                        case 3: name = "/5.FLA"; break;
-                        case 4: name = "/5.FLA"; break;
-                        case 5: name = "/6.FLA"; break;
-                        case 6: name = "/7.FLA"; break;
-                        case 7: name = "/8.FLA"; break;
-                        case 8: name = "/9.FLA"; break;
-                        case 9: name = "/10.FLA"; break;
-                        case 10: name = "/11.FLA"; break;
-                        case 11: name = "/12.FLA"; break;
-                        case 12: name = "/PUPPY~1.FLA"; break;
-                    }
-
-            printf( "Playing file: '%s'\n", name );
-            media_flac_play( name, codec_suspend, codec_resume );
+    song_node_t * current_song = NULL;
+    db_status_t rv;
+    while( 1 ) {
+        if( false == mc_present() ) {
+            printf( "mc_unmount: 0x%08x\n", mc_unmount() );
+            return;
         }
-/*
-                    if( 0 == file_fopen(&info.file, &efs.myFs, name, 'r') ) {
-                        printf( "Wts\n" );
-                        media_flac_play( &info.file, codec_suspend, codec_resume );
-                        file_fclose( &info.file );
-                        printf( "done\n" );
-                    } else {
-                        printf( "failed to open: '%s'\n", name );
-                    }
-                    if( false == mc_present() ) {
-                        printf( "mc_unmount: 0x%08x\n", mc_unmount() );
-                        return;
-                    }
-                }
-            }
-*/
+        rv = next_song( &current_song, DT_NEXT, DL_SONG );
+        if( DS_END_OF_LIST == rv ) {
+            rv = next_song( &current_song, DT_NEXT, DL_ALBUM );
+        }
+        if( DS_END_OF_LIST == rv ) {
+            rv = next_song( &current_song, DT_NEXT, DL_ARTIST );
+        }
+        if( DS_END_OF_LIST == rv ) {
+            rv = next_song( &current_song, DT_NEXT, DL_GROUP );
+        }
+        if( DS_FAILURE == rv ) {
+            break;
+        }
+        current_song->play_fn( current_song->file_location, codec_suspend, codec_resume );
     }
-//#endif
 }
 
 /**
