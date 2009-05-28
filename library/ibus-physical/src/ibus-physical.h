@@ -20,6 +20,7 @@
 #define __IBUS_PHYSICAL_H__
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #define IBUS_MAX_MESSAGE_SIZE   32
