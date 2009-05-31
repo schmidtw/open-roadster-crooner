@@ -38,4 +38,5 @@
 #define INCLUDE_xTaskGetCurrentTaskHandle   1
 #define INCLUDE_xTaskGetSchedulerState		0
 #define INCLUDE_xTaskResumeFromISR          1
+#define INCLUDE_uxTaskGetStackHighWaterMark 1
 #endif
