@@ -256,6 +256,9 @@ void gpio_reset_pin( const uint8_t pin )
     /* Input Only */
     port->oderc = p;
 
+    /* Disable any alternate functions. */
+    port->gpers = p;
+
     /* Disable Open Drain */
     port->odmerc = p;
 
