@@ -25,9 +25,11 @@
 #include <bsp/boards/boards.h>
 #include <bsp/intc.h>
 #include <bsp/pdca.h>
+#include <bsp/gpio.h>
 #include <bsp/usart.h>
 
 #include <freertos/queue.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include "ibus-physical.h"
@@ -35,6 +37,10 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
+#define TX_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
+#define TX_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
+#define TX_DELAY            (TASK_DELAY_MS(10))
+
 #define IBUS_PHYSICAL_DEBUG 0
 
 #define _D1(...)
@@ -63,17 +69,20 @@ static xQueueHandle __rx_idle;
 static xQueueHandle __rx_pending;
 static xQueueHandle __tx_idle;
 static xQueueHandle __tx_pending;
+static xSemaphoreHandle __wake_up_tx_task;
+static xSemaphoreHandle __tx_done;
 static ibus_io_msg_t __rx_messages[IBUS_PHYSICAL_RX_MSG_MAX];
 static ibus_io_msg_t __tx_messages[IBUS_PHYSICAL_TX_MSG_MAX];
+static volatile bool __tx_successfully_sent;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
+static void __tx_task( void *data );
 static void __get_char_isr( const int c );
 static void __cts_change_isr( const bool cts );
 __attribute__((__interrupt__))
 static void __tx_msg_sent( void );
-static void __start_pending_msg_from_isr( void );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -137,6 +146,10 @@ void ibus_physical_init( void )
         xQueueSendToBack( __tx_idle, &msg, 0 );
     }
 
+    vSemaphoreCreateBinary( __wake_up_tx_task );
+    xSemaphoreTake( __wake_up_tx_task, 0 );
+    vSemaphoreCreateBinary( __tx_done );
+    xSemaphoreTake( __tx_done, 0 );
 
     /* ISR for the PDCA/DMA complete */
     intc_register_isr( &__tx_msg_sent,
@@ -147,6 +160,8 @@ void ibus_physical_init( void )
 
     usart_init_rs232( IBUS_USART, &ibus_options );
 
+    xTaskCreate( __tx_task, (signed portCHAR *) "IPTX",
+                 TX_TASK_STACK_SIZE, NULL, TX_TASK_PRIORITY, NULL );
     return;
 
 error_3:
@@ -227,20 +242,8 @@ bool ibus_physical_send_message( const uint8_t *msg, const size_t size )
     ibus_msg->size = size;
     memcpy( ibus_msg->buffer, msg, size );
 
-    taskENTER_CRITICAL();
-    {
-        /* Need to use ISR versions since we're in a critcal section. */
-        portBASE_TYPE yield;
-        xQueueSendToBackFromISR( __tx_pending, &ibus_msg, &yield );
-
-        if( (1 == uxQueueMessagesWaitingFromISR(__tx_pending)) &&
-            (true == usart_is_cts(IBUS_USART)) )
-        {
-            __start_pending_msg_from_isr();
-        }
-
-    }
-    taskEXIT_CRITICAL();
+    xQueueSendToBack( __tx_pending, &ibus_msg, portMAX_DELAY );
+    xSemaphoreGive( __wake_up_tx_task );
 
     return true;
 }
@@ -248,6 +251,42 @@ bool ibus_physical_send_message( const uint8_t *msg, const size_t size )
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
+static void __tx_task( void *data )
+{
+    while( 1 ) {
+        if( 0 < uxQueueMessagesWaiting(__tx_pending) ) {
+            if( true == usart_is_cts(IBUS_USART) ) {
+                ibus_io_msg_t *msg;
+
+                /* Start the pending messages now */
+                xQueueReceive( __tx_pending, &msg, 0 );
+                __tx_successfully_sent = false;
+
+                pdca_queue_buffer( PDCA_CHANNEL_ID_IBUS_TX, msg->buffer, msg->size );
+                pdca_isr_enable( PDCA_CHANNEL_ID_IBUS_TX, PDCA_ISR__TRANSFER_COMPLETE );
+                pdca_enable( PDCA_CHANNEL_ID_IBUS_TX );
+
+                /* Wait until the message is sent */
+                xSemaphoreTake( __tx_done, portMAX_DELAY );
+
+                if( true == __tx_successfully_sent ) {
+                    xQueueSendToFront( __tx_idle, &msg, 0 );
+
+                    /* Wait between messages so the radio can have a break. */
+                    vTaskDelay( TX_DELAY );
+                } else {
+                    /* CTS changed state - re-queue & try again. */
+                    xQueueSendToFront( __tx_pending, &msg, 0 );
+                }
+            } else {
+                xSemaphoreTake( __wake_up_tx_task, portMAX_DELAY );
+            }
+        } else {
+            xSemaphoreTake( __wake_up_tx_task, portMAX_DELAY );
+        }
+    }
+}
+
 static void __get_char_isr( const int c )
 {
     static ibus_io_msg_status_t status = IBUS_IO_STATUS__OK;
@@ -285,50 +324,32 @@ static void __get_char_isr( const int c )
 
 static void __cts_change_isr( const bool cts )
 {
+    portBASE_TYPE ignore;
+
     _D2( "%s()\n", __func__ );
 
     if( true == cts ) {
-        /* Start a new transfer */
-        __start_pending_msg_from_isr();
+        /* Enable starting a new transfer */
+        xSemaphoreGiveFromISR( __wake_up_tx_task, &ignore );
     } else {
         /* Cancel the active transfer */
         pdca_disable( PDCA_CHANNEL_ID_IBUS_TX );
         pdca_isr_disable( PDCA_CHANNEL_ID_IBUS_TX, PDCA_ISR__TRANSFER_COMPLETE );
+
+        xSemaphoreGiveFromISR( __tx_done, &ignore );
     }
 }
 
 __attribute__((__interrupt__))
 static void __tx_msg_sent( void )
 {
-    ibus_io_msg_t *msg;
-    portBASE_TYPE yield;
+    portBASE_TYPE ignore;
 
     _D2( "%s()\n", __func__ );
 
     pdca_disable( PDCA_CHANNEL_ID_IBUS_TX );
     pdca_isr_disable( PDCA_CHANNEL_ID_IBUS_TX, PDCA_ISR__TRANSFER_COMPLETE );
 
-    if( pdTRUE == xQueueReceiveFromISR(__tx_pending, &msg, &yield) ) {
-        xQueueSendToFrontFromISR( __tx_idle, &msg, &yield );
-
-        __start_pending_msg_from_isr();
-    }
-}
-
-static void __start_pending_msg_from_isr( void )
-{
-    ibus_io_msg_t *msg;
-    portBASE_TYPE ignore_yield;
-
-    _D2( "%s()\n", __func__ );
-
-    /* Start any pending messages now */
-    if( pdTRUE == xQueueReceiveFromISR(__tx_pending, &msg, &ignore_yield) ) {
-        /* Re-queue the message at the front. */
-        xQueueSendToFrontFromISR( __tx_pending, &msg, &ignore_yield );
-
-        pdca_isr_enable( PDCA_CHANNEL_ID_IBUS_TX, PDCA_ISR__TRANSFER_COMPLETE );
-        pdca_queue_buffer( PDCA_CHANNEL_ID_IBUS_TX, msg->buffer, msg->size );
-        pdca_enable( PDCA_CHANNEL_ID_IBUS_TX );
-    }
+    __tx_successfully_sent = true;
+    xSemaphoreGiveFromISR( __tx_done, &ignore );
 }
