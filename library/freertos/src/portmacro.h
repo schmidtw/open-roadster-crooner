@@ -94,9 +94,9 @@ extern "C" {
 #define portSTACK_TYPE  unsigned long
 #define portBASE_TYPE   long
 
-#define TASK_DELAY_MS(x)   ( (x)        /portTICK_RATE_MS )
-#define TASK_DELAY_S(x)    ( (x)*1000   /portTICK_RATE_MS )
-#define TASK_DELAY_MIN(x)  ( (x)*60*1000/portTICK_RATE_MS )
+#define TASK_DELAY_MS(x)   ( ((x)         * configTICK_RATE_HZ) / 1000 )
+#define TASK_DELAY_S(x)    ( ((x)*1000    * configTICK_RATE_HZ) / 1000 )
+#define TASK_DELAY_MIN(x)  ( ((x)*60*1000 * configTICK_RATE_HZ) / 1000 )
 
 #if( configUSE_16_BIT_TICKS == 1 )
     typedef uint16_t portTickType;
