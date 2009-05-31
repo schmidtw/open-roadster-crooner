@@ -82,7 +82,6 @@
 #define CHANNEL_TO_ISR( id )    __CHANNEL_TO_ISR( id )
 #define __CHANNEL_TO_ISR( id )  ISR__TC_ ## id
 #define configTICK_TC_CHANNEL   2
-#define configPBA_CLOCK_HZ      FOSC0
 
 /* Constants required to setup the task context. */
 #define portINITIAL_SR            ( ( portSTACK_TYPE ) 0x00400000 ) /* AVR32 : [M2:M0]=001 I1M=0 I0M=0, GM=0 */
@@ -255,6 +254,7 @@ static void prvSetupTimerInterrupt(void)
 {
     volatile avr32_tc_channel_t *channel;
     uint32_t rate;
+    uint32_t pba_clock;
 
     /* Disable all interrupt/exception. */
     portDISABLE_INTERRUPTS();
@@ -275,7 +275,8 @@ static void prvSetupTimerInterrupt(void)
      * Remember TC counter is 16-bits, so counting second is not possible!
      * That's why we configure it to count ms. Set Rc to the right value with
      * rounding.*/
-    rate = (configPBA_CLOCK_HZ + (4 * configTICK_RATE_HZ)) / (8 * configTICK_RATE_HZ);
+    pba_clock = pm_get_frequency( PM__PBA );
+    rate = (pba_clock + (4 * configTICK_RATE_HZ)) / (8 * configTICK_RATE_HZ);
     channel->RC.rc = AVR32_TC_RC_MASK & rate;
 
     /* Setup the interrupt */
