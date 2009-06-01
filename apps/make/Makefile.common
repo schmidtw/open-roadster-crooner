@@ -1,6 +1,6 @@
 QUIET   ?= @
 
-as       	 = avr32-as
+as           = avr32-as
 cc           = avr32-gcc
 nm           = avr32-nm
 objcopy      = avr32-objcopy
@@ -97,7 +97,7 @@ includes = \
     -I/usr/avr32/include \
     -I$(inc_dir)
 
-ifdef VERIFY
+ifndef NOVERIFY
 verify = -v
 dfu_verify =
 else
