@@ -32,6 +32,7 @@
 
 #include <freertos/portmacro.h>
 #include <freertos/queue.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include "config.h"
@@ -42,11 +43,13 @@
 #include "timing-parameters.h"
 #include "io.h"
 
-//#define MEMCARD_DEBUG   10
-
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
+#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE + 1400)
+#define AUTOMOUNT_PRIORITY      (tskIDLE_PRIORITY+1)
+#define AUTOMOUNT_CALLBACK_MAX  3
+
 #define MC_RX_ISR       PDCA_GET_ISR_NAME( PDCA_CHANNEL_ID_MC_RX )
 #define MC_TX_ISR       PDCA_GET_ISR_NAME( PDCA_CHANNEL_ID_MC_TX )
 
@@ -127,7 +130,6 @@ typedef struct {
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
 static mc_card_type_t mc_type;
-static bool mc_mounted;
 static uint64_t mc_size;
 static uint32_t mc_Nac_read;
 static uint32_t mc_block_size;  /**< In bytes. */
@@ -135,9 +137,12 @@ static uint32_t mc_block_size;  /**< In bytes. */
 static xQueueHandle __idle;
 static xQueueHandle __pending;
 static xQueueHandle __complete;
+static xSemaphoreHandle __card_state_change;
 static mc_message_t __messages[MC_MSG_MAX];
 static uint8_t *__command_buffer;
 static uint8_t *__block_buffer;
+static volatile mc_card_status_t __card_status;
+static card_status_fct __callback_fns[AUTOMOUNT_CALLBACK_MAX];
 
 /*----------------------------------------------------------------------------*/
 /*                                  Constants                                 */
@@ -202,7 +207,7 @@ static void __fast_process_block( void );
 static mc_status_t __determine_metrics( void );
 static mc_status_t __set_block_size( void );
 __attribute__((__interrupt__))
-static void __card_ejected( void );
+static void __card_change( void );
 __attribute__((__interrupt__))
 static void __fast_read_handler( void );
 static inline void __queue_and_send( const uint8_t *send,
@@ -212,6 +217,10 @@ static inline void __queue_and_send( const uint8_t *send,
 static inline uint32_t __find_and_process_block_start( mc_message_t *msg,
                                                        const uint8_t *start,
                                                        const size_t len );
+static void __automount_task( void *data );
+static mc_status_t __mc_mount( void );
+static void __call_all( const mc_card_status_t status );
+static bool __card_present( void );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -221,19 +230,13 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
 {
     int32_t i;
 
-    mc_mounted = false;
+    __card_status = MC_CARD__REMOVED;
+    vSemaphoreCreateBinary( __card_state_change );
+    xSemaphoreTake( __card_state_change, 0 );
 
-    /* Create an interrupt on the card ejection. */
-    gpio_set_options( MC_CD_PIN,
-                      GPIO_DIRECTION__INPUT,
-                      GPIO_PULL_UP__DISABLE,
-                      GPIO_GLITCH_FILTER__ENABLE,
-#if (0 != MC_CD_ACTIVE_LOW)
-                      GPIO_INTERRUPT__RISING_EDGE,
-#else
-                      GPIO_INTERRUPT__FALLING_EDGE,
-#endif
-                      0 );
+    for( i = 0; i < AUTOMOUNT_CALLBACK_MAX; i++ ) {
+        __callback_fns[i] = NULL;
+    }
 
     __idle = xQueueCreate( MC_MSG_MAX, sizeof(mc_message_t*) );
     __pending = xQueueCreate( MC_MSG_MAX, sizeof(mc_message_t*) );
@@ -246,313 +249,56 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
         xQueueSendToBack( __idle, &__messages[i], 0 );
     }
 
-    intc_register_isr( &__card_ejected, MC_CD_ISR, ISR_LEVEL__2 );
     intc_register_isr( &__fast_read_handler, MC_RX_ISR, ISR_LEVEL__1 );
 
     pdca_channel_init( PDCA_CHANNEL_ID_MC_RX, MC_PDCA_RX_PERIPHERAL_ID, 8 );
     pdca_channel_init( PDCA_CHANNEL_ID_MC_TX, MC_PDCA_TX_PERIPHERAL_ID, 8 );
 
+    xTaskCreate( __automount_task, (signed portCHAR *) "AMNT",
+                 AUTOMOUNT_STACK_SIZE, NULL, AUTOMOUNT_PRIORITY, NULL );
+
     return MC_RETURN_OK;
 }
 
 /* See memcard.h for details. */
-bool mc_present( void )
+mc_status_t mc_register( card_status_fct card_status_fn )
 {
-#if (0 != MC_CD_ACTIVE_LOW)
-    return (0 == gpio_read_pin(MC_CD_PIN));
-#else
-    return (0 != gpio_read_pin(MC_CD_PIN));
-#endif
-}
+    int32_t i;
 
-/* See memcard.h for details. */
-mc_status_t mc_mount( void )
-{
-    mc_mount_state_t mount_state;
-    int retries;
-    static const gpio_map_t map[] = { { MC_SCK_PIN,  MC_SCK_FUNCTION  },
-                                      { MC_MISO_PIN, MC_MISO_FUNCTION },
-                                      { MC_MOSI_PIN, MC_MOSI_FUNCTION },
-                                      { MC_CS_PIN,   MC_CS_FUNCTION   } };
-
-    retries = 10;
-
-    if( true == mc_mounted ) {
-        return MC_IN_USE;
+    if( NULL == card_status_fn ) {
+        return MC_ERROR_PARAMETER;
     }
 
-    /* Initialize the hardware. */
-    gpio_enable_module( map, sizeof(map)/sizeof(gpio_map_t) );
-
-    spi_reset( MC_SPI );
-
-    MC_SPI->MR.mstr = 1;    /* master mode */
-    MC_SPI->MR.modfdis = 1; /* ignore faults */
-    MC_SPI->MR.dlybcs = 8;  /* make sure there is a delay between CSs */
-
-    if( MC_RETURN_OK !=
-            spi_set_baudrate(MC_SPI, MC_CS, MC_BAUDRATE_INITIALIZATION) )
-    {
-        return MC_INIT_ERROR;
-    }
-
-    /* Allow 8 clock cycles of up time for the chip select
-     * prior to enabling/disabling it */
-    (MC_CSR(MC_CS)).dlybs  = 8;
-
-    /* We need a small delay between bytes, otherwise we seem to
-     * get data corruption unless we are going really slow. */
-    (MC_CSR(MC_CS)).dlybct = 1;
-
-    /* scbr is set by spi_set_baudrate() */
-
-    (MC_CSR(MC_CS)).bits   = 0;
-    (MC_CSR(MC_CS)).csaat  = 1;
-    (MC_CSR(MC_CS)).csnaat = 0;
-    (MC_CSR(MC_CS)).ncpha  = 1;
-    (MC_CSR(MC_CS)).cpol   = 0;
-
-    mount_state = MCS_NO_CARD;
-
-    while( 1 ) {
-        switch( mount_state ) {
-            case MCS_NO_CARD:
-                _D2( "MCS_NO_CARD:\n" );
-                mc_type = MCT_UNKNOWN;
-                if( true == mc_present() ) {
-                    _D2( "MCS_NO_CARD -> MCS_CARD_DETECTED\n" );
-                    mount_state = MCS_CARD_DETECTED;
-                } else {
-                    _D2( "MCS_NO_CARD -> Exit: MC_NOT_MOUNTED\n" );
-                    return MC_NOT_MOUNTED;
-                }
-                break;
-
-            case MCS_CARD_DETECTED:
-                _D2( "MCS_CARD_DETECTED:\n" );
-                /* Make sure the power is stable. */
-                vTaskDelay( TASK_DELAY_MS(250) );
-                _D2( "MCS_CARD_DETECTED -> MCS_POWERED_ON\n" );
-                mount_state = MCS_POWERED_ON;
-                break;
-
-            case MCS_POWERED_ON:
-            {
-                int i;
-                _D2( "MCS_POWERED_ON:\n" );
-                spi_enable( MC_SPI );
-
-                /* Send 74+ clock cycles. */
-                for( i = 0; i < 10; i++ ) {
-                    io_send_dummy();
-                }
-
-                _D2( "MCS_POWERED_ON -> MCS_ASSERT_SPI_MODE\n" );
-                mount_state = MCS_ASSERT_SPI_MODE;
-                break;
-            }
-
-            case MCS_ASSERT_SPI_MODE:
-                _D2( "MCS_ASSERT_SPI_MODE:\n" );
-                /* Initialize the card into idle state. */
-                if( MC_RETURN_OK == __send_card_to_idle_state() ) {
-                    _D2( "MCS_ASSERT_SPI_MODE -> MCS_INTERFACE_CONDITION_CHECK\n" );
-                    mount_state = MCS_INTERFACE_CONDITION_CHECK;
-                } else {
-                    _D2( "MCS_ASSERT_SPI_MODE -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-
-            case MCS_INTERFACE_CONDITION_CHECK:
-            {
-                bool legal_command;
-
-                _D2( "MCS_INTERFACE_CONDITION_CHECK:\n" );
-                /* See if this card is an SD 2.00 compliant card. */
-                if( MC_RETURN_OK == mc_send_if_cond(MC_VOLTAGE, &legal_command) ) {
-                    if( true == legal_command ) {
-                        _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_INTERFACE_CONDITION_SUCCESS\n" );
-                        mount_state = MCS_INTERFACE_CONDITION_SUCCESS;
-                    } else {
-                        _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_INTERFACE_CONDITION_FAILURE\n" );
-                        mount_state = MCS_INTERFACE_CONDITION_FAILURE;
-                    }
-                } else {
-                    _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-            }
-
-            case MCS_INTERFACE_CONDITION_SUCCESS:
-                _D2( "MCS_INTERFACE_CONDITION_SUCCESS:\n" );
-                /* See if this card has a compatible voltage range. */
-                if( MC_RETURN_OK == __is_card_voltage_compat() ) {
-                    _D2( "MCS_INTERFACE_CONDITION_SUCCESS -> MCS_SD20_COMPATIBLE_VOLTAGE\n" );
-                    mount_state = MCS_SD20_COMPATIBLE_VOLTAGE;
-                } else {
-                    _D2( "MCS_INTERFACE_CONDITION_SUCCESS -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-
-            case MCS_INTERFACE_CONDITION_FAILURE:
-                _D2( "MCS_INTERFACE_CONDITION_FAILURE:\n" );
-                /* See if this card has a compatible voltage range. */
-                if( MC_RETURN_OK == __is_card_voltage_compat() ) {
-                    _D2( "MCS_INTERFACE_CONDITION_FAILURE -> MCS_SD10_COMPATIBLE_VOLTAGE\n" );
-                    mount_state = MCS_SD10_COMPATIBLE_VOLTAGE;
-                } else {
-                    _D2( "MCS_INTERFACE_CONDITION_FAILURE -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-
-            case MCS_SD10_COMPATIBLE_VOLTAGE:
-            {
-                bool ready;
-
-                _D2( "MCS_SD10_COMPATIBLE_VOLTAGE:\n" );
-                do {
-                    if( MC_RETURN_OK != mc_send_sd_op_cond(false, &ready) ) {
-                        _D2( "MCS_SD10_COMPATIBLE_VOLTAGE -> MCS_MMC_CARD\n" );
-                        mount_state = MCS_MMC_CARD;
-                        break;
-                    }
-                } while( false == ready );
-                _D2( "MCS_SD10_COMPATIBLE_VOLTAGE -> MCS_SD10_CARD_READY\n" );
-                mount_state = MCS_SD10_CARD_READY;
-                break;
-            }
-
-            case MCS_SD20_COMPATIBLE_VOLTAGE:
-            {
-                bool ready;
-
-                _D2( "MCS_SD20_COMPATIBLE_VOLTAGE:\n" );
-                do {
-                    if( MC_RETURN_OK != mc_send_sd_op_cond(true, &ready) ) {
-                        _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_CARD_UNUSABLE\n" );
-                        mount_state = MCS_CARD_UNUSABLE;
-                        break;
-                    }
-                } while( false == ready );
-                _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_SD20_CARD_READY\n" );
-                mount_state = MCS_SD20_CARD_READY;
-                break;
-            }
-
-            case MCS_SD10_CARD_READY:
-                _D2( "MCS_SD10_CARD_READY:\n" );
-                mc_type = MCT_SD;
-                _D2( "MCS_SD10_CARD_READY -> MCS_DETERMINE_METRICS\n" );
-                mount_state = MCS_DETERMINE_METRICS;
-                break;
-
-            case MCS_SD20_CARD_READY:
-            {
-                mc_ocr_t ocr;
-
-                _D2( "MCS_SD20_CARD_READY:\n" );
-                if( MC_RETURN_OK == mc_read_ocr(&ocr) ) {
-                    if( true == ocr.card_capacity_status ) {
-                        mc_type = MCT_SDHC;
-                    } else {
-                        mc_type = MCT_SD_20;
-                    }
-                    _D2( "MCS_SD20_CARD_READY -> MCS_DETERMINE_METRICS\n" );
-                    mount_state = MCS_DETERMINE_METRICS;
-                } else {
-                    _D2( "MCS_SD20_CARD_READY -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-            }
-
-            case MCS_MMC_CARD:
-                _D2( "MCS_MMC_CARD:\n" );
-                if( MC_RETURN_OK == __send_card_to_idle_state() ) {
-                    _D2( "MCS_MMC_CARD -> MCS_INTERFACE_CONDITION_CHECK\n" );
-                    mount_state = MCS_INTERFACE_CONDITION_CHECK;
-                } else {
-                    _D2( "MCS_MMC_CARD -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-
-            case MCS_DETERMINE_METRICS:
-                _D2( "MCS_DETERMINE_METRICS:\n" );
-                if( MC_RETURN_OK == __determine_metrics() ) {
-                    _D2( "MCS_DETERMINE_METRICS -> MCS_SET_BLOCK_SIZE\n" );
-                    mount_state = MCS_SET_BLOCK_SIZE;
-                } else {
-                    _D2( "MCS_DETERMINE_METRICS -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-
-            case MCS_SET_BLOCK_SIZE:
-                _D2( "MCS_SET_BLOCK_SIZE:\n" );
-                if( MC_RETURN_OK == __set_block_size() ) {
-                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_READY\n" );
-                    mount_state = MCS_CARD_READY;
-                } else {
-                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_UNUSABLE\n" );
-                    mount_state = MCS_CARD_UNUSABLE;
-                }
-                break;
-
-            case MCS_CARD_READY:
-                _D2( "MCS_CARD_READY:\n" );
-                mc_mounted = true;
-
-                _D1( "Mounted Card type: " );
-                switch( mc_type ) {
-                    case MCT_UNKNOWN:   _D1( "Unknown" ); break;
-                    case MCT_MMC:       _D1( "MMC"     ); break;
-                    case MCT_SD:        _D1( "SD"      ); break;
-                    case MCT_SD_20:     _D1( "SD 2.0"  ); break;
-                    case MCT_SDHC:      _D1( "SDHC"    ); break;
-                }
-
-                _D1( " Size: %llu\n", mc_size );
-
-                _D2( "MCS_CARD_READY -> Exit: MC_RETURN_OK\n" );
-                return MC_RETURN_OK;
-                
-            case MCS_CARD_UNUSABLE:
-                _D2( "MCS_CARD_UNUSABLE: (%d)\n", retries );
-                /* I don't like retrying, but for now it works. */
-                if( 0 < retries-- ) {
-                    _D2( "MCS_CARD_UNUSABLE -> MCS_NO_CARD\n" );
-                    mount_state = MCS_NO_CARD;
-                } else {
-                    _D2( "MCS_CARD_UNUSABLE -> Exit: MC_NOT_MOUNTED\n" );
-                    return MC_NOT_MOUNTED;
-                }
-                break;
+    for( i = 0; i < AUTOMOUNT_CALLBACK_MAX; i++ ) {
+        if( NULL == __callback_fns[i] ) {
+            __callback_fns[i] = card_status_fn;
+            return MC_RETURN_OK;
         }
     }
+
+    return MC_TOO_MANY_REGISTERED;
+}
+
+mc_status_t mc_cancel( card_status_fct card_status_fn )
+{
+    if( NULL != card_status_fn ) {
+        int32_t i;
+
+        for( i = 0; i < AUTOMOUNT_CALLBACK_MAX; i++ ) {
+            if( card_status_fn == __callback_fns[i] ) {
+                __callback_fns[i] = NULL;
+                return MC_RETURN_OK;
+            }
+        }
+    }
+
+    return MC_ERROR_PARAMETER;
 }
 
 /* See memcard.h for details. */
-mc_status_t mc_unmount( void )
+mc_card_status_t mc_get_status( void )
 {
-    gpio_reset_pin( MC_SCK_PIN );
-    gpio_reset_pin( MC_MISO_PIN );
-    gpio_reset_pin( MC_MOSI_PIN );
-    gpio_reset_pin( MC_CS_PIN );
-
-    io_unselect();
-
-    if( false == mc_mounted ) {
-        return MC_NOT_MOUNTED;
-    }
-
-    mc_mounted = false;
-
-    return MC_RETURN_OK;
+    return __card_status;
 }
 
 /* See memcard.h for details. */
@@ -569,7 +315,7 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
     }
 #endif
 
-    if( false == mc_mounted ) {
+    if( MC_CARD__MOUNTED != __card_status ) {
         return MC_NOT_MOUNTED;
     }
 
@@ -627,7 +373,7 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
 /* See memcard.h for details. */
 mc_status_t mc_write_block( const uint32_t lba, const uint8_t *buffer )
 {
-    if( false == mc_mounted ) {
+    if( MC_CARD__MOUNTED != __card_status ) {
         return MC_NOT_MOUNTED;
     }
 
@@ -644,7 +390,7 @@ mc_status_t mc_get_block_count( uint32_t *blocks )
     }
 #endif
 
-    if( false == mc_mounted ) {
+    if( MC_CARD__MOUNTED != __card_status ) {
         return MC_NOT_MOUNTED;
     }
 
@@ -843,15 +589,21 @@ static mc_status_t __set_block_size( void )
 }
 
 __attribute__((__interrupt__))
-static void __card_ejected( void )
+static void __card_change( void )
 {
-    /* Force clean up now so we're ready for a new card insertion. */
-    mc_mounted = false;
-    mc_type = MCT_UNKNOWN;
-    gpio_reset_pin( MC_SCK_PIN );
-    gpio_reset_pin( MC_MISO_PIN );
-    gpio_reset_pin( MC_MOSI_PIN );
-    gpio_reset_pin( MC_CS_PIN );
+    portBASE_TYPE ignore;
+    
+    if( false == __card_present() ) {
+        /* Force clean up now so we're ready for a new card insertion. */
+        mc_type = MCT_UNKNOWN;
+        gpio_reset_pin( MC_SCK_PIN );
+        gpio_reset_pin( MC_MISO_PIN );
+        gpio_reset_pin( MC_MOSI_PIN );
+        gpio_reset_pin( MC_CS_PIN );
+        io_unselect();
+    }
+
+    xSemaphoreGiveFromISR( __card_state_change, &ignore );
 
     gpio_clr_interrupt_flag( MC_CD_PIN );
 }
@@ -968,4 +720,357 @@ static inline uint32_t __find_and_process_block_start( mc_message_t *msg,
 
     _D2( "left: %lu\n", left );
     return left;
+}
+
+static void __automount_task( void *data )
+{
+    /* Create an interrupt on the card ejection. */
+    gpio_set_options( MC_CD_PIN,
+                      GPIO_DIRECTION__INPUT,
+                      GPIO_PULL_UP__DISABLE,
+                      GPIO_GLITCH_FILTER__ENABLE,
+                      GPIO_INTERRUPT__CHANGE,
+                      0 );
+
+    intc_register_isr( &__card_change, MC_CD_ISR, ISR_LEVEL__2 );
+
+    /* In case we booted with a card in the slot. */
+    if( true == __card_present() ) {
+        xSemaphoreGive( __card_state_change );
+    }
+
+    while( 1 ) {
+        xSemaphoreTake( __card_state_change, portMAX_DELAY );
+
+        if( true == __card_present() ) {
+            __card_status = MC_CARD__INSERTED;
+            __call_all( __card_status );
+        } else {
+            __card_status = MC_CARD__REMOVED;
+            __call_all( __card_status );
+        }
+
+        if( MC_CARD__INSERTED == __card_status ) {
+            mc_status_t status;
+
+            status = __mc_mount();
+            if( MC_RETURN_OK == status ) {
+                __card_status = MC_CARD__MOUNTED;
+                __call_all( __card_status );
+            } else if( MC_UNUSABLE == status ) {
+                __card_status = MC_CARD__UNUSABLE;
+                __call_all( __card_status );
+            } else {
+                /* The card may have been removed during initialization. */
+                if( true == __card_present() ) {
+                    /* Nope, just can't use the card. */
+                    __card_status = MC_CARD__UNUSABLE;
+                    __call_all( __card_status );
+                }
+            }
+        }
+    }
+}
+
+/**
+ *  Used to mount a memory card when present in the defined hardware slot.
+ *
+ *  @return Status.
+ *      @retval MC_RETURN_OK        Success.
+ *      @retval MC_INIT_ERROR       The card did not respond properly.
+ *      @retval MC_UNUSABLE         The card is not compatible.
+ *      @retval MC_ERROR_TIMEOUT    The card timed out during IO.
+ *      @retval MC_ERROR_MODE       The card is in a generic error state.
+ *      @retval MC_CRC_FAILURE      The data retrieved from the card failed the CRC
+ *                                      check - the card may not be present anymore.
+ */
+static mc_status_t __mc_mount( void )
+{
+    mc_mount_state_t mount_state;
+    int retries;
+    static const gpio_map_t map[] = { { MC_SCK_PIN,  MC_SCK_FUNCTION  },
+                                      { MC_MISO_PIN, MC_MISO_FUNCTION },
+                                      { MC_MOSI_PIN, MC_MOSI_FUNCTION },
+                                      { MC_CS_PIN,   MC_CS_FUNCTION   } };
+
+    retries = 10;
+
+    /* Initialize the hardware. */
+    gpio_enable_module( map, sizeof(map)/sizeof(gpio_map_t) );
+
+    spi_reset( MC_SPI );
+
+    MC_SPI->MR.mstr = 1;    /* master mode */
+    MC_SPI->MR.modfdis = 1; /* ignore faults */
+    MC_SPI->MR.dlybcs = 8;  /* make sure there is a delay between CSs */
+
+    if( MC_RETURN_OK !=
+            spi_set_baudrate(MC_SPI, MC_CS, MC_BAUDRATE_INITIALIZATION) )
+    {
+        return MC_INIT_ERROR;
+    }
+
+    /* Allow 8 clock cycles of up time for the chip select
+     * prior to enabling/disabling it */
+    (MC_CSR(MC_CS)).dlybs  = 8;
+
+    /* We need a small delay between bytes, otherwise we seem to
+     * get data corruption unless we are going really slow. */
+    (MC_CSR(MC_CS)).dlybct = 1;
+
+    /* scbr is set by spi_set_baudrate() */
+
+    (MC_CSR(MC_CS)).bits   = 0;
+    (MC_CSR(MC_CS)).csaat  = 1;
+    (MC_CSR(MC_CS)).csnaat = 0;
+    (MC_CSR(MC_CS)).ncpha  = 1;
+    (MC_CSR(MC_CS)).cpol   = 0;
+
+    mount_state = MCS_NO_CARD;
+
+    while( 1 ) {
+        switch( mount_state ) {
+            case MCS_NO_CARD:
+                _D2( "MCS_NO_CARD:\n" );
+                mc_type = MCT_UNKNOWN;
+                if( true == __card_present() ) {
+                    _D2( "MCS_NO_CARD -> MCS_CARD_DETECTED\n" );
+                    mount_state = MCS_CARD_DETECTED;
+                } else {
+                    _D2( "MCS_NO_CARD -> Exit: MC_NOT_MOUNTED\n" );
+                    return MC_NOT_MOUNTED;
+                }
+                break;
+
+            case MCS_CARD_DETECTED:
+                _D2( "MCS_CARD_DETECTED:\n" );
+                /* Make sure the power is stable. */
+                vTaskDelay( TASK_DELAY_MS(250) );
+                _D2( "MCS_CARD_DETECTED -> MCS_POWERED_ON\n" );
+                mount_state = MCS_POWERED_ON;
+                break;
+
+            case MCS_POWERED_ON:
+            {
+                int i;
+                _D2( "MCS_POWERED_ON:\n" );
+                spi_enable( MC_SPI );
+
+                /* Send 74+ clock cycles. */
+                for( i = 0; i < 10; i++ ) {
+                    io_send_dummy();
+                }
+
+                _D2( "MCS_POWERED_ON -> MCS_ASSERT_SPI_MODE\n" );
+                mount_state = MCS_ASSERT_SPI_MODE;
+                break;
+            }
+
+            case MCS_ASSERT_SPI_MODE:
+                _D2( "MCS_ASSERT_SPI_MODE:\n" );
+                /* Initialize the card into idle state. */
+                if( MC_RETURN_OK == __send_card_to_idle_state() ) {
+                    _D2( "MCS_ASSERT_SPI_MODE -> MCS_INTERFACE_CONDITION_CHECK\n" );
+                    mount_state = MCS_INTERFACE_CONDITION_CHECK;
+                } else {
+                    _D2( "MCS_ASSERT_SPI_MODE -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_INTERFACE_CONDITION_CHECK:
+            {
+                bool legal_command;
+
+                _D2( "MCS_INTERFACE_CONDITION_CHECK:\n" );
+                /* See if this card is an SD 2.00 compliant card. */
+                if( MC_RETURN_OK == mc_send_if_cond(MC_VOLTAGE, &legal_command) ) {
+                    if( true == legal_command ) {
+                        _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_INTERFACE_CONDITION_SUCCESS\n" );
+                        mount_state = MCS_INTERFACE_CONDITION_SUCCESS;
+                    } else {
+                        _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_INTERFACE_CONDITION_FAILURE\n" );
+                        mount_state = MCS_INTERFACE_CONDITION_FAILURE;
+                    }
+                } else {
+                    _D2( "MCS_INTERFACE_CONDITION_CHECK -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+            }
+
+            case MCS_INTERFACE_CONDITION_SUCCESS:
+                _D2( "MCS_INTERFACE_CONDITION_SUCCESS:\n" );
+                /* See if this card has a compatible voltage range. */
+                if( MC_RETURN_OK == __is_card_voltage_compat() ) {
+                    _D2( "MCS_INTERFACE_CONDITION_SUCCESS -> MCS_SD20_COMPATIBLE_VOLTAGE\n" );
+                    mount_state = MCS_SD20_COMPATIBLE_VOLTAGE;
+                } else {
+                    _D2( "MCS_INTERFACE_CONDITION_SUCCESS -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_INTERFACE_CONDITION_FAILURE:
+                _D2( "MCS_INTERFACE_CONDITION_FAILURE:\n" );
+                /* See if this card has a compatible voltage range. */
+                if( MC_RETURN_OK == __is_card_voltage_compat() ) {
+                    _D2( "MCS_INTERFACE_CONDITION_FAILURE -> MCS_SD10_COMPATIBLE_VOLTAGE\n" );
+                    mount_state = MCS_SD10_COMPATIBLE_VOLTAGE;
+                } else {
+                    _D2( "MCS_INTERFACE_CONDITION_FAILURE -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_SD10_COMPATIBLE_VOLTAGE:
+            {
+                bool ready;
+
+                _D2( "MCS_SD10_COMPATIBLE_VOLTAGE:\n" );
+                do {
+                    if( MC_RETURN_OK != mc_send_sd_op_cond(false, &ready) ) {
+                        _D2( "MCS_SD10_COMPATIBLE_VOLTAGE -> MCS_MMC_CARD\n" );
+                        mount_state = MCS_MMC_CARD;
+                        break;
+                    }
+                } while( false == ready );
+                _D2( "MCS_SD10_COMPATIBLE_VOLTAGE -> MCS_SD10_CARD_READY\n" );
+                mount_state = MCS_SD10_CARD_READY;
+                break;
+            }
+
+            case MCS_SD20_COMPATIBLE_VOLTAGE:
+            {
+                bool ready;
+
+                _D2( "MCS_SD20_COMPATIBLE_VOLTAGE:\n" );
+                do {
+                    if( MC_RETURN_OK != mc_send_sd_op_cond(true, &ready) ) {
+                        _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_CARD_UNUSABLE\n" );
+                        mount_state = MCS_CARD_UNUSABLE;
+                        break;
+                    }
+                } while( false == ready );
+                _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_SD20_CARD_READY\n" );
+                mount_state = MCS_SD20_CARD_READY;
+                break;
+            }
+
+            case MCS_SD10_CARD_READY:
+                _D2( "MCS_SD10_CARD_READY:\n" );
+                mc_type = MCT_SD;
+                _D2( "MCS_SD10_CARD_READY -> MCS_DETERMINE_METRICS\n" );
+                mount_state = MCS_DETERMINE_METRICS;
+                break;
+
+            case MCS_SD20_CARD_READY:
+            {
+                mc_ocr_t ocr;
+
+                _D2( "MCS_SD20_CARD_READY:\n" );
+                if( MC_RETURN_OK == mc_read_ocr(&ocr) ) {
+                    if( true == ocr.card_capacity_status ) {
+                        mc_type = MCT_SDHC;
+                    } else {
+                        mc_type = MCT_SD_20;
+                    }
+                    _D2( "MCS_SD20_CARD_READY -> MCS_DETERMINE_METRICS\n" );
+                    mount_state = MCS_DETERMINE_METRICS;
+                } else {
+                    _D2( "MCS_SD20_CARD_READY -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+            }
+
+            case MCS_MMC_CARD:
+                _D2( "MCS_MMC_CARD:\n" );
+                if( MC_RETURN_OK == __send_card_to_idle_state() ) {
+                    _D2( "MCS_MMC_CARD -> MCS_INTERFACE_CONDITION_CHECK\n" );
+                    mount_state = MCS_INTERFACE_CONDITION_CHECK;
+                } else {
+                    _D2( "MCS_MMC_CARD -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_DETERMINE_METRICS:
+                _D2( "MCS_DETERMINE_METRICS:\n" );
+                if( MC_RETURN_OK == __determine_metrics() ) {
+                    _D2( "MCS_DETERMINE_METRICS -> MCS_SET_BLOCK_SIZE\n" );
+                    mount_state = MCS_SET_BLOCK_SIZE;
+                } else {
+                    _D2( "MCS_DETERMINE_METRICS -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_SET_BLOCK_SIZE:
+                _D2( "MCS_SET_BLOCK_SIZE:\n" );
+                if( MC_RETURN_OK == __set_block_size() ) {
+                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_READY\n" );
+                    mount_state = MCS_CARD_READY;
+                } else {
+                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                }
+                break;
+
+            case MCS_CARD_READY:
+                _D2( "MCS_CARD_READY:\n" );
+
+                _D1( "Mounted Card type: " );
+                switch( mc_type ) {
+                    case MCT_UNKNOWN:   _D1( "Unknown" ); break;
+                    case MCT_MMC:       _D1( "MMC"     ); break;
+                    case MCT_SD:        _D1( "SD"      ); break;
+                    case MCT_SD_20:     _D1( "SD 2.0"  ); break;
+                    case MCT_SDHC:      _D1( "SDHC"    ); break;
+                }
+
+                _D1( " Size: %llu\n", mc_size );
+
+                _D2( "MCS_CARD_READY -> Exit: MC_RETURN_OK\n" );
+                return MC_RETURN_OK;
+                
+            case MCS_CARD_UNUSABLE:
+                _D2( "MCS_CARD_UNUSABLE: (%d)\n", retries );
+                /* I don't like retrying, but for now it works. */
+                if( 0 < retries-- ) {
+                    _D2( "MCS_CARD_UNUSABLE -> MCS_NO_CARD\n" );
+                    mount_state = MCS_NO_CARD;
+                } else {
+                    _D2( "MCS_CARD_UNUSABLE -> Exit: MC_NOT_MOUNTED\n" );
+                    return MC_NOT_MOUNTED;
+                }
+                break;
+        }
+    }
+}
+
+
+/**
+ *  Used to call all the registered callbacks.
+ *
+ *  @param status the status to send all the callbacks
+ */
+static void __call_all( const mc_card_status_t status )
+{
+    int32_t i;
+
+    for( i = 0; i < AUTOMOUNT_CALLBACK_MAX; i++ ) {
+        if( NULL != __callback_fns[i] ) {
+            (*__callback_fns[i])( status );
+        }
+    }
+}
+
+static bool __card_present( void )
+{
+#if (0 != MC_CD_ACTIVE_LOW)
+    return (0 == gpio_read_pin(MC_CD_PIN));
+#else
+    return (0 != gpio_read_pin(MC_CD_PIN));
+#endif
 }

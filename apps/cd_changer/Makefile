@@ -3,8 +3,7 @@ TARGET     = cd_changer
 BASE       = ../..
 
 SOURCES = \
-          ibus.c \
-          blu.c \
+          radio-interface.c \
           playback.c \
           main.c
 
@@ -13,6 +12,7 @@ LIBRARIES = \
             media-interface \
             media-flac \
             file-stream \
+            ibus-radio-protocol \
             ibus-physical \
             fatfs \
             freertos \

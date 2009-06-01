@@ -36,7 +36,7 @@ DSTATUS disk_initialize( BYTE drv )
         return STA_NOINIT;
     }
 
-    if( (true == mc_present()) && (MC_RETURN_OK == mc_mount()) ) {
+    if( MC_CARD__MOUNTED == mc_get_status() ) {
         return STA_PROTECT;
     }
 

@@ -23,20 +23,34 @@
 #include <stddef.h>
 
 typedef enum {
-    MC_RETURN_OK        = 0x0000,
+    MC_RETURN_OK            = 0x0000,
 
-    MC_ERROR_PARAMETER  = 0x0100,
-    MC_ERROR_TIMEOUT    = 0x0101,
-    MC_IN_USE           = 0x0102,
-    MC_INIT_ERROR       = 0x0103,
-    MC_UNUSABLE         = 0x0104,
-    MC_ERROR_MODE       = 0x0105,
-    MC_CRC_FAILURE      = 0x0106,
-    MC_NOT_SUPPORTED    = 0x0107,
-    MC_NOT_MOUNTED      = 0x0108,
+    MC_ERROR_PARAMETER      = 0x0100,
+    MC_ERROR_TIMEOUT        = 0x0101,
+    MC_INIT_ERROR           = 0x0102,
+    MC_UNUSABLE             = 0x0103,
+    MC_ERROR_MODE           = 0x0104,
+    MC_CRC_FAILURE          = 0x0105,
+    MC_NOT_SUPPORTED        = 0x0106,
+    MC_NOT_MOUNTED          = 0x0107,
+    MC_TOO_MANY_REGISTERED  = 0x0108,
 
-    MC_STILL_WAITING    = 0x0200
+    MC_STILL_WAITING        = 0x0200
 } mc_status_t;
+
+typedef enum {
+    MC_CARD__INSERTED,
+    MC_CARD__MOUNTED,
+    MC_CARD__UNUSABLE,
+    MC_CARD__REMOVED
+} mc_card_status_t;
+
+/**
+ *  Called with a status update for the memory card/slot.
+ *
+ *  @param status the current status of any card in the slot
+ */
+typedef void (*card_status_fct)( const mc_card_status_t status );
 
 /**
  *  Used to initialize the memory card subsystem.  This <b>MUST</b>
@@ -51,41 +65,41 @@ typedef enum {
 mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) );
 
 /**
- *  Used to determine if a memory card is present.
+ *  Used to register a callback notification when the status
+ *  of the card changes.
  *
- *  @return Status.
- *      @retval true if a card is present of the detection hardware
- *                   is not present
- *      @retval fase if no card is present
+ *  @note The callback is based on a different thread.
+ *
+ *  @param card_status_fn the callback to call
+ *
+ *  @return Status
+ *      @retval MC_RETURN_OK            Success.
+ *      @retval MC_ERROR_PARAMETER      Invalid argument(s) passed.
+ *      @retval MC_TOO_MANY_REGISTERED  Too many callbacks registered - failed 
  */
-bool mc_present( void );
+mc_status_t mc_register( card_status_fct card_status_fn );
 
 /**
- *  Used to mount a memory card when present in the defined hardware slot.
+ *  Used to cancel callback notifications to this function.
  *
- *  @return Status.
- *      @retval MC_RETURN_OK        Success.
- *      @retval MC_ERROR_PARAMETER  Invalid argument(s) passed.
- *      @retval MC_IN_USE           Card is already mounted.
- *      @retval MC_INIT_ERROR       The card did not respond properly.
- *      @retval MC_UNUSABLE         The card is not compatible.
- *      @retval MC_ERROR_TIMEOUT    The card timed out during IO.
- *      @retval MC_ERROR_MODE       The card is in a generic error state.
- *      @retval MC_CRC_FAILURE      The data retrieved from the card failed the CRC
- *                                      check - the card may not be present anymore.
+ *  @param card_status_fn the callback to cancel
+ *
+ *  @return Status
+ *      @retval MC_RETURN_OK            Success.
+ *      @retval MC_ERROR_PARAMETER      Invalid argument(s) passed.
  */
-mc_status_t mc_mount( void );
+mc_status_t mc_cancel( card_status_fct card_status_fn );
 
 /**
- *  Used to unmount a memory card in a defined hardware slot.
- *
+ *  Used to ask the current state of the memory card/slot.
  *
  *  @return Status.
- *      @retval MC_RETURN_OK        Success.
- *      @retval MC_ERROR_PARAMETER  Invalid argument(s) passed.
- *      @retval MC_NOT_MOUNTED      The card in the slot is not mounted.
+ *      @retval MC_CARD__INSERTED   A card is inserted, but not mounted.
+ *      @retval MC_CARD__MOUNTED    A card is inserted and is mounted.
+ *      @retval MC_CARD__UNUSABLE   A card is inserted and is not useable.
+ *      @retval MC_CARD__REMOVED    No card is present.
  */
-mc_status_t mc_unmount( void );
+mc_card_status_t mc_get_status( void );
 
 /**
  *  Used to read a 512 byte block of memory from the card.
