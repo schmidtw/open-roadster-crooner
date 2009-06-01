@@ -25,6 +25,7 @@
 #include <bsp/intc.h>
 #include <linked-list/linked-list.h>
 #include <file-stream/file-stream.h>
+#include <fatfs/ff.h>
 
 #include "media-flac.h"
 #include "decoder.h"
@@ -59,9 +60,11 @@ typedef enum {
     FLAC__SIZE           = 8
 } flac_block_type_t;
 
-typedef media_status_t (*block_handler_t)( FLACContext *fc,
-                                           const uint32_t length,
-                                           media_metadata_t *metadata );
+typedef media_status_t (*stream__block_handler_t)( FLACContext *fc,
+                                                   const uint32_t length );
+typedef media_status_t (*file__block_handler_t)( FIL *file,
+                                                 const uint32_t length,
+                                                 media_metadata_t *metadata );
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -73,30 +76,39 @@ static media_resume_fn_t __resume;
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
-static media_status_t process_file( FLACContext *fc,
-                                    int32_t *decode_0,
-                                    int32_t *decode_1,
-                                    media_suspend_fn_t suspend );
-static media_status_t process_metadata( FLACContext *fc,
-                                        media_metadata_t *metadata );
-static void process_metadata_block_header( uint8_t *header,
-                                           bool *last,
-                                           flac_block_type_t *type,
-                                           uint32_t *length );
-static media_status_t metadata_block_ignore( FLACContext *fc,
-                                             const uint32_t length,
-                                             media_metadata_t *metadata );
-static media_status_t metadata_streaminfo_block( FLACContext *fc,
-                                                 const uint32_t length,
-                                                 media_metadata_t *metadata );
-static media_status_t metadata_vorbis_comment( FLACContext *fc,
-                                               const uint32_t length,
-                                               media_metadata_t *metadata );
 static media_status_t play_song( FLACContext *fc,
                                  int32_t *decode_0,
                                  int32_t *decode_1,
                                  media_suspend_fn_t suspend );
 static void __buffer_done( abdac_node_t *node, const bool last );
+static void process_metadata_block_header( uint8_t *header,
+                                           bool *last,
+                                           flac_block_type_t *type,
+                                           uint32_t *length );
+
+/*---------- Stream based metadata handlers ----------*/
+static media_status_t stream__process_file( FLACContext *fc,
+                                            int32_t *decode_0,
+                                            int32_t *decode_1,
+                                            media_suspend_fn_t suspend );
+static media_status_t stream__process_metadata( FLACContext *fc );
+static media_status_t stream__metadata_block_ignore( FLACContext *fc,
+                                                     const uint32_t length );
+static media_status_t stream__metadata_streaminfo_block( FLACContext *fc,
+                                                         const uint32_t length );
+
+/*---------- File based metadata handlers ----------*/
+static media_status_t file__process_metadata( FIL *file,
+                                              media_metadata_t *metadata );
+static media_status_t file__metadata_vorbis_comment( FIL *file,
+                                                     const uint32_t length,
+                                                     media_metadata_t *metadata );
+static media_status_t file__metadata_block_ignore( FIL *file,
+                                                   const uint32_t length,
+                                                   media_metadata_t *metadata );
+static bool file__read_uint32_t( FIL *file, uint32_t *out );
+static inline bool file__read( FIL *file, uint8_t *buf, uint32_t len );
+static inline bool file__seek_from_current( FIL *file, uint32_t len );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -166,7 +178,7 @@ media_status_t media_flac_play( const char *filename,
         ll_append( &__idle, &d->nodes[i].node );
     }
 
-    rv = process_file( &fc, d->decode_0, d->decode_1, suspend );
+    rv = stream__process_file( &fc, d->decode_0, d->decode_1, suspend );
 
     free( d );
 
@@ -201,9 +213,9 @@ bool media_flac_get_type( const char *filename )
 media_status_t media_flac_get_metadata( const char *filename,
                                         media_metadata_t *metadata )
 {
-    FLACContext  fc;
     media_status_t rv;
     flac_data_t *d;
+    FIL file;
 
     rv = MI_RETURN_OK;
 
@@ -212,44 +224,38 @@ media_status_t media_flac_get_metadata( const char *filename,
         goto error_0;
     }
 
-    if( true != fstream_open(filename) ) {
+    if( FR_OK != f_open(&file, filename, FA_READ|FA_OPEN_EXISTING) ) {
         rv = MI_ERROR_PARAMETER;
         goto error_0;
     }
 
     {
-        size_t got;
-        uint8_t *buf;
-        buf = (uint8_t*) fstream_get_buffer( 4, &got );
-        if( (4 != got) || (0 != memcmp(buf, "fLaC", 4)) )
-        {
+        uint8_t buf[4];
+        if( false == file__read(&file, buf, 4) ) {
             rv = MI_ERROR_INVALID_FORMAT;
-            fstream_release_buffer( 0 );
-            goto error_0;
+            goto error_1;
         }
-        fstream_release_buffer( 4 );
+
+        if( 0 != memcmp(buf, "fLaC", 4) ) {
+            rv = MI_ERROR_INVALID_FORMAT;
+            goto error_1;
+        }
     }
 
     d = (flac_data_t*) malloc( sizeof(flac_data_t) );
     if( NULL == d ) {
         rv = MI_ERROR_OUT_OF_MEMORY;
-        goto error_0;
+        goto error_1;
     }
 
-    /* Initialize the non-buffer sections of the memory allocation */
-    memset( &fc, 0, sizeof(FLACContext) );
-
-    /* From above we've already read 4 bytes of metadata */
-    fc.filesize = fstream_get_filesize();
-    fc.metadatalength = 4;
-
-    rv = process_metadata( &fc, metadata );
+    rv = file__process_metadata( &file, metadata );
 
     free( d );
 
-error_0:
+error_1:
+    f_close( &file );
 
-    fstream_close();
+error_0:
 
     return rv;
 }
@@ -267,15 +273,15 @@ error_0:
  *
  *  @retval MI_RETURN_OK
  */
-static media_status_t process_file( FLACContext *fc,
-                                    int32_t *decode_0,
-                                    int32_t *decode_1,
-                                    media_suspend_fn_t suspend )
+static media_status_t stream__process_file( FLACContext *fc,
+                                            int32_t *decode_0,
+                                            int32_t *decode_1,
+                                            media_suspend_fn_t suspend )
 {
     media_status_t status;
     abdac_sample_rate_t sample_rate;
 
-    status = process_metadata( fc, NULL );
+    status = stream__process_metadata( fc );
     if( MI_RETURN_OK != status ) {
         return status;
     }
@@ -313,15 +319,7 @@ static media_status_t process_file( FLACContext *fc,
     return status;
 }
 
-/**
- *  Used to process the file after the basic error checking has been done.
- *
- *  @param fc the flac context data
- *
- *  @retval MI_RETURN_OK
- */
-static media_status_t process_metadata( FLACContext *fc,
-                                        media_metadata_t *metadata )
+static media_status_t stream__process_metadata( FLACContext *fc )
 {
     media_status_t status;
     bool end;
@@ -329,16 +327,16 @@ static media_status_t process_metadata( FLACContext *fc,
     flac_block_type_t type;
     uint32_t block_length;
 
-    block_handler_t handler[FLAC__SIZE];
+    stream__block_handler_t handler[FLAC__SIZE];
 
-    handler[FLAC__STREAMINFO]     = metadata_streaminfo_block;
-    handler[FLAC__PADDING]        = metadata_block_ignore;
-    handler[FLAC__APPLICATION]    = metadata_block_ignore;
-    handler[FLAC__SEEKTABLE]      = metadata_block_ignore;
-    handler[FLAC__VORBIS_COMMENT] = metadata_vorbis_comment;
-    handler[FLAC__CUESHEET]       = metadata_block_ignore;
-    handler[FLAC__PICTURE]        = metadata_block_ignore;
-    handler[FLAC__INVALID]        = metadata_block_ignore;
+    handler[FLAC__STREAMINFO]     = stream__metadata_streaminfo_block;
+    handler[FLAC__PADDING]        = stream__metadata_block_ignore;
+    handler[FLAC__APPLICATION]    = stream__metadata_block_ignore;
+    handler[FLAC__SEEKTABLE]      = stream__metadata_block_ignore;
+    handler[FLAC__VORBIS_COMMENT] = stream__metadata_block_ignore;
+    handler[FLAC__CUESHEET]       = stream__metadata_block_ignore;
+    handler[FLAC__PICTURE]        = stream__metadata_block_ignore;
+    handler[FLAC__INVALID]        = stream__metadata_block_ignore;
 
     end = false;
     found_stream_info = false;
@@ -357,7 +355,7 @@ static media_status_t process_metadata( FLACContext *fc,
             fstream_release_buffer( 4 );
         }
 
-        status = (*handler[type])( fc, block_length, metadata );
+        status = (*handler[type])( fc, block_length );
         if( MI_RETURN_OK != status ) {
             return status;
         }
@@ -372,6 +370,62 @@ static media_status_t process_metadata( FLACContext *fc,
     }
 
     fc->bitrate = ((fc->filesize - fc->metadatalength) * 8) / fc->length;
+
+    return MI_RETURN_OK;
+}
+
+/**
+ *  Used to process the file after the basic error checking has been done.
+ *
+ *  @param fc the flac context data
+ *
+ *  @retval MI_RETURN_OK
+ */
+static media_status_t file__process_metadata( FIL *file,
+                                              media_metadata_t *metadata )
+{
+    media_status_t status;
+    bool end;
+    bool found_stream_info;
+    flac_block_type_t type;
+    uint32_t block_length;
+
+    file__block_handler_t handler[FLAC__SIZE];
+
+    handler[FLAC__STREAMINFO]     = file__metadata_block_ignore;
+    handler[FLAC__PADDING]        = file__metadata_block_ignore;
+    handler[FLAC__APPLICATION]    = file__metadata_block_ignore;
+    handler[FLAC__SEEKTABLE]      = file__metadata_block_ignore;
+    handler[FLAC__VORBIS_COMMENT] = file__metadata_vorbis_comment;
+    handler[FLAC__CUESHEET]       = file__metadata_block_ignore;
+    handler[FLAC__PICTURE]        = file__metadata_block_ignore;
+    handler[FLAC__INVALID]        = file__metadata_block_ignore;
+
+    end = false;
+    found_stream_info = false;
+
+    while( !end ) {
+        {
+            uint8_t buf[4];
+            if( false == file__read(file, buf, 4) ) {
+                return MI_ERROR_DECODE_ERROR;
+            }
+
+            process_metadata_block_header( buf, &end, &type, &block_length );
+        }
+
+        status = (*handler[type])( file, block_length, metadata );
+        if( MI_RETURN_OK != status ) {
+            return status;
+        }
+        if( FLAC__STREAMINFO == type ) {
+            found_stream_info = true;
+        }
+    }
+
+    if( false == found_stream_info ) {
+        return MI_ERROR_DECODE_ERROR;
+    }
 
     return MI_RETURN_OK;
 }
@@ -413,14 +467,30 @@ static void process_metadata_block_header( uint8_t *header,
  *  @param length the number of bytes in the block
  *  @param buf ignored
  */
-static media_status_t metadata_block_ignore( FLACContext *fc,
-                                             const uint32_t length,
-                                             media_metadata_t *metadata )
+static media_status_t stream__metadata_block_ignore( FLACContext *fc,
+                                                     const uint32_t length )
 {
     fstream_skip( length );
     return MI_RETURN_OK;
 }
 
+/**
+ *  Skips over the dat in the block.
+ *
+ *  @param fc ignored
+ *  @param length the number of bytes in the block
+ *  @param buf ignored
+ */
+static media_status_t file__metadata_block_ignore( FIL *file,
+                                                   const uint32_t length,
+                                                   media_metadata_t *metadata )
+{
+    if( true == file__seek_from_current(file, length) ) {
+        return MI_RETURN_OK;
+    }
+
+    return MI_ERROR_DECODE_ERROR;
+}
 /**
  *  Processes the data in a STREAMINFO block.
  *
@@ -428,9 +498,8 @@ static media_status_t metadata_block_ignore( FLACContext *fc,
  *  @param length the number of bytes in the block
  *  @param buf the scratch buffer to read into
  */
-static media_status_t metadata_streaminfo_block( FLACContext *fc,
-                                                 const uint32_t length,
-                                                 media_metadata_t *metadata )
+static media_status_t stream__metadata_streaminfo_block( FLACContext *fc,
+                                                         const uint32_t length )
 {
     size_t got;
     uint8_t *buf;
@@ -462,80 +531,109 @@ static media_status_t metadata_streaminfo_block( FLACContext *fc,
     return MI_RETURN_OK;
 }
 
-static media_status_t metadata_vorbis_comment( FLACContext *fc,
-                                               const uint32_t length,
-                                               media_metadata_t *metadata )
+static media_status_t file__metadata_vorbis_comment( FIL *file,
+                                                     const uint32_t length,
+                                                     media_metadata_t *metadata )
 {
-    if( NULL != metadata ) {
-        int32_t i;
-        size_t got;
-        uint8_t *buf;
-        
-        buf = (uint8_t*) fstream_get_buffer( length, &got );
-        if( length != got ) {
-            fstream_release_buffer( 0 );
+    uint32_t list_size;
+    
+    memset( metadata, 0, sizeof(media_metadata_t) );
+    metadata->track_number = -1;
+
+    /* Skip the vendor information */
+    {   uint32_t vendor_length;
+        if( false == file__read_uint32_t(file, &vendor_length) ) {
+            return MI_ERROR_DECODE_ERROR;
+        }
+        if( false == file__seek_from_current(file, vendor_length) ) {
+            return MI_ERROR_DECODE_ERROR;
+        }
+    }
+
+    if( false == file__read_uint32_t(file, &list_size) ) {
+        return MI_ERROR_DECODE_ERROR;
+    }
+
+    while( 0 < list_size ) {
+        uint32_t comment_length;
+
+        list_size--;
+
+        if( false == file__read_uint32_t(file, &comment_length) ) {
             return MI_ERROR_DECODE_ERROR;
         }
 
-        memset( metadata, 0, sizeof(media_metadata_t) );
-        metadata->track_number = -1;
+        if( comment_length < 6 ) {
+            if( false == file__seek_from_current(file, comment_length) ) {
+                return MI_ERROR_DECODE_ERROR;
+            }
+        } else {
+            uint8_t buffer[12];
+            if( false == file__read(file, buffer, 6) ) {
+                return MI_ERROR_DECODE_ERROR;
+            }
 
-        /* Skip the vendor information */
-        {   uint32_t vendor_length;
-            vendor_length = *buf;           buf++;
-            vendor_length |= (*buf << 8);   buf++;
-            vendor_length |= (*buf << 16);  buf++;
-            vendor_length |= (*buf << 24);  buf++;
-            buf += vendor_length;
-        }
+            if( 0 == strncasecmp((char*) buffer, "TITLE=", 6) ) {
+                uint32_t title_length;
 
-        i = *buf;           buf++;
-        i |= (*buf << 8);   buf++;
-        i |= (*buf << 16);  buf++;
-        i |= (*buf << 24);  buf++;
+                title_length = MIN( MEDIA_TITLE_LENGTH, (comment_length - 6) );
+                if( false == file__read(file, (uint8_t*) &metadata->title, title_length) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+            } else if( 0 == strncasecmp((char*) buffer, "ALBUM=", 6) ) {
+                uint32_t album_length;
 
-        for( ; 0 < i; i-- ) {
-            uint32_t comment_length;
+                album_length = MIN( MEDIA_ALBUM_LENGTH, (comment_length - 6) );
+                if( false == file__read(file, (uint8_t*) &metadata->album, album_length) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+            } else if( 0 == strncasecmp((char*) buffer, "ARTIST", 6) ) {
+                if( false == file__read(file, &buffer[6], 1) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                if( 0 == strncasecmp((char*) buffer, "ARTIST=", 7) ) {
+                    uint32_t artist_length;
 
-            comment_length = *buf;          buf++;
-            comment_length |= (*buf << 8);  buf++;
-            comment_length |= (*buf << 16); buf++;
-            comment_length |= (*buf << 24); buf++;
-
-            if( (comment_length >  6) &&
-                (0 == strncasecmp((char*)buf, "TITLE=", 6)) ) {
-                memcpy( &metadata->title, &buf[6],
-                        MIN(MEDIA_TITLE_LENGTH, (comment_length-6)) );
-            } else if( (comment_length >  6) &&
-                       (0 == strncasecmp((char*)buf, "ALBUM=", 6)) )
-            {
-                memcpy( &metadata->album, &buf[6],
-                        MIN(MEDIA_ALBUM_LENGTH, (comment_length-6)) );
-            } else if( (comment_length >  7) &&
-                       (0 == strncasecmp((char*)buf, "ARTIST=", 7)) )
-            {
-                memcpy( &metadata->artist, &buf[7],
-                        MIN(MEDIA_ARTIST_LENGTH, (comment_length-7)) );
-            } else if( (comment_length > 12) &&
-                       (0 == strncasecmp((char*)buf, "TRACKNUMBER=", 12)) )
-            {
-                int32_t i;
-                metadata->track_number = 0;
-                for( i = 12; i < comment_length; i++ ) {
-                    if( ('0' <= buf[i]) && (buf[i] <= '9') ) {
-                        metadata->track_number *= 10;
-                        metadata->track_number += (buf[i] - '0');
-                    } else {
-                        fstream_release_buffer( got );
+                    artist_length = MIN( MEDIA_ARTIST_LENGTH, (comment_length - 7) );
+                    if( false == file__read(file, (uint8_t*) &metadata->artist, artist_length) ) {
+                        return MI_ERROR_DECODE_ERROR;
+                    }
+                } else {
+                    if( false == file__seek_from_current(file, (comment_length - 7)) ) {
                         return MI_ERROR_DECODE_ERROR;
                     }
                 }
+            } else if( 0 == strncasecmp((char*) buffer, "TRACKN", 6) ) {
+                if( false == file__read(file, &buffer[6], 6) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                if( 0 == strncasecmp((char*) buffer, "TRACKNUMBER=", 12) ) {
+                    int32_t i;
+
+                    metadata->track_number = 0;
+                    for( i = 12; i < comment_length; i++ ) {
+                        uint8_t c;
+                        if( false == file__read(file, &c, 1) ) {
+                            return MI_ERROR_DECODE_ERROR;
+                        }
+                        if( ('0' <= c) && (c <= '9') ) {
+                            metadata->track_number *= 10;
+                            metadata->track_number += (c - '0');
+                        } else {
+                            return MI_ERROR_DECODE_ERROR;
+                        }
+                    }
+                } else {
+                    if( false == file__seek_from_current(file, (comment_length - 12)) ) {
+                        return MI_ERROR_DECODE_ERROR;
+                    }
+                }
+            } else {
+                if( false == file__seek_from_current(file, (comment_length - 6)) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
             }
-            buf += comment_length;
         }
-        fstream_release_buffer( got );
-    } else {
-        return metadata_block_ignore( fc, length, metadata );
     }
 
     return MI_RETURN_OK;
@@ -610,4 +708,73 @@ static void __buffer_done( abdac_node_t *node, const bool last )
         __done = true;
     }
     (*__resume)();
+}
+
+/**
+ *  Used to read a uint32_t from a file and advance the file
+ *  pointer.
+ *
+ *  @param file the file to read from
+ *  @param out the uint32_t data to output
+ *
+ *  @return true on success, false otherwise
+ */
+static bool file__read_uint32_t( FIL *file, uint32_t *out )
+{
+    uint8_t buf[4];
+
+    if( true == file__read(file, buf, 4) ) {
+        *out = buf[0];
+        *out |= (buf[1] << 8);
+        *out |= (buf[2] << 16);
+        *out |= (buf[3] << 24);
+
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ *  Used to read bytes from a file and verify that the exact amount of
+ *  data was returned.
+ *
+ *  @param file the file to read from
+ *  @param buf the buffer location to read into
+ *  @param len the number of bytes to read
+ *
+ *  @return true on success, false otherwise
+ */
+static inline bool file__read( FIL *file, uint8_t *buf, uint32_t len )
+{
+    UINT got;
+
+    if( FR_OK == f_read(file, buf, len, &got) ) {
+        if( len == got ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ *  Used to seek from the current location in the file forward.  The
+ *  normal f_lseek() doesn't seek from the current location.
+ *
+ *  @param file the file to read from
+ *  @param len the number of bytes to skip
+ *
+ *  @return true on success, false otherwise
+ */
+static inline bool file__seek_from_current( FIL *file, uint32_t len )
+{
+    DWORD current;
+
+    current = file->fptr;
+    if( FR_OK == f_lseek(file, (len + current)) ) {
+        return true;
+    }
+
+    return false;
 }
