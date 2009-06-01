@@ -11,5 +11,6 @@ LIBRARIES = \
             media-interface \
             media-flac \
             ibus-physical \
+            ibus-radio-protocol \
             display \
             database
