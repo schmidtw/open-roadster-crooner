@@ -29,24 +29,24 @@ void create_simple_database( void )
     sprintf(artist, "A Me");
     sprintf(album, "Brushfire Fairytales");
     sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 1);
+    so_n = add_song_to_group(group, artist, album, song, 1, NULL, NULL, NULL);
     CU_ASSERT( NULL != so_n );
     
     sprintf(artist, "Jack Johnson");
     sprintf(album, "Brushfire Fairytales");
     sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 2);
+    so_n = add_song_to_group(group, artist, album, song, 2, NULL, NULL, NULL);
     CU_ASSERT( NULL != so_n );
     sprintf(song, "Middle Man");
-    so_n = add_song_to_group(group, artist, album, song, 1);
+    so_n = add_song_to_group(group, artist, album, song, 1, NULL, NULL, NULL);
     CU_ASSERT( NULL != so_n );
     
     sprintf(album, "In between dreams");
     sprintf(song, "Better Together");
-    so_n = add_song_to_group(group, artist, album, song, 1);
+    so_n = add_song_to_group(group, artist, album, song, 1, NULL, NULL, NULL);
     CU_ASSERT( NULL != so_n );
     sprintf(song, "Never Know");
-    so_n = add_song_to_group(group, artist, album, song, 2);
+    so_n = add_song_to_group(group, artist, album, song, 2, NULL, NULL, NULL);
     CU_ASSERT( NULL != so_n );
 }
 
