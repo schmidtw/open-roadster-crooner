@@ -196,7 +196,7 @@ group_node_t * find_group_node( const char * dir_name )
     if( NULL != rdn.groups.head ) {
         gn = (group_node_t *)rdn.groups.head->data;
     }
-    while( NULL == gn ) {
+    while( NULL != gn ) {
         if( 0 == strcmp( dir_name, gn->name ) ) {
             break;
         }
