@@ -25,13 +25,15 @@
 ll_node_t * get_new_artist_and_node( const char * name );
 
 artist_node_t * find_or_create_artist( group_node_t * group,
-                                       const char * artist )
+                                       const char * artist,
+                                       bool * created_node )
 {
     artist_node_t * ar_n;
     ll_node_t * node_before_new_node = NULL;
     ll_node_t * node;
-    bool create_node = false;
     int result;
+    
+    *created_node = false;
     
     if(    ( NULL == group )
         || ( NULL == artist ) ) {
@@ -39,12 +41,12 @@ artist_node_t * find_or_create_artist( group_node_t * group,
     }
     
     if(NULL == group->artists.head) {
-        create_node = true;
+        *created_node = true;
     } else {
         node = group->artists.head;
     }
     
-    while( false == create_node ) {
+    while( false == *created_node ) {
         ar_n = (artist_node_t *)node->data;
         result = strcmp(artist, ar_n->name);
         if( 0 == result ) {
@@ -52,14 +54,14 @@ artist_node_t * find_or_create_artist( group_node_t * group,
         } else if ( 0 > result ) {
             /* This is a new artist which is to be created
              */
-            create_node = true;
+            *created_node = true;
         } else {
             node_before_new_node = node;
             /* The artist name we are looking for is after this node,
              * if it exists.
              */
             if( NULL == node->next ) {
-                create_node = true;
+                *created_node = true;
             } else {
                 node = node->next;
             }

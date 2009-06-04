@@ -54,6 +54,10 @@ void group_print( group_node_t * group, int spaces )
 {
     artist_node_t *ar_n;
     
+    if( NULL == group->artists.head ) {
+        printf("%*.*s Why are the artists NULL?\n", spaces, spaces, " ");
+        return;
+    }
     ar_n = (artist_node_t *)group->artists.head->data;
     printf("%*.*s Group: %-*.*s\n",
             spaces, spaces, " ",
@@ -73,6 +77,10 @@ void artist_print( artist_node_t * artist, int spaces )
 {
     album_node_t *al_n;
     
+    if( NULL == artist->albums.head ) {
+        printf("%*.*s Why are the albums NULL?\n", spaces, spaces, " ");
+        return;
+    }
     al_n = (album_node_t *)artist->albums.head->data;
     printf("%*.*s %-*.*s\n",
             spaces, spaces, " ",
@@ -91,7 +99,11 @@ void artist_print( artist_node_t * artist, int spaces )
 void album_print( album_node_t * album, int spaces )
 {
     song_node_t *so_n;
-        
+    
+    if( NULL == album->songs.head ) {
+        printf("%*.*s Why are the songs NULL?\n", spaces, spaces, " ");
+        return;
+    }
     so_n = (song_node_t *)album->songs.head->data;
     
     printf("%*.*s %-*.*s\n",

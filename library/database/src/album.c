@@ -25,12 +25,13 @@
 ll_node_t * get_new_album_and_node( const char * name );
 
 album_node_t * find_or_create_album( artist_node_t * artist,
-                                     const char * album )
+                                     const char * album,
+                                     bool * created_node )
 {
     album_node_t * al_n;
     ll_node_t * node_before_new_node = NULL;
     ll_node_t * node;
-    bool create_node = false;
+    *created_node = false;
     int result;
     
     if(    ( NULL == artist )
@@ -39,12 +40,12 @@ album_node_t * find_or_create_album( artist_node_t * artist,
     }
     
     if(NULL == artist->albums.head) {
-        create_node = true;
+        *created_node = true;
     } else {
         node = artist->albums.head;
     }
     
-    while( false == create_node ) {
+    while( false == *created_node ) {
         al_n = (album_node_t *)node->data;
         result = strcmp(album, al_n->name);
         if( 0 == result ) {
@@ -52,14 +53,14 @@ album_node_t * find_or_create_album( artist_node_t * artist,
         } else if ( 0 > result ) {
             /* This is a new album which is to be created
              */
-            create_node = true;
+            *created_node = true;
         } else {
             node_before_new_node = node;
             /* The album name we are looking for is after this node,
              * if it exists.
              */
             if( NULL == node->next ) {
-                create_node = true;
+                *created_node = true;
             } else {
                 node = node->next;
             }
