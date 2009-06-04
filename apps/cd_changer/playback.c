@@ -52,7 +52,7 @@ static uint8_t __determine_map( void );
 static volatile xSemaphoreHandle __codec_semaphore;
 static volatile xSemaphoreHandle __card_mounted;
 static volatile mc_card_status_t __card_status;
-const char *dir_map[DIR_MAP_SIZE] = { "/1", "/2", "/3", "/4", "/5", "/6" };
+const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
