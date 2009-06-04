@@ -11,7 +11,7 @@ paths   = src unit-tests
 target_deps = $(foreach path,$(paths),$(addprefix $(1)-,$(addsuffix /$(path),$(LIBRARIES))))
 all_deps = $(foreach target,$(targets),$(call target_deps,$(target)))
 
-.DEFAULT : install
+.DEFAULT_GOAL : install
 .PHONY : $(targets) $(all_deps)
 
 install ::

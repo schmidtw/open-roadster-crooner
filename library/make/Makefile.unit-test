@@ -10,7 +10,7 @@ inc_suffix    = __INCLUDES
 cflags_suffix = __CFLAGS
 source_suffix = __SOURCES
 
-.DEFAULT : unit-test
+.DEFAULT_GOAL : unit-test
 .PHONY : unit-test clean cleanall all install
 unit-test :: $(addsuffix _run,$(TESTS))
 clean     :: $(addsuffix _clean,$(TESTS))
