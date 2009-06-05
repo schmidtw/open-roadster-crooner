@@ -121,12 +121,35 @@ void test_previous_song( void )
     database_purge();
 }
 
+void test_random_song( void )
+{
+    song_node_t * so_n = NULL;
+    create_simple_database();
+    printf("\n");
+    CU_ASSERT( DS_FAILURE == next_song(NULL, DT_RANDOM, DL_SONG) );
+    srand(11);
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_SONG) );
+    printf("Random Song: ");
+    print_song_info( so_n );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
+    printf("Random Group: ");
+    print_song_info( so_n );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
+    printf("Random Group: ");
+    print_song_info( so_n );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
+    printf("Random Group: ");
+    print_song_info( so_n );
+    database_purge();
+}
+
 void add_suites( CU_pSuite *suite )
 {
     *suite = CU_add_suite( "Print Test", NULL, NULL );
     CU_add_test( *suite, "Test Simple Print   ", test_simple_test );
     CU_add_test( *suite, "Test Next Song Print", test_next_song );
     CU_add_test( *suite, "Test Prev Song Print", test_previous_song );
+    CU_add_test( *suite, "Test Rand Song Print", test_random_song );
 }
 
 int main( int argc, char *argv[] )

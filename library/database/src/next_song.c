@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include "database.h"
 #include "internal_database.h"
 
@@ -30,19 +31,17 @@ db_status_t next_song( song_node_t ** current_song,
     db_status_t rv = DS_FAILURE;
     
     if(    ( false == rdn.initialized )
-        || ( NULL == current_song ) )
+        || ( NULL == current_song )
+        || ( NULL == rdn.groups.head )
+        || ( NULL == rdn.groups.tail ) )
     {
         return DS_FAILURE;
     }
     
     if( NULL == *current_song ) {
-        if(    ( NULL == rdn.groups.head )
-            || ( NULL == rdn.groups.tail ) )
-        {
-            return DS_FAILURE;
-        }
         switch( operation ) {
             case DT_NEXT:
+            case DT_RANDOM:
                 group = (group_node_t *)rdn.groups.head->data;
                 if( NULL == group->artists.head ) {
                     return DS_FAILURE;
@@ -56,7 +55,11 @@ db_status_t next_song( song_node_t ** current_song,
                     return DS_FAILURE;
                 }
                 *current_song = (song_node_t *)album->songs.head->data;
-                return DS_SUCCESS;
+                if( DT_NEXT == operation ) {
+                    return DS_SUCCESS;
+                }
+                /* else DT_RANDOM */
+                break;
             case DT_PREVIOUS:
                 group = (group_node_t *)rdn.groups.tail->data;
                 if( NULL == group->artists.tail ) {
@@ -72,8 +75,6 @@ db_status_t next_song( song_node_t ** current_song,
                 }
                 *current_song = (song_node_t *)album->songs.tail->data;
                 return DS_SUCCESS;
-            case DT_RANDOM:
-                break;
         }
     }
     
@@ -171,13 +172,59 @@ db_status_t next_song( song_node_t ** current_song,
             }
             break;
         default:
+            rv = DS_SUCCESS;
             /* DT_RANDOM */
             switch( level ) {
+                int random_number;
+                int ii;
                 case DL_GROUP:
+                    random_number = rand() % rdn.size_list;
+                    group = (group_node_t *) rdn.groups.head->data;
+                    for(ii = 0; ii < random_number; ii++) {
+                        if( NULL == group->node.next ) {
+                            return DS_FAILURE;
+                        }
+                        group = (group_node_t *)group->node.next->data;
+                    }
+                    /* Break left out on purpose */
                 case DL_ARTIST:
+                    random_number = rand() % group->size_list;
+                    if( NULL == group->artists.head ) {
+                        return DS_FAILURE;
+                    }
+                    artist = (artist_node_t *) group->artists.head->data;
+                    for(ii = 0; ii < random_number; ii++) {
+                        if( NULL == artist->node.next ) {
+                            return DS_FAILURE;
+                        }
+                        artist = (artist_node_t *) artist->node.next->data;
+                    }
+                    /* Break left out on purpose */
                 case DL_ALBUM:
+                    random_number = rand() % artist->size_list;
+                    if( NULL == artist->albums.head ) {
+                        return DS_FAILURE;
+                    }
+                    album = (album_node_t *)artist->albums.head->data;
+                    for(ii = 0; ii < random_number; ii++) {
+                        if( NULL == album->node.next ) {
+                            return DS_FAILURE;
+                        }
+                        album = (album_node_t *)album->node.next->data;
+                    }
+                    /* Break left out on purpose */
                 default: /* DL_SONG */
-                    ;
+                    random_number = rand() % album->size_list;
+                    if( NULL == album->songs.head ) {
+                        return DS_FAILURE;
+                    }
+                    *current_song = (song_node_t *)album->songs.head->data;
+                    for(ii = 0; ii < random_number; ii++) {
+                        if( NULL == (*current_song)->node.next ) {
+                            return DS_FAILURE;
+                        }
+                        *current_song = (song_node_t *)(*current_song)->node.next->data;
+                    }
             }
     }
     

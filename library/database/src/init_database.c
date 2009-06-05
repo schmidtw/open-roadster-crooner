@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <linked-list/linked-list.h>
 #include "database.h"
 #include "internal_database.h"
@@ -32,6 +33,7 @@ bool init_database( void
     if( false == mi_init() ) {
         return false;
     }
+    srand(12);
     rdn.initialized = true;
     
     return true;
