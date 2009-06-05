@@ -36,18 +36,45 @@ db_status_t next_song( song_node_t ** current_song,
     }
     
     if( NULL == *current_song ) {
-        if( NULL == rdn.groups.head ) {
+        if(    ( NULL == rdn.groups.head )
+            || ( NULL == rdn.groups.tail ) )
+        {
             return DS_FAILURE;
         }
-        /* These can't fail as there is a head group which means there
-         * is a valid song in that group.  Empty groups/artists/albums
-         * are pruned from the database during the population period
-         */
-        group = (group_node_t *)rdn.groups.head->data;
-        artist = (artist_node_t *)group->artists.head->data;
-        album = (album_node_t *)artist->albums.head->data;
-        *current_song = (song_node_t *)album->songs.head->data;
-        return DS_SUCCESS;
+        switch( operation ) {
+            case DT_NEXT:
+                group = (group_node_t *)rdn.groups.head->data;
+                if( NULL == group->artists.head ) {
+                    return DS_FAILURE;
+                }
+                artist = (artist_node_t *)group->artists.head->data;
+                if( NULL == artist->albums.head ) {
+                    return DS_FAILURE;
+                }
+                album = (album_node_t *)artist->albums.head->data;
+                if( NULL == album->songs.head ) {
+                    return DS_FAILURE;
+                }
+                *current_song = (song_node_t *)album->songs.head->data;
+                return DS_SUCCESS;
+            case DT_PREVIOUS:
+                group = (group_node_t *)rdn.groups.tail->data;
+                if( NULL == group->artists.tail ) {
+                    return DS_FAILURE;
+                }
+                artist = (artist_node_t *)group->artists.tail->data;
+                if( NULL == artist->albums.tail ) {
+                    return DS_FAILURE;
+                }
+                album = (album_node_t *)artist->albums.tail->data;
+                if( NULL == album->songs.tail ) {
+                    return DS_FAILURE;
+                }
+                *current_song = (song_node_t *)album->songs.tail->data;
+                return DS_SUCCESS;
+            case DT_RANDOM:
+                break;
+        }
     }
     
     album = (*current_song)->album;
@@ -116,7 +143,7 @@ db_status_t next_song( song_node_t ** current_song,
                         album = (album_node_t *)album->node.prev->data;
                         rv = DS_SUCCESS;
                     }
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    *current_song = (song_node_t *)album->songs.tail->data;
                     break;
                 case DL_ARTIST:
                     if( NULL == artist->node.prev ) {
@@ -126,8 +153,8 @@ db_status_t next_song( song_node_t ** current_song,
                         artist = (artist_node_t *)artist->node.prev->data;
                         rv = DS_SUCCESS;
                     }
-                    album = (album_node_t *)artist->albums.head->data;
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    album = (album_node_t *)artist->albums.tail->data;
+                    *current_song = (song_node_t *)album->songs.tail->data;
                     break;
                 default: /* DL_GROUP */
                     if( NULL == group->node.next ) {
@@ -137,9 +164,9 @@ db_status_t next_song( song_node_t ** current_song,
                         group = (group_node_t *)group->node.prev->data;
                         rv = DS_SUCCESS;
                     }
-                    artist = (artist_node_t *)group->artists.head->data;
-                    album = (album_node_t *)artist->albums.head->data;
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    artist = (artist_node_t *)group->artists.tail->data;
+                    album = (album_node_t *)artist->albums.tail->data;
+                    *current_song = (song_node_t *)album->songs.tail->data;
                     break;
             }
             break;

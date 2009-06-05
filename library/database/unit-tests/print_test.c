@@ -96,6 +96,7 @@ void test_next_song( void )
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_ALBUM) );
     printf("Next Album: ");
     print_song_info( so_n );
+    database_purge();
 }
 
 void test_previous_song( void )
@@ -108,15 +109,16 @@ void test_previous_song( void )
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
     printf("Previous Song: ");
     print_song_info( so_n );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
-    printf("Previous Artist: ");
-    print_song_info( so_n );
-    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
     printf("Previous Song: ");
     print_song_info( so_n );
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
     printf("Previous Album: ");
     print_song_info( so_n );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    printf("Previous Artist: ");
+    print_song_info( so_n );
+    database_purge();
 }
 
 void add_suites( CU_pSuite *suite )
