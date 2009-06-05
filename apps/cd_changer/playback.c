@@ -94,16 +94,7 @@ static void __pb_task( void *params )
                 while( MC_CARD__MOUNTED == __card_status ) {
                     db_status_t rv;
 
-                    rv = next_song( &current_song, DT_NEXT, DL_SONG );
-                    if( DS_END_OF_LIST == rv ) {
-                        rv = next_song( &current_song, DT_NEXT, DL_ALBUM );
-                    }
-                    if( DS_END_OF_LIST == rv ) {
-                        rv = next_song( &current_song, DT_NEXT, DL_ARTIST );
-                    }
-                    if( DS_END_OF_LIST == rv ) {
-                        rv = next_song( &current_song, DT_NEXT, DL_GROUP );
-                    }
+                    rv = next_song( &current_song, DT_RANDOM, DL_GROUP );
                     if( DS_FAILURE == rv ) {
                         break;
                     }
