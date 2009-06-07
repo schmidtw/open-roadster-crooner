@@ -90,6 +90,7 @@ static irp_status_t create_message( const ibus_device_t src,
                                     const size_t payload_length,
                                     uint8_t *out,
                                     const size_t out_length );
+static uint8_t bcd_track_converter( const uint8_t track );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -320,7 +321,7 @@ irp_status_t irp_send_normal_status( const irp_state_t device_state,
 
         payload[4] = discs_present;
         payload[6] = current_disc;
-        payload[7] = current_track;
+        payload[7] = bcd_track_converter( current_track );
     }
 
     create_message( IBUS_DEVICE__CD_CHANGER,
@@ -420,4 +421,21 @@ static irp_status_t create_message( const ibus_device_t src,
     out[i] = checksum;
 
     return IRP_RETURN_OK;
+}
+
+static uint8_t bcd_track_converter( const uint8_t track )
+{
+    uint8_t rv;
+    uint8_t tmp;
+
+    tmp = track;
+    while( 99 < tmp ) {
+        tmp -= 99;
+    }
+
+    rv = tmp / 10;
+    rv <<= 4;
+    rv += (tmp % 10);
+
+    return rv;
 }
