@@ -189,16 +189,12 @@ media_status_t media_flac_play( const char *filename,
 
     free( d );
 
-    printf( "%s:%d\n", __FILE__, __LINE__ );
 error_1:
 
-    printf( "%s:%d\n", __FILE__, __LINE__ );
     fstream_close();
 
-    printf( "%s:%d\n", __FILE__, __LINE__ );
 error_0:
 
-    printf( "%s:%d\n", __FILE__, __LINE__ );
     return rv;
 }
 
@@ -323,11 +319,9 @@ static media_status_t stream__process_file( FLACContext *fc,
 
     status = play_song( fc, decode_0, decode_1, suspend );
 
-    printf( "%s:%d\n", __FILE__, __LINE__ );
     while( false == __done ) {
         (*suspend)();
     }
-    printf( "%s:%d\n", __FILE__, __LINE__ );
 
     return status;
 }
