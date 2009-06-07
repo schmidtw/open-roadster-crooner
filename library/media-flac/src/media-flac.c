@@ -546,6 +546,7 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
     
     memset( metadata, 0, sizeof(media_metadata_t) );
     metadata->track_number = -1;
+    metadata->disc_number = -1;
 
     /* Skip the vendor information */
     {   uint32_t vendor_length;
@@ -607,6 +608,31 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
                     }
                 } else {
                     if( false == file__seek_from_current(file, (comment_length - 7)) ) {
+                        return MI_ERROR_DECODE_ERROR;
+                    }
+                }
+            } else if( 0 == strncasecmp((char*) buffer, "DISCNU", 6) ) {
+                if( false == file__read(file, &buffer[6], 5) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                if( 0 == strncasecmp((char*) buffer, "DISCNUMBER=", 11) ) {
+                    int32_t i;
+
+                    metadata->disc_number = 0;
+                    for( i = 11; i < comment_length; i++ ) {
+                        uint8_t c;
+                        if( false == file__read(file, &c, 1) ) {
+                            return MI_ERROR_DECODE_ERROR;
+                        }
+                        if( ('0' <= c) && (c <= '9') ) {
+                            metadata->disc_number *= 10;
+                            metadata->disc_number += (c - '0');
+                        } else {
+                            return MI_ERROR_DECODE_ERROR;
+                        }
+                    }
+                } else {
+                    if( false == file__seek_from_current(file, (comment_length - 11)) ) {
                         return MI_ERROR_DECODE_ERROR;
                     }
                 }
