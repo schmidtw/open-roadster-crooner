@@ -72,6 +72,7 @@ typedef media_status_t (*file__block_handler_t)( FIL *file,
 static volatile ll_list_t __idle;
 static volatile bool __done;
 static media_resume_fn_t __resume;
+static volatile media_command_t __cmd;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -117,7 +118,12 @@ static inline bool file__seek_from_current( FIL *file, uint32_t len );
 /** See media-interface.h for details. */
 media_status_t media_flac_command( const media_command_t cmd )
 {
-    return MI_ERROR_NOT_SUPPORTED;
+    if( (MI_PLAY == cmd) || (MI_STOP == cmd) ) {
+        __cmd = cmd;
+        return MI_RETURN_OK;
+    } else {
+        return MI_ERROR_NOT_SUPPORTED;
+    }
 }
 
 /** See media-interface.h for details. */
@@ -137,6 +143,7 @@ media_status_t media_flac_play( const char *filename,
         goto error_0;
     }
 
+    __cmd = MI_PLAY;
     __resume = resume;
 
     if( true != fstream_open(filename) ) {
@@ -182,12 +189,16 @@ media_status_t media_flac_play( const char *filename,
 
     free( d );
 
+    printf( "%s:%d\n", __FILE__, __LINE__ );
 error_1:
 
+    printf( "%s:%d\n", __FILE__, __LINE__ );
     fstream_close();
 
+    printf( "%s:%d\n", __FILE__, __LINE__ );
 error_0:
 
+    printf( "%s:%d\n", __FILE__, __LINE__ );
     return rv;
 }
 
@@ -312,9 +323,11 @@ static media_status_t stream__process_file( FLACContext *fc,
 
     status = play_song( fc, decode_0, decode_1, suspend );
 
+    printf( "%s:%d\n", __FILE__, __LINE__ );
     while( false == __done ) {
         (*suspend)();
     }
+    printf( "%s:%d\n", __FILE__, __LINE__ );
 
     return status;
 }
@@ -676,12 +689,24 @@ static media_status_t play_song( FLACContext *fc,
                 return MI_END_OF_SONG;
             }
 
+            if( MI_STOP == __cmd ) {
+                fstream_release_buffer( 0 );
+                abdac_stop();
+                return MI_STOPPED_BY_REQUEST;
+            }
+
             if( 0 != flac_decode_frame(fc, (int32_t *) n->buffer, decode_1, read_buffer, bytes_left) ) {
                 fstream_release_buffer( 0 );
                 memset( (void*) n->buffer, 0, 1000 );
                 n->size = 1000;
                 abdac_queue_data( n, true );
                 return MI_ERROR_DECODE_ERROR;
+            }
+
+            if( MI_STOP == __cmd ) {
+                fstream_release_buffer( 0 );
+                abdac_stop();
+                return MI_STOPPED_BY_REQUEST;
             }
 
             n->size = fc->blocksize * 4;
