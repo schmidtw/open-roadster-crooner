@@ -59,8 +59,8 @@
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
-#define IBUS_PHYSICAL_RX_MSG_MAX    4
-#define IBUS_PHYSICAL_TX_MSG_MAX    4
+#define IBUS_PHYSICAL_RX_MSG_MAX    8
+#define IBUS_PHYSICAL_TX_MSG_MAX    8
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
