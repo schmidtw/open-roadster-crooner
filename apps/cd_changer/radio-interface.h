@@ -7,5 +7,6 @@
 bool ri_init( void );
 void ri_checking_for_discs( void );
 void ri_checking_complete( const uint8_t found_map );
+void ri_song_ended_playing_next( void );
 
 #endif

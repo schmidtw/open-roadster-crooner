@@ -27,6 +27,7 @@
 #include <memcard/memcard.h>
 
 #include "radio-interface.h"
+#include "playback.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -34,6 +35,19 @@
 #define RI_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 1400)
 #define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define RI_POLL_TIMEOUT     (TASK_DELAY_S(15))  /* 15 seconds */
+
+#define _D1(...)
+#define _D2(...)
+
+#if (defined(RI_DEBUG) && (0 < RI_DEBUG))
+#undef  _D1
+#define _D1(...) printf( __VA_ARGS__ )
+#endif
+
+#if (defined(RI_DEBUG) && (1 < RI_DEBUG))
+#undef  _D2
+#define _D2(...) printf( __VA_ARGS__ )
+#endif
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -102,9 +116,9 @@ void ri_checking_complete( const uint8_t found_map )
         disc_present = ((1 << (i - 1)) == (found_map & ((1 << (i - 1)))));
         active_map = (found_map & (0x3f >> (6 - i)));
 
-        printf( "%ld - preset: %s active_map: 0x%02x\n", i,
-                ((true == disc_present) ? "true" : "false"),
-                active_map );
+        _D1( "%ld - preset: %s active_map: 0x%02x\n", i,
+             ((true == disc_present) ? "true" : "false"),
+             active_map );
 
         if( (true == disc_present) && (i < lowest_disc) ) {
             lowest_disc = i;
@@ -129,6 +143,11 @@ void ri_checking_complete( const uint8_t found_map )
     __send_state();
 }
 
+void ri_song_ended_playing_next( void )
+{
+    __state.current_track++;
+}
+
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
@@ -138,10 +157,10 @@ static void __poll_task( void *params )
 
     while( 1 ) {
         if( pdTRUE == xSemaphoreTake(__poll_cmd, RI_POLL_TIMEOUT) ) {
-            printf( "Poll Request\n" );
+            _D2( "Poll Request\n" );
             irp_send_poll_response();
         } else {
-            printf( "ibus timed out\n" );
+            _D2( "ibus timed out\n" );
             irp_send_announce();
         }
     }
@@ -155,10 +174,83 @@ static void __msg_task( void *params )
         irp_rx_msg_t msg;
 
         if( IRP_RETURN_OK == irp_get_message(&msg) ) {
-            if( IRP_CMD__POLL == msg.command ) {
-                xSemaphoreGive( __poll_cmd );
-            } else {
-                printf( "Got a different command. 0x%04x\n", msg.command );
+            switch( msg.command ) {
+                case IRP_CMD__GET_STATUS:
+                case IRP_CMD__SCAN_DISC__ENABLE:
+                case IRP_CMD__SCAN_DISC__DISABLE:
+                case IRP_CMD__RANDOMIZE__ENABLE:
+                case IRP_CMD__RANDOMIZE__DISABLE:
+                    _D2( "MISC Ignored: 0x%04x\n", msg.command );
+                    break;
+
+                case IRP_CMD__STOP:
+                    _D2( "IRP_CMD__STOP\n" );
+                    playback_stop();
+                    __state.device_status = IRP_STATE__STOPPED;
+                    break;
+
+                case IRP_CMD__PAUSE:
+                    _D2( "IRP_CMD__PAUSE\n" );
+                    __state.device_status = IRP_STATE__PAUSED;
+                    break;
+
+                case IRP_CMD__PLAY:
+                    _D2( "IRP_CMD__PLAY\n" );
+                    playback_play();
+                    __state.device_status = IRP_STATE__PLAYING;
+                    break;
+
+                case IRP_CMD__FAST_PLAY__FORWARD:
+                    _D2( "IRP_CMD__FAST_PLAY__FORWARD\n" );
+                    __state.device_status = IRP_STATE__FAST_PLAYING__FORWARD;
+                    break;
+
+                case IRP_CMD__FAST_PLAY__REVERSE:
+                    _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
+                    __state.device_status = IRP_STATE__FAST_PLAYING__REVERSE;
+                    break;
+
+                case IRP_CMD__SEEK__NEXT:
+                    _D2( "IRP_CMD__SEEK__NEXT\n" );
+                    __state.device_status = IRP_STATE__SEEKING__NEXT;
+                    __send_state();
+                    __state.current_track++;
+                    if( 99 < __state.current_track ) {
+                        __state.current_track = 1;
+                    }
+                    playback_song_next();
+                    __state.device_status = IRP_STATE__PLAYING;
+                    break;
+
+                case IRP_CMD__SEEK__PREV:
+                    _D2( "IRP_CMD__SEEK__PREV\n" );
+                    __state.device_status = IRP_STATE__SEEKING__PREV;
+                    __send_state();
+                    playback_song_prev();
+                    __state.current_track--;
+                    if( __state.current_track < 1) {
+                        __state.current_track = 99;
+                    }
+                    __state.device_status = IRP_STATE__PLAYING;
+                    break;
+
+                case IRP_CMD__CHANGE_DISC:
+                    _D2( "IRP_CMD__CHANGE_DISC\n" );
+                    __state.device_status = IRP_STATE__LOADING_DISC;
+                    __send_state();
+                    playback_disc( msg.disc );
+                    __state.current_disc = msg.disc;
+                    __state.current_track = 1;
+                    __state.device_status = IRP_STATE__PLAYING;
+                    break;
+
+                case IRP_CMD__POLL:
+                    _D2( "IRP_CMD__POLL\n" );
+                    xSemaphoreGive( __poll_cmd );
+                    break;
+            }
+
+            if( IRP_CMD__POLL != msg.command ) {
                 __send_state();
             }
         }
@@ -178,15 +270,15 @@ static void __test( const mc_card_status_t status )
 {
     switch( status ) {
         case MC_CARD__INSERTED:
-            printf( "New card status: MC_CARD__INSERTED\n" );
+            _D2( "New card status: MC_CARD__INSERTED\n" );
             break;
         case MC_CARD__MOUNTED:
             __state.magazine_present = true;
             __send_state();
-            printf( "New card status: MC_CARD__MOUNTED\n" );
+            _D2( "New card status: MC_CARD__MOUNTED\n" );
             break;
         case MC_CARD__UNUSABLE:
-            printf( "New card status: MC_CARD__UNUSABLE\n" );
+            _D2( "New card status: MC_CARD__UNUSABLE\n" );
             break;
         case MC_CARD__REMOVED:
             __state.magazine_present = false;
@@ -194,7 +286,7 @@ static void __test( const mc_card_status_t status )
             __state.current_disc = 0;
             __state.current_track = 0;
             __send_state();
-            printf( "New card status: MC_CARD__REMOVED\n" );
+            _D2( "New card status: MC_CARD__REMOVED\n" );
             break;
     }
 }

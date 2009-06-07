@@ -52,7 +52,9 @@ static uint8_t __determine_map( void );
 static volatile xSemaphoreHandle __codec_semaphore;
 static volatile xSemaphoreHandle __card_mounted;
 static volatile mc_card_status_t __card_status;
-const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
+static const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
+static volatile song_node_t *__current_song;
+static volatile media_command_t __playback_mode;
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -61,12 +63,93 @@ void playback_init( void )
 {
     printf( "playback_init()\n" );
 
+    __current_song = NULL;
+    __playback_mode = MI_STOP;
+
     vSemaphoreCreateBinary( __codec_semaphore );
     vSemaphoreCreateBinary( __card_mounted );
     xSemaphoreTake( __card_mounted, 0 );
 
     xTaskCreate( __pb_task, ( signed portCHAR *) "PLYB",
                  PB_TASK_STACK_SIZE, NULL, PB_TASK_PRIORITY, NULL );
+}
+
+void playback_song_next( void )
+{
+    db_status_t rv;
+
+    if( NULL != __current_song ) {
+        __current_song->command_fn( MI_STOP );
+    }
+
+    rv = next_song( &__current_song, DT_NEXT, DL_SONG );
+    if( DS_END_OF_LIST == rv ) {
+        rv = next_song( &__current_song, DT_NEXT, DL_ALBUM );
+    }
+    if( DS_END_OF_LIST == rv ) {
+        rv = next_song( &__current_song, DT_NEXT, DL_ARTIST );
+    }
+
+    __playback_mode = MI_PLAY;
+}
+
+void playback_song_prev( void )
+{
+    db_status_t rv;
+
+    if( NULL != __current_song ) {
+        __current_song->command_fn( MI_STOP );
+    }
+
+    rv = next_song( &__current_song, DT_PREVIOUS, DL_SONG );
+    if( DS_END_OF_LIST == rv ) {
+        rv = next_song( &__current_song, DT_PREVIOUS, DL_ALBUM );
+    }
+    if( DS_END_OF_LIST == rv ) {
+        rv = next_song( &__current_song, DT_PREVIOUS, DL_ARTIST );
+    }
+
+    __playback_mode = MI_PLAY;
+}
+
+void playback_disc( const uint8_t disc )
+{
+    db_status_t rv;
+
+    if( NULL != __current_song ) {
+        __current_song->command_fn( MI_STOP );
+    }
+
+    __current_song = NULL;
+    rv = DS_SUCCESS;
+
+    while( DS_SUCCESS == rv ) {
+        rv = next_song( &__current_song, DT_NEXT, DL_GROUP );
+        if( DS_FAILURE != rv ) {
+            if( 0 == strcasecmp(dir_map[disc - 1],
+                                __current_song->album->artist->group->name) )
+            {
+                rv = DS_END_OF_LIST;
+            }
+        }
+    }
+}
+
+void playback_stop( void )
+{
+    if( NULL != __current_song ) {
+        __current_song->command_fn( MI_STOP );
+    }
+    __playback_mode = MI_STOP;
+}
+
+void playback_play( void )
+{
+    if( NULL != __current_song ) {
+        __current_song->command_fn( MI_PLAY );
+    }
+
+    __playback_mode = MI_PLAY;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -86,22 +169,43 @@ static void __pb_task( void *params )
             printf( "mounted fs.\n" );
             ri_checking_for_discs();
             if( true == populate_database(dir_map, DIR_MAP_SIZE, "/") ) {
-                song_node_t *current_song;
+                media_status_t ms;
 
                 ri_checking_complete( __determine_map() );
 
-                current_song = NULL;
+                __current_song = NULL;
+                ms = MI_STOPPED_BY_REQUEST;
+                next_song( &__current_song, DT_NEXT, DL_SONG );
                 while( MC_CARD__MOUNTED == __card_status ) {
-                    db_status_t rv;
+                    media_play_fn_t play_fn;
 
-                    rv = next_song( &current_song, DT_RANDOM, DL_GROUP );
-                    if( DS_FAILURE == rv ) {
-                        break;
+                    while( MI_PLAY != __playback_mode ) {
+                        vTaskDelay( TASK_DELAY_MS(10) );
                     }
-                    current_song->play_fn( current_song->file_location,
-                                           __codec_suspend, __codec_resume );
+
+                    play_fn = __current_song->play_fn;
+                    ms = (*play_fn)( __current_song->file_location,
+                                  __codec_suspend, __codec_resume );
+
+                    if( MI_STOPPED_BY_REQUEST != ms ) {
+                        db_status_t rv;
+
+                        ri_song_ended_playing_next();
+
+                        rv = next_song( &__current_song, DT_NEXT, DL_SONG );
+                        if( DS_END_OF_LIST == rv ) {
+                            rv = next_song( &__current_song, DT_NEXT, DL_ALBUM );
+                        }
+                        if( DS_END_OF_LIST == rv ) {
+                            rv = next_song( &__current_song, DT_NEXT, DL_ARTIST );
+                        }
+                        if( DS_FAILURE == rv ) {
+                            break;
+                        }
+                    }
                 }
 
+                __current_song = NULL;
                 database_purge();
             } else {
                 ri_checking_complete( 0x00 );
