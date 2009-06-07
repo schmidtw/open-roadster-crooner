@@ -281,6 +281,9 @@ bsp_status_t abdac_stop( void )
 
     /* Disable 'abdac' pdca channel */
     abdac->cr = AVR32_PDCA_CR_TDIS_MASK;
+    /* Clear out any pending buffers so we don't get
+     * audio blips when we re-enable the audio. */
+    pdca_disable( PDCA_CHANNEL_ID_DAC );
 
     isrs_enabled = interrupts_save_and_disable();
     while( NULL != (node = ll_remove_head(&__play_list)) ) {
