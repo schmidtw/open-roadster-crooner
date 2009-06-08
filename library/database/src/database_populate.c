@@ -35,7 +35,11 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name );
 bool get_last_dir_name( char * dest, char * src );
 void append_to_path( char * dest, const char * src );
 bool iterate_to_dir_entry( const char * dir_name );
+bool put_songs_into_groups( const char * RootDirectory );
+bool normalize_artists_in_unknown_group_to_unused_groups( void );
 ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data );
+ll_ir_t count_unused_nodes( ll_node_t *node, volatile void *user_data );
+ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data );
 
 /**
  * The structure of the pools are:
@@ -100,62 +104,10 @@ bool populate_database( const char ** directory,
         goto failure;
     }
     rdn.size_list++;
+    if(    ( false == put_songs_into_groups(RootDirectory) )
+        || ( false == normalize_artists_in_unknown_group_to_unused_groups() ) )
     {
-        char base_dir[MAX_SHORT_FILENAME_PATH_W_NULL];
-        file_info_t file_info;
-        size_t num_chars_base_dir;
-        
-        strcpy( base_dir, RootDirectory );
-        num_chars_base_dir = strlen( base_dir );
-        if( FRV_RETURN_GOOD != open_directory( base_dir ) ) {
-            goto failure;
-        }
-        
-        while( FRV_RETURN_GOOD == get_next_element_in_directory( &file_info ) ) {
-            /* append the file/dir name to the base dir.  This absolute path
-             * is critical in opening this file/dir for metadata or searching
-             * for more files.
-             */
-            append_to_path( base_dir, file_info.short_filename );
-            if( true == file_info.is_dir ) {
-                bool rv;
-                /* this is a directory, search for the group.  Once we have
-                 * the group, call a subroutine which will place all files
-                 * in this directory into the correct group.
-                 */
-                rv = place_songs_into_group(
-                        find_group_node(file_info.short_filename),
-                        base_dir );
-                if( false == rv ) {
-                    goto failure;
-                }
-                /* Reopen the root directory */
-                base_dir[num_chars_base_dir] = '\0';
-                if(    ( FRV_RETURN_GOOD != open_directory( base_dir ) )
-                    || ( false == iterate_to_dir_entry( file_info.short_filename ) ) ) {
-                    goto failure;
-                }
-            } else { /* This is a file */
-                media_status_t rv;
-                media_metadata_t metadata;
-                media_command_fn_t command_fn;
-                media_play_fn_t play_fn;
-                /* Place this file into the miscellaneous group */
-                rv = mi_get_information( base_dir, &metadata,
-                        &command_fn, &play_fn );
-                if( MI_RETURN_OK == rv ) {
-                    add_song_to_group( (group_node_t *)rdn.groups.tail->data,
-                            (char *)metadata.artist, (char *)metadata.album,
-                            (char *)metadata.title, metadata.track_number,
-                            command_fn, play_fn, base_dir );
-                }
-                /* After sending the fully qualified path into add the song
-                 * to the group, move the end of the string back to the
-                 * proper location
-                 */
-                base_dir[num_chars_base_dir] = '\0';
-            }
-        }
+        goto failure;
     }
     ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_group, NULL);
     database_print();
@@ -165,12 +117,149 @@ failure:
     return false;
 }
 
+bool normalize_artists_in_unknown_group_to_unused_groups( void )
+{
+    group_node_t * unknown_group;
+    uint8_t number_of_empty_groups = 0;
+    
+    if( NULL == rdn.groups.tail ) {
+        return false;
+    }
+    unknown_group = (group_node_t *)rdn.groups.tail->data;
+    if( NULL == unknown_group ) {
+        return false;
+    }
+    ll_iterate(&rdn.groups, count_unused_nodes, NULL, &number_of_empty_groups );
+    ll_iterate(&rdn.groups, distribute_unknown_group, NULL, &number_of_empty_groups );
+    return true;
+}
+
+ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data )
+{
+    group_node_t * gn = (group_node_t *)node->data;
+    group_node_t * unknown_node;
+    artist_node_t * artist_node;
+    uint8_t * count = (uint8_t *)user_data;
+    
+    if( NULL == rdn.groups.tail ) {
+        return LL_IR__STOP;
+    }
+    unknown_node = (group_node_t *)rdn.groups.tail->data;
+    if(    ( NULL == unknown_node )
+        || ( 0 == *count ) )
+    {
+        return LL_IR__STOP;
+    }
+    if( 0 == gn->size_list ) {
+        int ii;
+        for( ii = (unknown_node->size_list / (*count)) + (unknown_node->size_list % (*count)>0?1:0); ii > 0 ; ii-- ) {
+            if( NULL == unknown_node->artists.head ) {
+                return LL_IR__STOP;
+            }
+            artist_node = (artist_node_t *)unknown_node->artists.head->data;
+            ll_remove( &unknown_node->artists, &artist_node->node );
+            unknown_node->size_list--;
+            ll_append( &gn->artists, &artist_node->node );
+            gn->size_list++;
+            artist_node->group = gn;
+        }
+        *count = *count - 1;
+    }
+    return LL_IR__CONTINUE;
+}
+
+ll_ir_t count_unused_nodes( ll_node_t *node, volatile void *user_data )
+{
+    group_node_t * gn = (group_node_t *)node->data;
+    group_node_t * unknown_node;
+    uint8_t * count = (uint8_t *)user_data;
+    
+    if( NULL == rdn.groups.tail ) {
+        return LL_IR__STOP;
+    }
+    unknown_node = (group_node_t *)rdn.groups.tail->data;
+    if( NULL == unknown_node ) {
+        return LL_IR__STOP;
+    }
+    if( gn == unknown_node ) {
+        return LL_IR__STOP;
+    }
+    if( 0 == gn->size_list ) {
+        *count = *count + 1;
+    }
+    return LL_IR__CONTINUE;
+}
+
+bool put_songs_into_groups( const char * RootDirectory )
+{
+    char base_dir[MAX_SHORT_FILENAME_PATH_W_NULL];
+    file_info_t file_info;
+    size_t num_chars_base_dir;
+    
+    if( NULL == RootDirectory ) {
+        return false;
+    }
+    
+    strcpy( base_dir, RootDirectory );
+    num_chars_base_dir = strlen( base_dir );
+    if( FRV_RETURN_GOOD != open_directory( base_dir ) ) {
+        return false;
+    }
+    
+    while( FRV_RETURN_GOOD == get_next_element_in_directory( &file_info ) ) {
+        /* append the file/dir name to the base dir.  This absolute path
+         * is critical in opening this file/dir for metadata or searching
+         * for more files.
+         */
+        append_to_path( base_dir, file_info.short_filename );
+        if( true == file_info.is_dir ) {
+            bool rv;
+            /* this is a directory, search for the group.  Once we have
+             * the group, call a subroutine which will place all files
+             * in this directory into the correct group.
+             */
+            rv = place_songs_into_group(
+                    find_group_node(file_info.short_filename),
+                    base_dir );
+            if( false == rv ) {
+                return false;
+            }
+            /* Reopen the root directory */
+            base_dir[num_chars_base_dir] = '\0';
+            if(    ( FRV_RETURN_GOOD != open_directory( base_dir ) )
+                || ( false == iterate_to_dir_entry( file_info.short_filename ) ) ) {
+                return false;
+            }
+        } else { /* This is a file */
+            media_status_t rv;
+            media_metadata_t metadata;
+            media_command_fn_t command_fn;
+            media_play_fn_t play_fn;
+            /* Place this file into the miscellaneous group */
+            rv = mi_get_information( base_dir, &metadata,
+                    &command_fn, &play_fn );
+            if( MI_RETURN_OK == rv ) {
+                add_song_to_group( (group_node_t *)rdn.groups.tail->data,
+                        (char *)metadata.artist, (char *)metadata.album,
+                        (char *)metadata.title, metadata.track_number,
+                        command_fn, play_fn, base_dir );
+            }
+            /* After sending the fully qualified path into add the song
+             * to the group, move the end of the string back to the
+             * proper location
+             */
+            base_dir[num_chars_base_dir] = '\0';
+        }
+    }
+    return true;
+}
+
 ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data )
 {
     group_node_t *gn;
     
     gn = (group_node_t *)node->data;
-    if( NULL == gn->artists.head  ) {
+    if( 0 == gn->size_list  ) {
         return LL_IR__DELETE_AND_CONTINUE;
     }
     return LL_IR__CONTINUE;
