@@ -152,7 +152,13 @@ ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data )
     }
     if( 0 == gn->size_list ) {
         int ii;
-        for( ii = (unknown_node->size_list / (*count)) + (unknown_node->size_list % (*count)>0?1:0); ii > 0 ; ii-- ) {
+        if( (*count) > gn->size_list ) {
+            ii = 1;
+        } else {
+            ii = unknown_node->size_list / (*count);
+            ii += (unknown_node->size_list % (*count)>0?1:0);
+        }
+        for( ; ii > 0 ; ii-- ) {
             if( NULL == unknown_node->artists.head ) {
                 return LL_IR__STOP;
             }
