@@ -203,12 +203,19 @@ static void __msg_task( void *params )
 
                 case IRP_CMD__FAST_PLAY__FORWARD:
                     _D2( "IRP_CMD__FAST_PLAY__FORWARD\n" );
-                    __state.device_status = IRP_STATE__FAST_PLAYING__FORWARD;
+
+                    if( IRP_STATE__FAST_PLAYING__FORWARD != __state.device_status ) {
+                        __state.device_status = IRP_STATE__FAST_PLAYING__FORWARD;
+                        playback_album_next();
+                    }
                     break;
 
                 case IRP_CMD__FAST_PLAY__REVERSE:
                     _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
-                    __state.device_status = IRP_STATE__FAST_PLAYING__REVERSE;
+                    if( IRP_STATE__FAST_PLAYING__REVERSE != __state.device_status ) {
+                        __state.device_status = IRP_STATE__FAST_PLAYING__REVERSE;
+                        playback_album_prev();
+                    }
                     break;
 
                 case IRP_CMD__SEEK__NEXT:

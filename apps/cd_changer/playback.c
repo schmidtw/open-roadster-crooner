@@ -74,6 +74,38 @@ void playback_init( void )
                  PB_TASK_STACK_SIZE, NULL, PB_TASK_PRIORITY, NULL );
 }
 
+void playback_album_next( void )
+{
+    db_status_t rv;
+
+    if( NULL != __current_song ) {
+        __current_song->command_fn( MI_STOP );
+    }
+
+    rv = next_song( &__current_song, DT_NEXT, DL_ALBUM );
+    if( DS_END_OF_LIST == rv ) {
+        rv = next_song( &__current_song, DT_NEXT, DL_ARTIST );
+    }
+
+    __playback_mode = MI_PLAY;
+}
+
+void playback_album_prev( void )
+{
+    db_status_t rv;
+
+    if( NULL != __current_song ) {
+        __current_song->command_fn( MI_STOP );
+    }
+
+    rv = next_song( &__current_song, DT_PREVIOUS, DL_ALBUM );
+    if( DS_END_OF_LIST == rv ) {
+        rv = next_song( &__current_song, DT_PREVIOUS, DL_ARTIST );
+    }
+
+    __playback_mode = MI_PLAY;
+}
+
 void playback_song_next( void )
 {
     db_status_t rv;
