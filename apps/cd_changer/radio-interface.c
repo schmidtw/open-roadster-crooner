@@ -146,6 +146,7 @@ void ri_checking_complete( const uint8_t found_map )
 void ri_song_ended_playing_next( void )
 {
     __state.current_track++;
+    __send_state();
 }
 
 /*----------------------------------------------------------------------------*/
