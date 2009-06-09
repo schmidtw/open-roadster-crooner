@@ -25,6 +25,7 @@
 #include <freertos/semphr.h>
 
 #include <memcard/memcard.h>
+#include <bsp/led.h>
 
 #include "radio-interface.h"
 #include "playback.h"
@@ -72,7 +73,7 @@ static ri_state_t __state;
 static void __poll_task( void *params );
 static void __msg_task( void *params );
 static void __send_state( void );
-static void __test( const mc_card_status_t status );
+static void __card_status( const mc_card_status_t status );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -169,7 +170,13 @@ static void __poll_task( void *params )
 
 static void __msg_task( void *params )
 {
-    mc_register( &__test );
+    led_init();
+
+    led_off( led_all );
+    led_on( led_red );
+    led_on( led_blue );
+
+    mc_register( &__card_status );
 
     while( 1 ) {
         irp_rx_msg_t msg;
@@ -274,19 +281,25 @@ static void __send_state( void )
                             __state.current_track );
 }
 
-static void __test( const mc_card_status_t status )
+static void __card_status( const mc_card_status_t status )
 {
     switch( status ) {
         case MC_CARD__INSERTED:
             _D2( "New card status: MC_CARD__INSERTED\n" );
+            led_off( led_all );
+            led_on( led_blue );
             break;
         case MC_CARD__MOUNTED:
             __state.magazine_present = true;
             __send_state();
             _D2( "New card status: MC_CARD__MOUNTED\n" );
+            led_off( led_all );
+            led_on( led_green );
             break;
         case MC_CARD__UNUSABLE:
             _D2( "New card status: MC_CARD__UNUSABLE\n" );
+            led_off( led_all );
+            led_on( led_red );
             break;
         case MC_CARD__REMOVED:
             __state.magazine_present = false;
@@ -294,7 +307,14 @@ static void __test( const mc_card_status_t status )
             __state.current_disc = 0;
             __state.current_track = 0;
             __send_state();
+            /* This is a temporary solution - we still get the:
+             * "da-da-da-da-da-da" sound sometimes when the disc
+             * is just removed. */
+            playback_stop();
             _D2( "New card status: MC_CARD__REMOVED\n" );
+            led_off( led_all );
+            led_on( led_red );
+            led_on( led_blue );
             break;
     }
 }
