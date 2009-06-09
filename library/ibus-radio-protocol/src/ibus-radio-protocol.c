@@ -53,7 +53,8 @@ typedef enum {
     IRP_RX_CMD__SEEK            = 0x05,
     IRP_RX_CMD__CHANGE_DISC     = 0x06,
     IRP_RX_CMD__SCAN_DISC       = 0x07,
-    IRP_RX_CMD__RANDOMIZE       = 0x08
+    IRP_RX_CMD__RANDOMIZE       = 0x08,
+    IRP_RX_CMD__ALT_SEEK        = 0x0a
 } irp_rx_command_t;
 
 typedef enum {
@@ -170,6 +171,7 @@ irp_status_t irp_get_message( irp_rx_msg_t *msg )
                                     }
                                     break;
                                 case IRP_RX_CMD__SEEK:
+                                case IRP_RX_CMD__ALT_SEEK:
                                     if( 0 == payload[2] ) {
                                         msg->command = IRP_CMD__SEEK__NEXT;
                                         done = true;
