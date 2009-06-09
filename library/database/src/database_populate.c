@@ -245,9 +245,14 @@ bool put_songs_into_groups( const char * RootDirectory )
             rv = mi_get_information( base_dir, &metadata,
                     &command_fn, &play_fn );
             if( MI_RETURN_OK == rv ) {
+                uint16_t adjusted_track_number;
+                adjusted_track_number = metadata.track_number;
+                if( 0 < metadata.disc_number ) {
+                    adjusted_track_number += 1000 * (metadata.disc_number - 1);
+                }
                 add_song_to_group( (group_node_t *)rdn.groups.tail->data,
                         (char *)metadata.artist, (char *)metadata.album,
-                        (char *)metadata.title, metadata.track_number,
+                        (char *)metadata.title, adjusted_track_number,
                         command_fn, play_fn, base_dir );
             }
             /* After sending the fully qualified path into add the song
@@ -371,8 +376,13 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
                 rv = mi_get_information( full_path, &metadata,
                         &command_fn, &play_fn );
                 if( MI_RETURN_OK == rv ) {
+                    uint16_t adjusted_track_number;
+                    adjusted_track_number = metadata.track_number;
+                    if( 0 < metadata.disc_number ) {
+                        adjusted_track_number += 1000 * (metadata.disc_number - 1);
+                    }
                     add_song_to_group( gn, (char *)metadata.artist, (char *)metadata.album,
-                            (char *)metadata.title, metadata.track_number,
+                            (char *)metadata.title, adjusted_track_number,
                             command_fn, play_fn, full_path );
                 }
                 if( false == get_last_dir_name( junk_filename, full_path ) ) {

@@ -26,7 +26,7 @@
 #define MAX_DISPLAY_ARTIST_LEN  20
 #define MAX_DISPLAY_ALBUM_LEN   20
 #define MAX_DISPLAY_SONG_LEN    30
-#define MAX_TRACK_DIGITS        3
+#define MAX_TRACK_DIGITS        5
 #define MAX_FILE_NAME           35
 
 

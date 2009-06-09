@@ -50,7 +50,7 @@ typedef struct {
     ll_node_t node;
     char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
     album_node_t * album;
-    uint8_t track_number;
+    uint16_t track_number;
     media_command_fn_t command_fn;
     media_play_fn_t play_fn;
 } song_node_t;

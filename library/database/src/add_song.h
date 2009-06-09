@@ -29,7 +29,7 @@
  */
 song_node_t * add_song_to_group( group_node_t * group,
         const char * artist, const char * album,
-        const char * song, const uint8_t track_number,
+        const char * song, const uint16_t track_number,
         media_command_fn_t command_fn,
         media_play_fn_t play_fn,
         const char * file_location );

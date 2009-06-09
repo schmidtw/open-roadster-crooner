@@ -22,13 +22,13 @@
 #include "w_malloc.h"
 
 ll_node_t * get_new_song_and_node(
-        const char * name, const uint8_t track_number,
+        const char * name, const uint16_t track_number,
         media_command_fn_t command_fn, media_play_fn_t play_fn,
         const char * file_location );
 
 song_node_t * find_or_create_song( album_node_t * album,
                                    const char * song,
-                                   const uint8_t track_number,
+                                   const uint16_t track_number,
                                    media_command_fn_t command_fn,
                                    media_play_fn_t play_fn,
                                    const char * file_location )
@@ -100,7 +100,7 @@ song_node_t * find_or_create_song( album_node_t * album,
 }
 
 ll_node_t * get_new_song_and_node( const char * name,
-        const uint8_t track_number, media_command_fn_t command_fn,
+        const uint16_t track_number, media_command_fn_t command_fn,
         media_play_fn_t play_fn, const char * file_location )
 {
     song_node_t * sn;
