@@ -253,6 +253,8 @@ bool put_songs_into_groups( const char * RootDirectory )
                 add_song_to_group( (group_node_t *)rdn.groups.tail->data,
                         (char *)metadata.artist, (char *)metadata.album,
                         (char *)metadata.title, adjusted_track_number,
+                        metadata.track_gain, metadata.track_peak,
+                        metadata.album_gain, metadata.album_peak,
                         command_fn, play_fn, base_dir );
             }
             /* After sending the fully qualified path into add the song
@@ -383,6 +385,8 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
                     }
                     add_song_to_group( gn, (char *)metadata.artist, (char *)metadata.album,
                             (char *)metadata.title, adjusted_track_number,
+                            metadata.track_gain, metadata.track_peak,
+                            metadata.album_gain, metadata.album_peak,
                             command_fn, play_fn, full_path );
                 }
                 if( false == get_last_dir_name( junk_filename, full_path ) ) {

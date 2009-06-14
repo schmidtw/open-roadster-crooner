@@ -8,7 +8,7 @@
 #include <linked-list/linked-list.h>
 #include <media-interface/media-interface.h>
 
-#define MAX_GROUP_NAME           260
+#define MAX_GROUP_NAME           24
 #define MAX_GROUP_NAME_W_NULL    (MAX_GROUP_NAME + 1)
 #define MAX_ARTIST_NAME          127
 #define MAX_ARTIST_NAME_W_NULL   (MAX_ALBUM_TITLE + 1)
@@ -51,6 +51,10 @@ typedef struct {
     char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
     album_node_t * album;
     uint16_t track_number;
+    double album_gain;
+    double album_peak;
+    double track_gain;
+    double track_peak;
     media_command_fn_t command_fn;
     media_play_fn_t play_fn;
 } song_node_t;

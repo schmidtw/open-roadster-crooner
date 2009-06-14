@@ -21,8 +21,8 @@
 #include "internal_database.h"
 #include "database_print.h"
 
-#define DISPLAY_OFFSET          5
-#define MAX_DISPLAY_GROUP_LEN   20
+#define DISPLAY_OFFSET          2
+#define MAX_DISPLAY_GROUP_LEN   12
 #define MAX_DISPLAY_ARTIST_LEN  20
 #define MAX_DISPLAY_ALBUM_LEN   20
 #define MAX_DISPLAY_SONG_LEN    30
@@ -42,7 +42,6 @@ void database_print( void )
             if( NULL != gn->node.next ) {
                 gn = (group_node_t *)gn->node.next->data;
                 printf("------------------------------\n");
-                fflush(stdout);
             } else {
                 break;
             }
@@ -57,10 +56,8 @@ void group_print( group_node_t * group, int spaces )
     printf("%*.*s Group: %-*.*s\n",
             spaces, spaces, " ",
             MAX_DISPLAY_GROUP_LEN, MAX_DISPLAY_GROUP_LEN, group->name );
-    fflush(stdout);
     if( NULL == group->artists.head ) {
         printf("%*.*s Why are the artists NULL?\n", spaces, spaces, " ");
-        fflush(stdout);
         return;
     }
     ar_n = (artist_node_t *)group->artists.head->data;
@@ -81,10 +78,8 @@ void artist_print( artist_node_t * artist, int spaces )
     printf("%*.*s %-*.*s\n",
             spaces, spaces, " ",
             MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name );
-    fflush(stdout);
     if( NULL == artist->albums.head ) {
         printf("%*.*s Why are the albums NULL?\n", spaces, spaces, " ");
-        fflush(stdout);
         return;
     }
     al_n = (album_node_t *)artist->albums.head->data;
@@ -107,7 +102,6 @@ void album_print( album_node_t * album, int spaces )
             MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name );
     if( NULL == album->songs.head ) {
         printf("%*.*s Why are the songs NULL?\n", spaces, spaces, " ");
-        fflush(stdout);
         return;
     }
     so_n = (song_node_t *)album->songs.head->data;
@@ -123,10 +117,11 @@ void album_print( album_node_t * album, int spaces )
 
 void song_print( song_node_t * song, int spaces )
 {
-    printf("%*.*s %*.*d.) %-*.*s  -- %*.*s\n",
+    printf("%*.*s %*.*d.) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
             spaces, spaces, " ",
             MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, song->track_number,
             MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->title,
+            song->album_gain, song->album_peak,
+            song->track_gain, song->track_peak,
             MAX_FILE_NAME, MAX_FILE_NAME, song->file_location );
-    fflush(stdout);
 }

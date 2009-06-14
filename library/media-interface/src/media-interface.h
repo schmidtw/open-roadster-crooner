@@ -49,6 +49,12 @@ typedef struct {
     uint8_t title[MEDIA_TITLE_LENGTH + 1];
     uint8_t album[MEDIA_ALBUM_LENGTH + 1];
     uint8_t artist[MEDIA_ARTIST_LENGTH + 1];
+
+    double reference_loudness;
+    double track_gain;
+    double track_peak;
+    double album_gain;
+    double album_peak;
 } media_metadata_t;
 
 typedef void media_interface_t;

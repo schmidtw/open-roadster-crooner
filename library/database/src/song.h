@@ -12,6 +12,10 @@
  *        or added to
  * @param song NULL terminated string of the song name
  * @param track_number this tracks number
+ * @param album_gain the gain to use during album mode gain adjusting
+ * @param album_peak the peak to use during album mode gain adjusting
+ * @param track_gain the gain to use during track mode gain adjusting
+ * @param track_peak the peak to use during track mode gain adjusting
  * @param command_fn function which is to be used when issuing commands
  *        (Play/Pause/etc) for this song
  * @param play_fn function which is to be used when initially playing this song
@@ -23,6 +27,8 @@
  */
 song_node_t * find_or_create_song( album_node_t * group,
         const char * song, const uint16_t track_number,
+        const double album_gain, const double album_peak,
+        const double track_gain, const double track_peak,
         media_command_fn_t command_fn, media_play_fn_t play_fn,
         const char * file_location );
 

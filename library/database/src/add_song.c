@@ -10,6 +10,8 @@ ll_ir_t scrubber(ll_node_t *node, volatile void *user_data);
 song_node_t * add_song_to_group( group_node_t * group,
         const char * artist, const char * album,
         const char * song, const uint16_t track_number,
+        const double track_gain, const double track_peak,
+        const double album_gain, const double album_peak,
         media_command_fn_t command_fn,
         media_play_fn_t play_fn,
         const char * file_location )
@@ -28,7 +30,9 @@ song_node_t * add_song_to_group( group_node_t * group,
         if( NULL == al_n ) {
             goto failure;
         } else {
-            so_n = find_or_create_song( al_n, song, track_number, command_fn, play_fn, file_location );
+            so_n = find_or_create_song( al_n, song, track_number, album_gain, album_peak,
+                                        track_gain, track_peak, command_fn, play_fn,
+                                        file_location );
             if( NULL == so_n ) {
                 goto failure;
             }

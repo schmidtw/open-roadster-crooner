@@ -60,6 +60,20 @@ typedef enum {
     FLAC__SIZE           = 8
 } flac_block_type_t;
 
+typedef enum {
+    FM__ALBUM,
+    FM__ARTIST,
+    FM__DISCNUMBER,
+    FM__TITLE,
+    FM__TRACKNUMBER,
+    FM__REPLAYGAIN_ALBUM_PEAK,
+    FM__REPLAYGAIN_ALBUM_GAIN,
+    FM__REPLAYGAIN_TRACK_PEAK,
+    FM__REPLAYGAIN_TRACK_GAIN,
+    FM__REPLAYGAIN_REFERENCE_LOUDNESS,
+    FM__UNKNOWN
+} flac_metadata_t;
+
 typedef media_status_t (*stream__block_handler_t)( FLACContext *fc,
                                                    const uint32_t length );
 typedef media_status_t (*file__block_handler_t)( FIL *file,
@@ -110,6 +124,11 @@ static media_status_t file__metadata_block_ignore( FIL *file,
 static bool file__read_uint32_t( FIL *file, uint32_t *out );
 static inline bool file__read( FIL *file, uint8_t *buf, uint32_t len );
 static inline bool file__seek_from_current( FIL *file, uint32_t len );
+static inline bool file__read_char( FIL *file, char *c );
+static flac_metadata_t flac_get_key_value( FIL *file,
+                                           uint32_t *len );
+static bool flac_get_int32_t( FIL *file, uint32_t *len, int32_t *out );
+static bool flac_get_double( FIL *file, uint32_t *len, double *out );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -547,6 +566,10 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
     memset( metadata, 0, sizeof(media_metadata_t) );
     metadata->track_number = -1;
     metadata->disc_number = -1;
+    metadata->track_gain = 0.0;
+    metadata->track_peak = 0.0;
+    metadata->album_gain = 0.0;
+    metadata->album_peak = 0.0;
 
     /* Skip the vendor information */
     {   uint32_t vendor_length;
@@ -564,6 +587,7 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
 
     while( 0 < list_size ) {
         uint32_t comment_length;
+        flac_metadata_t type;
 
         list_size--;
 
@@ -571,101 +595,86 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
             return MI_ERROR_DECODE_ERROR;
         }
 
-        if( comment_length < 6 ) {
-            if( false == file__seek_from_current(file, comment_length) ) {
-                return MI_ERROR_DECODE_ERROR;
-            }
-        } else {
-            uint8_t buffer[12];
-            if( false == file__read(file, buffer, 6) ) {
-                return MI_ERROR_DECODE_ERROR;
-            }
-
-            if( 0 == strncasecmp((char*) buffer, "TITLE=", 6) ) {
-                uint32_t title_length;
-
-                title_length = MIN( MEDIA_TITLE_LENGTH, (comment_length - 6) );
-                if( false == file__read(file, (uint8_t*) &metadata->title, title_length) ) {
-                    return MI_ERROR_DECODE_ERROR;
-                }
-            } else if( 0 == strncasecmp((char*) buffer, "ALBUM=", 6) ) {
+        type = flac_get_key_value( file, &comment_length );
+        switch( type ) {
+            case FM__ALBUM:
+            {
                 uint32_t album_length;
 
-                album_length = MIN( MEDIA_ALBUM_LENGTH, (comment_length - 6) );
+                album_length = MIN( MEDIA_ALBUM_LENGTH, comment_length );
                 if( false == file__read(file, (uint8_t*) &metadata->album, album_length) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
-            } else if( 0 == strncasecmp((char*) buffer, "ARTIST", 6) ) {
-                if( false == file__read(file, &buffer[6], 1) ) {
-                    return MI_ERROR_DECODE_ERROR;
-                }
-                if( 0 == strncasecmp((char*) buffer, "ARTIST=", 7) ) {
-                    uint32_t artist_length;
-
-                    artist_length = MIN( MEDIA_ARTIST_LENGTH, (comment_length - 7) );
-                    if( false == file__read(file, (uint8_t*) &metadata->artist, artist_length) ) {
-                        return MI_ERROR_DECODE_ERROR;
-                    }
-                } else {
-                    if( false == file__seek_from_current(file, (comment_length - 7)) ) {
-                        return MI_ERROR_DECODE_ERROR;
-                    }
-                }
-            } else if( 0 == strncasecmp((char*) buffer, "DISCNU", 6) ) {
-                if( false == file__read(file, &buffer[6], 5) ) {
-                    return MI_ERROR_DECODE_ERROR;
-                }
-                if( 0 == strncasecmp((char*) buffer, "DISCNUMBER=", 11) ) {
-                    int32_t i;
-
-                    metadata->disc_number = 0;
-                    for( i = 11; i < comment_length; i++ ) {
-                        uint8_t c;
-                        if( false == file__read(file, &c, 1) ) {
-                            return MI_ERROR_DECODE_ERROR;
-                        }
-                        if( ('0' <= c) && (c <= '9') ) {
-                            metadata->disc_number *= 10;
-                            metadata->disc_number += (c - '0');
-                        } else {
-                            return MI_ERROR_DECODE_ERROR;
-                        }
-                    }
-                } else {
-                    if( false == file__seek_from_current(file, (comment_length - 11)) ) {
-                        return MI_ERROR_DECODE_ERROR;
-                    }
-                }
-            } else if( 0 == strncasecmp((char*) buffer, "TRACKN", 6) ) {
-                if( false == file__read(file, &buffer[6], 6) ) {
-                    return MI_ERROR_DECODE_ERROR;
-                }
-                if( 0 == strncasecmp((char*) buffer, "TRACKNUMBER=", 12) ) {
-                    int32_t i;
-
-                    metadata->track_number = 0;
-                    for( i = 12; i < comment_length; i++ ) {
-                        uint8_t c;
-                        if( false == file__read(file, &c, 1) ) {
-                            return MI_ERROR_DECODE_ERROR;
-                        }
-                        if( ('0' <= c) && (c <= '9') ) {
-                            metadata->track_number *= 10;
-                            metadata->track_number += (c - '0');
-                        } else {
-                            return MI_ERROR_DECODE_ERROR;
-                        }
-                    }
-                } else {
-                    if( false == file__seek_from_current(file, (comment_length - 12)) ) {
-                        return MI_ERROR_DECODE_ERROR;
-                    }
-                }
-            } else {
-                if( false == file__seek_from_current(file, (comment_length - 6)) ) {
-                    return MI_ERROR_DECODE_ERROR;
-                }
+                comment_length -= album_length;
+                break;
             }
+
+            case FM__ARTIST:
+            {
+                uint32_t artist_length;
+
+                artist_length = MIN( MEDIA_ARTIST_LENGTH, comment_length );
+                if( false == file__read(file, (uint8_t*) &metadata->artist, artist_length) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                comment_length -= artist_length;
+                break;
+            }
+
+            case FM__DISCNUMBER:
+                if( false == flac_get_int32_t(file, &comment_length, &metadata->disc_number) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                break;
+
+            case FM__TITLE:
+            {
+                uint32_t title_length;
+
+                title_length = MIN( MEDIA_TITLE_LENGTH, comment_length );
+                if( false == file__read(file, (uint8_t*) &metadata->title, title_length) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                comment_length -= title_length;
+                break;
+            }
+
+            case FM__TRACKNUMBER:
+                if( false == flac_get_int32_t(file, &comment_length, &metadata->track_number) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                break;
+
+            case FM__REPLAYGAIN_ALBUM_PEAK:
+                if( false == flac_get_double(file, &comment_length, &metadata->album_peak) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                break;
+
+            case FM__REPLAYGAIN_ALBUM_GAIN:
+                if( false == flac_get_double(file, &comment_length, &metadata->album_gain) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                break;
+
+            case FM__REPLAYGAIN_TRACK_PEAK:
+                if( false == flac_get_double(file, &comment_length, &metadata->track_peak) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                break;
+
+            case FM__REPLAYGAIN_TRACK_GAIN:
+                if( false == flac_get_double(file, &comment_length, &metadata->track_gain) ) {
+                    return MI_ERROR_DECODE_ERROR;
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        if( false == file__seek_from_current(file, comment_length) ) {
+            return MI_ERROR_DECODE_ERROR;
         }
     }
 
@@ -822,4 +831,247 @@ static inline bool file__seek_from_current( FIL *file, uint32_t len )
     }
 
     return false;
+}
+
+/**
+ *  Used to read 1 character from a file.
+ *
+ *  @param file the file to read from
+ *  @param c the pointer to the character buffer
+ *
+ *  @return true on success, false otherwise
+ */
+static inline bool file__read_char( FIL *file, char *c )
+{
+    return file__read( file, (uint8_t *) c, 1 );
+}
+
+/**
+ *  Used to read out of a vorbis comment the key and point the
+ *  next file character to the value if it is a known type.  If
+ *  the type is unknown, the entire comment is skipped.
+ *
+ *  @param file the file to read from
+ *  @param len the bytes in the comment (in), then the bytes
+ *             left after processing
+ *
+ *  @return the metadata type of this comment
+ */
+static flac_metadata_t flac_get_key_value( FIL *file,
+                                           uint32_t *len )
+{
+    char c;
+
+    if( 0 < *len ) {
+        if( true == file__read_char(file, &c) ) {
+            (*len)--;
+            switch( c ) {
+                case 'a':
+                case 'A':
+                    if( 5 < *len ) {
+                        uint8_t buf[5];
+                        if( true == file__read(file, buf, 5) ) {
+                            *len -= 5;
+                            if( 0 == strncasecmp((char*) buf, "LBUM=", 5) ) {
+                                return FM__ALBUM;
+                            }
+                            if( 0 == strncasecmp((char*) buf, "RTIST", 5) ) {
+                                if( true == file__read_char(file, &c) ) {
+                                    (*len)--;
+                                    return FM__ARTIST;
+                                }
+                            }
+                        }
+                    }
+                    break;
+
+                case 'd':
+                case 'D':
+                    if( 10 < *len ) {
+                        uint8_t buf[10];
+                        if( true == file__read(file, buf, 10) ) {
+                            *len -= 10;
+                            if( 0 == strncasecmp((char*) buf, "ISCNUMBER=", 10) ) {
+                                return FM__DISCNUMBER;
+                            }
+                        }
+                    }
+                    break;
+
+                case 'r':
+                case 'R':
+                    if( 21 < *len ) {
+                        uint8_t buf[21];
+                        if( true == file__read(file, buf, 21) ) {
+                            *len -= 21;
+                            if( 0 == strncasecmp((char*) buf, "EPLAYGAIN_ALBUM_PEAK=", 21) ) {
+                                return FM__REPLAYGAIN_ALBUM_PEAK;
+                            } else if( 0 == strncasecmp((char*) buf, "EPLAYGAIN_ALBUM_GAIN=", 21) ) {
+                                return FM__REPLAYGAIN_ALBUM_GAIN;
+                            } else if( 0 == strncasecmp((char*) buf, "EPLAYGAIN_TRACK_PEAK=", 21) ) {
+                                return FM__REPLAYGAIN_TRACK_PEAK;
+                            } else if( 0 == strncasecmp((char*) buf, "EPLAYGAIN_TRACK_GAIN=", 21) ) {
+                                return FM__REPLAYGAIN_TRACK_GAIN;
+                            } else if( 0 == strncasecmp((char*) buf, "EPLAYGAIN_REFERENCE_L", 21) ) {
+                                if( 8 < *len ) {
+                                    if( true == file__read(file, buf, 8) ) {
+                                        *len -= 8;
+                                        if( 0 == strncasecmp((char*) buf, "OUDNESS=", 8) ) {
+                                            return FM__REPLAYGAIN_REFERENCE_LOUDNESS;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+
+                case 't':
+                case 'T':
+                    if( 5 < *len ) {
+                        uint8_t buf[6];
+                        if( true == file__read(file, buf, 5) ) {
+                            *len -= 5;
+                            if( 0 == strncasecmp((char*) buf, "ITLE=", 5) ) {
+                                return FM__TITLE;
+                            }
+                            if( 0 == strncasecmp((char*) buf, "RACKN", 5) ) {
+                                if( 6 < *len ) {
+                                    if( true == file__read(file, buf, 6) ) {
+                                        *len -= 6;
+                                        if( 0 == strncasecmp((char*) buf, "UMBER=", 6) ) {
+                                            return FM__TRACKNUMBER;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    file__seek_from_current( file, *len );
+    *len = 0;
+    return FM__UNKNOWN;
+}
+
+/**
+ *  Used to read in an int32_t from a file as an ASCII string.
+ *
+ *  @param file the file to read and process
+ *  @param len the maximum valid number of of bytes
+ *  @param out the output int32_t data
+ *
+ *  @return true if successful, false otherwise
+ */
+static bool flac_get_int32_t( FIL *file, uint32_t *len, int32_t *out )
+{
+    bool positive;
+    bool got_sign;
+
+    *out = 0;
+    positive = true;
+    got_sign = false;
+
+    while( 0 < *len ) {
+        char c;
+
+        if( false == file__read_char(file, &c) ) {
+            return false;
+        }
+
+        (*len)--;
+
+        if( ('0' <= c) && (c <= '9') ) {
+            if( ((*out) * 10) < (*out) ) {
+                /* we overflowed the output. */
+                return false;
+            }
+            *out *= 10;
+            *out += (c - '0');
+        } else if( '-' == c ) {
+            if( true == got_sign ) {
+                return false;
+            }
+            got_sign = true;
+            positive = false;
+        } else if( '+' == c ) {
+            if( true == got_sign ) {
+                return false;
+            }
+            got_sign = true;
+        } else {
+            return false;
+        }
+    }
+
+    if( false == positive ) {
+        *out *= -1;
+    }
+
+    return true;
+}
+
+/**
+ *  Used to read in double from a file as an ASCII string.
+ *
+ *  @param file the file to read and process
+ *  @param len the maximum valid number of of bytes
+ *  @param out the output double data
+ *
+ *  @return true if successful, false otherwise
+ */
+static bool flac_get_double( FIL *file, uint32_t *len, double *out )
+{
+    bool positive;
+    uint32_t number;
+    uint32_t decimal_point;
+
+    *out = 0.0;
+    positive = true;
+    decimal_point = 0;
+    number = 0;
+
+    while( 0 < *len ) {
+        char c;
+
+        if( false == file__read_char(file, &c) ) {
+            return false;
+        }
+
+        (*len)--;
+
+        switch( c ) {
+            case '+':
+                break;
+            case '-':
+                positive = false;
+                break;
+            case '.':
+                decimal_point = 1;
+                break;
+            case '0': case '1': case '2':
+            case '3': case '4': case '5':
+            case '6': case '7': case '8': case '9':
+                number *= 10;
+                number += (c - '0');
+                decimal_point *= 10;
+                break;
+            default:
+                goto done;
+        }
+    }
+
+done:
+    *out = ((double) number) / decimal_point;
+    if( false == positive ) {
+        *out *= -1;
+    }
+
+    return true;
 }
