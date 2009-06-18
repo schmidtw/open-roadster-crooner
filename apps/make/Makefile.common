@@ -122,7 +122,7 @@ $(gen_file) : $(MAKEFILE_LIST)
 	$(QUIET)touch $@
 
 $(gen_dir)/%.o : %.c $(gen_file) $(makefile_dependency)
-	$(QUIET)$(cc) $(cflags) $(includes) -MM -MT $@ -MF $(@:%.o=%.d) $<
+	$(QUIET)$(cc) $(cflags) $(includes) -M -MT $@ -MF $(@:%.o=%.d) $<
 	$(QUIET)perl $(fillout_dependency_file) $(@:%.o=%.d)
 	$(QUIET)$(cc) $(cflags) $(OPTIMIZATIONS) -g -c $(includes) -o $@ $<
 
