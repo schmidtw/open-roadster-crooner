@@ -246,7 +246,8 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
     __block_buffer = (uint8_t *) (*fast_malloc_fn)( MC_BLOCK_BUFFER_SIZE );
 
     for( i = 0; i < MC_MSG_MAX; i++ ) {
-        xQueueSendToBack( __idle, &__messages[i], 0 );
+        mc_message_t *msg = &__messages[i];
+        xQueueSendToBack( __idle, &msg, 0 );
     }
 
     intc_register_isr( &__fast_read_handler, MC_RX_ISR, ISR_LEVEL__1 );
