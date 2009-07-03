@@ -126,7 +126,7 @@ bool init_database( void
  *         is updated.  DS_END_OF_LIST will place the first song of the
  *         specified level in the current_song pointer.  DS_FAILURE otherwise
  */
-db_status_t next_song( song_node_t ** current_song,
+db_status_t next_song( volatile song_node_t ** current_song,
                        const db_traverse_t operation,
                        const db_level_t level );
 

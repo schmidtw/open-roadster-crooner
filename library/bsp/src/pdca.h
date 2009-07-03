@@ -109,6 +109,17 @@ bsp_status_t pdca_isr_enable( const uint8_t channel, const pdca_isr_t isr );
 bsp_status_t pdca_isr_disable( const uint8_t channel, const pdca_isr_t isr );
 
 /**
+ *  Used to clear the ISR causes due to the PDCA/DMA channel.
+ *
+ *  @param channel the PDCA/DMA channel of interest
+ *
+ *  @return Status
+ *      @retval BSP_RETURN_OK
+ *      @retval BSP_ERROR_PARAMETER
+ */
+bsp_status_t pdca_isr_clear( const uint8_t channel );
+
+/**
  *  Used to enable the PDCA/DMA transfer
  *
  *  @param channel the PDCA/DMA channel of interest

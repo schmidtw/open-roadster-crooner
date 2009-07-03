@@ -19,7 +19,11 @@
 #define __MEDIA_INTERFACE_H__
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+
+#include <freertos/semphr.h>
+#include <freertos/queue.h>
 
 #define MEDIA_TITLE_LENGTH  127
 #define MEDIA_ALBUM_LENGTH  127
@@ -63,13 +67,13 @@ typedef void media_interface_t;
  *  Called by the media playback to cause the current task to suspend while
  *  waiting for data.
  */
-typedef void (*media_suspend_fn_t)( void );
+typedef void* (*media_malloc_fn_t)( const size_t size );
 
 /**
  *  Called by the media playback during an ISR to wake up the task and
  *  alert the task that there is data available.
  */
-typedef void (*media_resume_fn_t)( void );
+typedef void (*media_free_fn_t)( void *ptr );
 
 /**
  *  Used to command the decoder while it is busy decoding.
@@ -94,8 +98,12 @@ typedef media_status_t (*media_command_fn_t)( const media_command_t cmd );
  *  @return the status of the decode
  */
 typedef media_status_t (*media_play_fn_t)( const char *filename,
-                                           media_suspend_fn_t suspend,
-                                           media_resume_fn_t resume );
+                                           const double gain,
+                                           const double peak,
+                                           xQueueHandle idle,
+                                           const size_t queue_size,
+                                           media_malloc_fn_t malloc_fn,
+                                           media_free_fn_t free_fn );
 
 /**
  *  Used to determine if a file is if a particular media type.

@@ -8,6 +8,7 @@ LIBRARIES = \
             memcard \
             fatfs \
             file-stream \
+            dsp \
             media-interface \
             media-flac \
             ibus-physical \

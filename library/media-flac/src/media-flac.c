@@ -21,11 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <bsp/abdac.h>
-#include <bsp/intc.h>
-#include <linked-list/linked-list.h>
+#include <dsp/dsp.h>
 #include <file-stream/file-stream.h>
 #include <fatfs/ff.h>
+#include <freertos/semphr.h>
+#include <freertos/queue.h>
 
 #include "media-flac.h"
 #include "decoder.h"
@@ -33,20 +33,16 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define BUFFER_COUNT    20
-#define FILL_TO         10
-
 #define MIN(a, b)   ((a) < (b)) ? (a) : (b)
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
 typedef struct {
-    abdac_node_t nodes[BUFFER_COUNT];
-    uint8_t      buffers[BUFFER_COUNT][MAX_BLOCKSIZE*4];    /* stereo + 16bit */
-    int32_t      decode_0[MAX_BLOCKSIZE];
-    int32_t      decode_1[MAX_BLOCKSIZE];
-} flac_data_t;
+    int32_t decode_0[MAX_BLOCKSIZE];
+    int32_t decode_1[MAX_BLOCKSIZE];
+    xQueueHandle idle;
+} flac_data_node_t;
 
 typedef enum {
     FLAC__STREAMINFO     = 0,
@@ -83,19 +79,14 @@ typedef media_status_t (*file__block_handler_t)( FIL *file,
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static volatile ll_list_t __idle;
-static volatile bool __done;
-static media_resume_fn_t __resume;
 static volatile media_command_t __cmd;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static media_status_t play_song( FLACContext *fc,
-                                 int32_t *decode_0,
-                                 int32_t *decode_1,
-                                 media_suspend_fn_t suspend );
-static void __buffer_done( abdac_node_t *node, const bool last );
+                                 xQueueHandle idle,
+                                 const int32_t gain );
 static void process_metadata_block_header( uint8_t *header,
                                            bool *last,
                                            flac_block_type_t *type,
@@ -103,9 +94,8 @@ static void process_metadata_block_header( uint8_t *header,
 
 /*---------- Stream based metadata handlers ----------*/
 static media_status_t stream__process_file( FLACContext *fc,
-                                            int32_t *decode_0,
-                                            int32_t *decode_1,
-                                            media_suspend_fn_t suspend );
+                                            xQueueHandle idle,
+                                            const int32_t gain );
 static media_status_t stream__process_metadata( FLACContext *fc );
 static media_status_t stream__metadata_block_ignore( FLACContext *fc,
                                                      const uint32_t length );
@@ -129,6 +119,7 @@ static flac_metadata_t flac_get_key_value( FIL *file,
                                            uint32_t *len );
 static bool flac_get_int32_t( FIL *file, uint32_t *len, int32_t *out );
 static bool flac_get_double( FIL *file, uint32_t *len, double *out );
+static void dsp_callback( int32_t *left, int32_t *right, void *data );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -140,30 +131,37 @@ media_status_t media_flac_command( const media_command_t cmd )
     if( (MI_PLAY == cmd) || (MI_STOP == cmd) ) {
         __cmd = cmd;
         return MI_RETURN_OK;
-    } else {
-        return MI_ERROR_NOT_SUPPORTED;
     }
+
+    return MI_ERROR_NOT_SUPPORTED;
 }
 
 /** See media-interface.h for details. */
 media_status_t media_flac_play( const char *filename,
-                                media_suspend_fn_t suspend,
-                                media_resume_fn_t resume )
+                                const double gain,
+                                const double peak,
+                                xQueueHandle idle,
+                                const size_t queue_size,
+                                media_malloc_fn_t malloc_fn,
+                                media_free_fn_t free_fn )
 {
     FLACContext  fc;
     media_status_t rv;
     int32_t i;
-    flac_data_t *d;
+    int32_t dsp_scale_factor;
 
     rv = MI_RETURN_OK;
 
-    if( (NULL == filename) || (NULL == suspend) || (NULL == resume) ) {
+    if( (NULL == filename) || (NULL == idle) || (0 == queue_size) ||
+        (NULL == malloc_fn) || (NULL == free_fn) )
+    {
         rv = MI_ERROR_PARAMETER;
         goto error_0;
     }
 
+    dsp_scale_factor = dsp_determine_scale_factor( peak, gain );
+
     __cmd = MI_PLAY;
-    __resume = resume;
 
     if( true != fstream_open(filename) ) {
         rv = MI_ERROR_INVALID_FORMAT;
@@ -183,32 +181,37 @@ media_status_t media_flac_play( const char *filename,
         fstream_release_buffer( 4 );
     }
 
-    d = (flac_data_t*) malloc( sizeof(flac_data_t) );
-    if( NULL == d ) {
-        rv = MI_ERROR_OUT_OF_MEMORY;
-        goto error_1;
+    i = MIN(queue_size, 2);
+    while( 0 < i-- ) {
+        flac_data_node_t *node;
+
+        node = (flac_data_node_t*) (*malloc_fn)( sizeof(flac_data_node_t) );
+        if( NULL == node ) {
+            rv = MI_ERROR_OUT_OF_MEMORY;
+            goto error_1;
+        }
+        node->idle = idle;
+        xQueueSendToBack( idle, &node, 0 );
     }
 
-    /* Initialize the non-buffer sections of the memory allocation */
+    /* Initialize the FLACContext data */
     memset( &fc, 0, sizeof(FLACContext) );
 
     /* From above we've already read 4 bytes of metadata */
     fc.filesize = fstream_get_filesize();
     fc.metadatalength = 4;
 
-    ll_init_list( &__idle );
-
-    for( i = 0; i < BUFFER_COUNT; i++ ) {
-        ll_init_node( &d->nodes[i].node, &d->nodes[i] );
-        d->nodes[i].buffer = d->buffers[i];
-        ll_append( &__idle, &d->nodes[i].node );
-    }
-
-    rv = stream__process_file( &fc, d->decode_0, d->decode_1, suspend );
-
-    free( d );
+    rv = stream__process_file( &fc, idle, dsp_scale_factor );
 
 error_1:
+
+    i = MIN(queue_size, 2);
+    while( 0 < i-- ) {
+        flac_data_node_t *node;
+
+        xQueueReceive( idle, &node, portMAX_DELAY );
+        (*free_fn)( node );
+    }
 
     fstream_close();
 
@@ -240,7 +243,6 @@ media_status_t media_flac_get_metadata( const char *filename,
                                         media_metadata_t *metadata )
 {
     media_status_t rv;
-    flac_data_t *d;
     FIL file;
 
     rv = MI_RETURN_OK;
@@ -268,15 +270,7 @@ media_status_t media_flac_get_metadata( const char *filename,
         }
     }
 
-    d = (flac_data_t*) malloc( sizeof(flac_data_t) );
-    if( NULL == d ) {
-        rv = MI_ERROR_OUT_OF_MEMORY;
-        goto error_1;
-    }
-
     rv = file__process_metadata( &file, metadata );
-
-    free( d );
 
 error_1:
     f_close( &file );
@@ -300,47 +294,17 @@ error_0:
  *  @retval MI_RETURN_OK
  */
 static media_status_t stream__process_file( FLACContext *fc,
-                                            int32_t *decode_0,
-                                            int32_t *decode_1,
-                                            media_suspend_fn_t suspend )
+                                            xQueueHandle idle,
+                                            const int32_t gain )
 {
     media_status_t status;
-    abdac_sample_rate_t sample_rate;
 
     status = stream__process_metadata( fc );
     if( MI_RETURN_OK != status ) {
         return status;
     }
 
-    switch( fc->samplerate ) {
-        case 48000: sample_rate = ABDAC_SAMPLE_RATE__48000; break;
-        case 44100: sample_rate = ABDAC_SAMPLE_RATE__44100; break;
-        case 32000: sample_rate = ABDAC_SAMPLE_RATE__32000; break;
-        case 24000: sample_rate = ABDAC_SAMPLE_RATE__24000; break;
-        case 22050: sample_rate = ABDAC_SAMPLE_RATE__22050; break;
-        case 16000: sample_rate = ABDAC_SAMPLE_RATE__16000; break;
-        case 12000: sample_rate = ABDAC_SAMPLE_RATE__12000; break;
-        case 11025: sample_rate = ABDAC_SAMPLE_RATE__11025; break;
-        case 800:   sample_rate = ABDAC_SAMPLE_RATE__8000;  break;
-        default:
-            return MI_ERROR_NOT_SUPPORTED;
-    }
-
-    abdac_init( false, &__buffer_done );
-
-    if( BSP_RETURN_OK != abdac_set_sample_rate(sample_rate) ) {
-        return MI_ERROR_NOT_SUPPORTED;
-    }
-
-    abdac_queue_silence();
-
-    __done = false;
-
-    status = play_song( fc, decode_0, decode_1, suspend );
-
-    while( false == __done ) {
-        (*suspend)();
-    }
+    status = play_song( fc, idle, gain );
 
     return status;
 }
@@ -396,6 +360,7 @@ static media_status_t stream__process_metadata( FLACContext *fc )
     }
 
     fc->bitrate = ((fc->filesize - fc->metadatalength) * 8) / fc->length;
+    //printf( "bitrate: %ld\n", fc->bitrate );
 
     return MI_RETURN_OK;
 }
@@ -682,86 +647,56 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
 }
 
 static media_status_t play_song( FLACContext *fc,
-                                 int32_t *decode_0,
-                                 int32_t *decode_1,
-                                 media_suspend_fn_t suspend )
+                                 xQueueHandle idle,
+                                 const int32_t gain )
 {
-    bool started_song;
-    int32_t count;
+    flac_data_node_t *node;
+    media_status_t rv;
 
-    started_song = false;
-    count = 0;
+    rv = MI_END_OF_SONG;
+    node = NULL;
 
     while( 1 ) {
-        bool isrs_enabled;
-        ll_node_t *node;
+        int32_t consumed;
+        uint8_t *read_buffer;
+        int32_t bytes_left;
 
-        isrs_enabled = interrupts_save_and_disable();
-        node = ll_remove_head( &__idle );
-        interrupts_restore( isrs_enabled );
+        xQueueReceive( idle, &node, portMAX_DELAY );
 
-        if( NULL == node ) {
-            (*suspend)();
-        } else {
-            int32_t consumed;
-            abdac_node_t *n = (abdac_node_t *) node->data;
-            uint8_t *read_buffer;
-            int32_t bytes_left;
+        read_buffer = (uint8_t*) fstream_get_buffer( fc->max_framesize, (size_t*) &bytes_left );
 
-            read_buffer = (uint8_t*) fstream_get_buffer( fc->max_framesize, (size_t*) &bytes_left );
-
-            if( 0 == bytes_left ) {
-                fstream_release_buffer( 0 );
-                memset( (void*) n->buffer, 0, 1000 );
-                n->size = 1000;
-                abdac_queue_data( n, true );
-                return MI_END_OF_SONG;
-            }
-
-            if( MI_STOP == __cmd ) {
-                fstream_release_buffer( 0 );
-                abdac_stop();
-                return MI_STOPPED_BY_REQUEST;
-            }
-
-            if( 0 != flac_decode_frame(fc, (int32_t *) n->buffer, decode_1, read_buffer, bytes_left) ) {
-                fstream_release_buffer( 0 );
-                memset( (void*) n->buffer, 0, 1000 );
-                n->size = 1000;
-                abdac_queue_data( n, true );
-                return MI_ERROR_DECODE_ERROR;
-            }
-
-            if( MI_STOP == __cmd ) {
-                fstream_release_buffer( 0 );
-                abdac_stop();
-                return MI_STOPPED_BY_REQUEST;
-            }
-
-            n->size = fc->blocksize * 4;
-
-            abdac_queue_data( n, false );
-
-            consumed = fc->gb.index / 8;
-
-            fstream_release_buffer( consumed );
-
-            count++;
-            if( (false == started_song) && (FILL_TO == count) ) {
-                abdac_start();
-                started_song = true;
-            }
+        if( 0 == bytes_left ) {
+            goto done;
         }
-    }
-}
 
-static void __buffer_done( abdac_node_t *node, const bool last )
-{
-    ll_append( &__idle, &node->node );
-    if( true == last ) {
-        __done = true;
+        if( MI_STOP == __cmd ) {
+            rv = MI_STOPPED_BY_REQUEST;
+            goto done;
+        }
+
+        if( 0 != flac_decode_frame(fc, node->decode_0, node->decode_1, read_buffer, bytes_left) ) {
+            rv = MI_ERROR_DECODE_ERROR;
+            goto done;
+        }
+
+        if( MI_STOP == __cmd ) {
+            rv = MI_STOPPED_BY_REQUEST;
+            goto done;
+        }
+
+        dsp_queue_data( node->decode_0, node->decode_1, fc->blocksize,
+                        44100, gain, &dsp_callback, node );
+
+        consumed = fc->gb.index / 8;
+
+        fstream_release_buffer( consumed );
     }
-    (*__resume)();
+
+done:
+    fstream_release_buffer( 0 );
+    xQueueSendToBack( idle, &node, 0 );
+    dsp_data_complete( NULL, NULL );
+    return rv;
 }
 
 /**
@@ -1074,4 +1009,12 @@ done:
     }
 
     return true;
+}
+
+static void dsp_callback( int32_t *left, int32_t *right, void *data )
+{
+    flac_data_node_t *node = (flac_data_node_t*) data;
+
+    //printf( "%s() : 0x%08x\n", __func__, node->idle );
+    xQueueSendToBack( node->idle, &node, 0 );
 }

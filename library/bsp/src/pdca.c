@@ -18,6 +18,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <avr32/io.h>
 
@@ -185,6 +186,9 @@ bsp_status_t pdca_isr_enable( const uint8_t channel, const pdca_isr_t isr )
 
     pdca = &AVR32_PDCA.channel[channel];
 
+    /* Clear any pending ISRs */
+    pdca->isr;
+
     switch( isr ) {
         case PDCA_ISR__TRANSFER_ERROR:
             pdca->ier = AVR32_PDCA_TERR_MASK;
@@ -201,9 +205,6 @@ bsp_status_t pdca_isr_enable( const uint8_t channel, const pdca_isr_t isr )
         default:
             return BSP_ERROR_PARAMETER;
     }
-
-    /* Clear any pending ISRs */
-    pdca->isr;
 
     return BSP_RETURN_OK;
 }
@@ -238,6 +239,18 @@ bsp_status_t pdca_isr_disable( const uint8_t channel, const pdca_isr_t isr )
 
     /* Clear any pending ISRs */
     pdca->isr;
+
+    return BSP_RETURN_OK;
+}
+
+/* See pdca.h for details. */
+bsp_status_t pdca_isr_clear( const uint8_t channel )
+{
+    if( AVR32_PDCA_CHANNEL_LENGTH <= channel ) {
+        return BSP_ERROR_PARAMETER;
+    }
+
+    AVR32_PDCA.channel[channel].isr;
 
     return BSP_RETURN_OK;
 }

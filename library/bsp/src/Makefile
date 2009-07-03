@@ -7,7 +7,6 @@ INCLUDE = -I/usr/avr32/include \
 CFLAGS = -DSTRICT_PARAMS=1
 
 HEADERS = \
-    abdac.h \
     bsp_errors.h \
     delay.h \
     gpio.h \
@@ -23,7 +22,6 @@ HEADERS = \
     boards/crooner-2.0.h
 
 SOURCES = \
-    abdac.c \
     delay.c \
     gpio.c \
     pm.c \

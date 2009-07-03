@@ -28,9 +28,10 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define PB_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 8000)
+#define PB_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 5000)
 #define PB_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define DIR_MAP_SIZE        6
+#define IDLE_QUEUE_SIZE     10
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -41,16 +42,14 @@
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static void __pb_task( void *params );
-static void __codec_suspend( void );
-static void __codec_resume( void );
 static void __mount_status( const mc_card_status_t status );
 static uint8_t __determine_map( void );
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static volatile xSemaphoreHandle __codec_semaphore;
-static volatile xSemaphoreHandle __card_mounted;
+static xQueueHandle __idle;
+static xSemaphoreHandle __card_mounted;
 static volatile mc_card_status_t __card_status;
 static const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
 static volatile song_node_t *__current_song;
@@ -66,7 +65,7 @@ void playback_init( void )
     __current_song = NULL;
     __playback_mode = MI_STOP;
 
-    vSemaphoreCreateBinary( __codec_semaphore );
+    __idle = xQueueCreate( IDLE_QUEUE_SIZE, sizeof(void*) );
     vSemaphoreCreateBinary( __card_mounted );
     xSemaphoreTake( __card_mounted, 0 );
 
@@ -198,7 +197,7 @@ static void __pb_task( void *params )
 
         if( 0 == f_mount(0, &fs) ) {
 
-            printf( "mounted fs.\n" );
+            //printf( "mounted fs.\n" );
             ri_checking_for_discs();
             if( true == populate_database(dir_map, DIR_MAP_SIZE, "/") ) {
                 media_status_t ms;
@@ -216,8 +215,10 @@ static void __pb_task( void *params )
                     }
 
                     play_fn = __current_song->play_fn;
-                    ms = (*play_fn)( __current_song->file_location,
-                                  __codec_suspend, __codec_resume );
+                    ms = (*play_fn)( (const char*) __current_song->file_location,
+                                     __current_song->track_gain,
+                                     __current_song->track_peak,
+                                     __idle, IDLE_QUEUE_SIZE, &malloc, &free );
 
                     if( MI_STOPPED_BY_REQUEST != ms ) {
                         db_status_t rv;
@@ -246,24 +247,6 @@ static void __pb_task( void *params )
     }
 }
 
-/**
- *  Block the codec decoding task using a semaphore instead
- *  of spin-locking.
- */
-static void __codec_suspend( void )
-{
-    xSemaphoreTake( __codec_semaphore, portMAX_DELAY );
-}
-
-/**
- *  Resume the codec decoding task from inside an ISR.
- */
-static void __codec_resume( void )
-{
-    portBASE_TYPE xTaskWoken;
-    xSemaphoreGiveFromISR( __codec_semaphore, &xTaskWoken );
-}
-
 static void __mount_status( const mc_card_status_t status )
 {
     portBASE_TYPE ignore;
@@ -286,7 +269,7 @@ static uint8_t __determine_map( void )
 
     status = DS_SUCCESS;
     while( DS_SUCCESS == status ) {
-        status = next_song( &song, DT_NEXT, DL_GROUP );
+        status = next_song( (volatile song_node_t**) &song, DT_NEXT, DL_GROUP );
 
         if( DS_FAILURE == status ) {
             map = 0x00;

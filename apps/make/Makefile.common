@@ -115,7 +115,7 @@ $(target_hex) : $(target_elf)
 	$(QUIET)$(objcopy) -O ihex $< $@
 
 $(target_elf) : $(objs) $(addsuffix .a,$(addprefix $(lib_dir)/lib,$(libraries) $(local_newlib))) $(BASE)/apps/make/$(linkfile)
-	$(QUIET)$(cc) $(cflags) $(ldflags) -o $@ $(objs) $(addprefix -l,$(libraries)) $(startup_file)
+	$(QUIET)$(cc) $(cflags) $(ldflags) -o $@ $(objs) $(addprefix -l,$(libraries)) -lm $(startup_file)
 
 $(gen_file) : $(MAKEFILE_LIST)
 	$(QUIET)mkdir -p $(dir $@)
@@ -173,6 +173,7 @@ flash : $(target_hex) erase
 .PHONY: run
 run : $(target_hex)
 	@echo "Starting..."
+	$(QUIET)$(dfu) $(addprefix at32,$(chip)) reset
 	$(QUIET)$(dfu) $(addprefix at32,$(chip)) reset
 
 

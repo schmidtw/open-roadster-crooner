@@ -106,7 +106,7 @@ static int64_t get_utf8(GetBitContext *gb) ICODE_ATTR_FLAC;
 static int64_t get_utf8(GetBitContext *gb)
 {
     uint64_t val;
-    register int ones=0, bytes;
+    int ones=0, bytes;
     
     while(get_bits1(gb))
         ones++;
@@ -130,8 +130,8 @@ static int64_t get_utf8(GetBitContext *gb)
 static int get_crc8(const uint8_t *buf, int count) ICODE_ATTR_FLAC;
 static int get_crc8(const uint8_t *buf, int count)
 {
-    register int crc=0;
-    register int i;
+    int crc=0;
+    int i;
 
     for(i=0; i<count; i++){
         crc = table_crc8[crc ^ buf[i]];
@@ -143,8 +143,8 @@ static int get_crc8(const uint8_t *buf, int count)
 static int decode_residuals(FLACContext *s, int32_t* decoded, int pred_order) ICODE_ATTR_FLAC;
 static int decode_residuals(FLACContext *s, int32_t* decoded, int pred_order)
 {
-    register int i, tmp, partition, method_type, rice_order;
-    register int sample = 0, samples;
+    int i, tmp, partition, method_type, rice_order;
+    int sample = 0, samples;
 
     method_type = get_bits(&s->gb, 2);
     if (method_type > 1){
@@ -205,34 +205,20 @@ static int decode_subframe_fixed(FLACContext *s, int32_t* decoded, int pred_orde
         case 0:
             break;
         case 1:
-            for (i = pred_order; i < blocksize; i++) {
-                a += decoded[i];
-                decoded[i] = a;
-            }
+            for (i = pred_order; i < blocksize; i++)
+                decoded[i] = a += decoded[i];
             break;
         case 2:
-            for (i = pred_order; i < blocksize; i++) {
-                b += decoded[i];
-                a += b;
-                decoded[i] = a;
-            }
+            for (i = pred_order; i < blocksize; i++)
+                decoded[i] = a += b += decoded[i];
             break;
         case 3:
-            for (i = pred_order; i < blocksize; i++) {
-                c += decoded[i];
-                b += c;
-                a += b;
-                decoded[i] = a;
-            }
+            for (i = pred_order; i < blocksize; i++)
+                decoded[i] = a += b += c += decoded[i];
             break;
         case 4:
-            for (i = pred_order; i < blocksize; i++) {
-                d += decoded[i];
-                c += d;
-                b += c;
-                a += b;
-                decoded[i] = a;
-            }
+            for (i = pred_order; i < blocksize; i++)
+                decoded[i] = a += b += c += d += decoded[i];
             break;
         default:
             return -5;
@@ -324,8 +310,8 @@ static int decode_subframe_lpc(FLACContext *s, int32_t* slow_decoded, int pred_o
 
 static inline int decode_subframe(FLACContext *s, int channel, int32_t* decoded)
 {
-    register int type, wasted = 0;
-    register int i, tmp;
+    int type, wasted = 0;
+    int i, tmp;
     
     s->curr_bps = s->bps;
     if(channel == 0){
@@ -400,7 +386,7 @@ static inline int decode_subframe(FLACContext *s, int channel, int32_t* decoded)
         
     if (wasted)
     {
-        register int i;
+        int i;
         for (i = 0; i < s->blocksize; i++)
             decoded[i] <<= wasted;
     }
@@ -520,25 +506,15 @@ static int decode_frame(FLACContext *s,
     return 0;
 }
 
-static inline int32_t clip_sample_16( int32_t sample )
-{
-    if( (int16_t) sample != sample ) {
-        sample = 0x7fff ^ (sample >> 31);
-    }
-    return sample;
-}
-
 int flac_decode_frame(FLACContext *s,
                              int32_t* decoded0,
                              int32_t* decoded1,
                              uint8_t *buf, int buf_size)
 {
-#define SAMPLE_SCALE 13
     int tmp;
     int i;
     int framesize;
     int scale;
-    const int dc_bias = 1 << (SAMPLE_SCALE - 1);
 
     init_get_bits(&s->gb, buf, buf_size*8);
 
@@ -557,34 +533,16 @@ int flac_decode_frame(FLACContext *s,
     switch(s->decorrelation)
     {
         case INDEPENDENT:
-            if( 0 < scale ) {
-                if (s->channels==1) {;
-                    for (i = 0; i < s->blocksize; i++)
-                    {
-                        register int32_t l, r;
-                        l = decoded0[i];
-                        l = clip_sample_16( ((l << scale) + dc_bias) >> SAMPLE_SCALE );
-                        l <<= 16;
-                        l &= 0xffff0000;
-                        r = l >> 16;
-                        r &= 0x0000ffff;
-                        decoded0[i] = (r | l);
-                    }
-                } else {
-                    for (i = 0; i < s->blocksize; i++)
-                    {
-                        register int32_t l, r;
-                        l = decoded0[i];
-                        l = clip_sample_16( ((l << scale) + dc_bias) >> SAMPLE_SCALE );
-                        l <<= 16;
-                        l &= 0xffff0000;
-
-                        r = decoded1[i];
-                        r = clip_sample_16( ((r << scale) + dc_bias) >> SAMPLE_SCALE );
-                        r &= 0x0000ffff;
-
-                        decoded0[i] = (r | l);
-                    }
+            if (s->channels==1) {;
+                for (i = 0; i < s->blocksize; i++)
+                {
+                    decoded0[i] = decoded0[i] << scale;
+                }
+            } else {
+                for (i = 0; i < s->blocksize; i++)
+                {
+                    decoded0[i] = decoded0[i] << scale;
+                    decoded1[i] = decoded1[i] << scale;
                 }
             }
             break;
@@ -592,66 +550,38 @@ int flac_decode_frame(FLACContext *s,
             //assert(s->channels == 2);
             for (i = 0; i < s->blocksize; i++)
             {
-                register int32_t l, r;
-                l = decoded0[i];
-                r = decoded1[i];
-
-                r = l - r;
-                r = clip_sample_16( ((r << scale) + dc_bias) >> SAMPLE_SCALE );
-                r &= 0x0000ffff;
-
-                l = clip_sample_16( ((l << scale) + dc_bias) >> SAMPLE_SCALE );
-                l <<= 16;
-                l &= 0xffff0000;
-
-                decoded0[i] = (r | l);
+                decoded1[i] = (decoded0[i] - decoded1[i]) << scale;
+                decoded0[i] = decoded0[i] << scale;
             }
             break;
         case RIGHT_SIDE:
             //assert(s->channels == 2);
             for (i = 0; i < s->blocksize; i++)
             {
-                register int32_t l, r;
-                l = decoded0[i];
-                r = decoded1[i];
-
-                l += r;
-                l = clip_sample_16( ((l << scale) + dc_bias) >> SAMPLE_SCALE );
-                l <<= 16;
-                l &= 0xffff0000;
-
-                r = clip_sample_16( ((r << scale) + dc_bias) >> SAMPLE_SCALE );
-                r &= 0x0000ffff;
-
-                decoded0[i] = (r | l);
+                decoded0[i] = (decoded0[i] + decoded1[i]) << scale;
+                decoded1[i] = decoded1[i] << scale;
             }
             break;
         case MID_SIDE:
             //assert(s->channels == 2);
             for (i = 0; i < s->blocksize; i++)
             {
-                register int mid, side;
-                register int32_t l, r;
-
+                int mid, side;
                 mid = decoded0[i];
                 side = decoded1[i];
 
+#if 1 //needs to be checked but IMHO it should be binary identical
+                mid -= side>>1;
+                decoded0[i] = (mid + side) << scale;
+                decoded1[i] = mid << scale;
+#else
+                
                 mid <<= 1;
-                if( side & 1 ) {
+                if (side & 1)
                     mid++;
-                }
-
-                l = ((mid + side) >> 1) << scale;
-                r = ((mid - side) >> 1) << scale;
-
-                l = clip_sample_16( (l + dc_bias) >> SAMPLE_SCALE );
-                l <<= 16;
-                l &= 0xffff0000;
-
-                r = clip_sample_16( (r + dc_bias) >> SAMPLE_SCALE );
-                r &= 0x0000ffff;
-
-                decoded0[i] = (r | l);
+                decoded0[i] = ((mid + side) >> 1) << scale;
+                decoded1[i] = ((mid - side) >> 1) << scale;
+#endif
             }
             break;
     }

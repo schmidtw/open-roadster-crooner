@@ -19,6 +19,7 @@ LIBRARIES = \
             linked-list \
             display \
             memcard \
+            dsp \
             bsp \
             util
 

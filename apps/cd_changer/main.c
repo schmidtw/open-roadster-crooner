@@ -10,6 +10,7 @@
 #include <database/database.h>
 #include <memcard/memcard.h>
 #include <display/display.h>
+#include <dsp/dsp.h>
 
 #include "radio-interface.h"
 #include "playback.h"
@@ -33,6 +34,9 @@ void* pvPortMalloc( size_t size )
         total += size;
     }
 
+    if( NULL == ret ) {
+        while( 1 ) { ; }
+    }
     //printf( "pvPortMalloc( %lu ) ->: %p (total: %lu)\n", size, ret, total );
 
     xTaskResumeAll();
@@ -50,6 +54,7 @@ int main( void )
     printf( "--------------------------------------------------------------------------------\n" );
 
     mc_init( pvPortMalloc );
+    dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();
     playback_init();
 //    display_init( ibus_print , 5000, 15000, 10000, 1, true);

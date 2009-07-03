@@ -25,8 +25,12 @@ media_status_t media_flac_command( const media_command_t cmd );
 
 /** See media-interface.h for details. */
 media_status_t media_flac_play( const char *filename,
-                                media_suspend_fn_t suspend,
-                                media_resume_fn_t resume );
+                                const double gain,
+                                const double peak,
+                                xQueueHandle idle,
+                                const size_t queue_size,
+                                media_malloc_fn_t malloc_fn,
+                                media_free_fn_t free_fn );
 
 /** See media-interface.h for details. */
 bool media_flac_get_type( const char *filename );
