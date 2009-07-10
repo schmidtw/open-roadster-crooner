@@ -39,7 +39,7 @@
 #define DSP_BUFFER_SIZE     512
 
 #define GAIN_SCALE      8
-#define OUTPUT_SCALE    12
+#define OUTPUT_SCALE    13
 #define DC_BIAS         (1 << (OUTPUT_SCALE - 1))
 #define MIN(a,b)        ((a) < (b)) ? (a) : (b)
 
@@ -424,12 +424,20 @@ static void __mono_to_stereo_out( const int32_t *in, int16_t *out,
         data = (((int64_t) *in++) * gain_scale_factor) >> GAIN_SCALE;
 
         /* Convert from 32 bit to 16 bit */
-        data += DC_BIAS;
-        data >>= OUTPUT_SCALE;
-
-        /* Clip the sample */
-        if( (int16_t) data != data ) {
-            data = 0x7fff ^ (data >> 31);
+        if( 0 < data ) {
+            data += DC_BIAS;
+            data >>= OUTPUT_SCALE;
+            /* Clip if needed. */
+            if( (int16_t) data != data ) {
+                data = 0x7fff;
+            }
+        } else {
+            data -= DC_BIAS;
+            data >>= OUTPUT_SCALE;
+            /* Clip if needed. */
+            if( (int16_t) data != data ) {
+                data = 0x8000;
+            }
         }
 
         *out++ = (int16_t) data;
@@ -453,12 +461,6 @@ static void __stereo_to_stereo_out( const int32_t *l, const int32_t *r,
                                     int16_t *out, int32_t count,
                                     const int32_t gain_scale_factor )
 {
-    int32_t last[3];
-
-    last[0] = 0;
-    last[1] = 0;
-    last[2] = 0;
-
     while( 0 < count ) {
         register int32_t data;
 
@@ -468,16 +470,20 @@ static void __stereo_to_stereo_out( const int32_t *l, const int32_t *r,
         data = (((int64_t) *l++) * gain_scale_factor) >> GAIN_SCALE;
 
         /* Convert from 32 bit to 16 bit */
-        data += DC_BIAS;
-        data >>= OUTPUT_SCALE;
-
-        last[0] = last[1];
-        last[1] = last[2];
-        last[2] = data;
-
-        /* Clip the sample */
-        if( (int16_t) data != data ) {
-            data = 0x7fff ^ (data >> 31);
+        if( 0 < data ) {
+            data += DC_BIAS;
+            data >>= OUTPUT_SCALE;
+            /* Clip if needed. */
+            if( (int16_t) data != data ) {
+                data = 0x7fff;
+            }
+        } else {
+            data -= DC_BIAS;
+            data >>= OUTPUT_SCALE;
+            /* Clip if needed. */
+            if( (int16_t) data != data ) {
+                data = 0x8000;
+            }
         }
 
         *out++ = (int16_t) data;
@@ -488,16 +494,20 @@ static void __stereo_to_stereo_out( const int32_t *l, const int32_t *r,
         data = (((int64_t) *r++) * gain_scale_factor) >> GAIN_SCALE;
 
         /* Convert from 32 bit to 16 bit */
-        data += DC_BIAS;
-        data >>= OUTPUT_SCALE;
-
-        last[0] = last[1];
-        last[1] = last[2];
-        last[2] = data;
-
-        /* Clip the sample */
-        if( (int16_t) data != data ) {
-            data = 0x7fff ^ (data >> 31);
+        if( 0 < data ) {
+            data += DC_BIAS;
+            data >>= OUTPUT_SCALE;
+            /* Clip if needed. */
+            if( (int16_t) data != data ) {
+                data = 0x7fff;
+            }
+        } else {
+            data -= DC_BIAS;
+            data >>= OUTPUT_SCALE;
+            /* Clip if needed. */
+            if( (int16_t) data != data ) {
+                data = 0x8000;
+            }
         }
 
         *out++ = (int16_t) data;
