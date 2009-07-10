@@ -428,15 +428,15 @@ static void __mono_to_stereo_out( const int32_t *in, int16_t *out,
             data += DC_BIAS;
             data >>= OUTPUT_SCALE;
             /* Clip if needed. */
-            if( (int16_t) data != data ) {
-                data = 0x7fff;
+            if( INT16_MAX < data ) {
+                data = INT16_MAX;
             }
         } else {
             data -= DC_BIAS;
             data >>= OUTPUT_SCALE;
             /* Clip if needed. */
-            if( (int16_t) data != data ) {
-                data = 0x8000;
+            if( data < INT16_MIN ) {
+                data = INT16_MIN;
             }
         }
 
@@ -474,15 +474,15 @@ static void __stereo_to_stereo_out( const int32_t *l, const int32_t *r,
             data += DC_BIAS;
             data >>= OUTPUT_SCALE;
             /* Clip if needed. */
-            if( (int16_t) data != data ) {
-                data = 0x7fff;
+            if( INT16_MAX < data ) {
+                data = INT16_MAX;
             }
         } else {
             data -= DC_BIAS;
             data >>= OUTPUT_SCALE;
             /* Clip if needed. */
-            if( (int16_t) data != data ) {
-                data = 0x8000;
+            if( data < INT16_MIN ) {
+                data = INT16_MIN;
             }
         }
 
@@ -498,15 +498,15 @@ static void __stereo_to_stereo_out( const int32_t *l, const int32_t *r,
             data += DC_BIAS;
             data >>= OUTPUT_SCALE;
             /* Clip if needed. */
-            if( (int16_t) data != data ) {
-                data = 0x7fff;
+            if( INT16_MAX < data ) {
+                data = INT16_MAX;
             }
         } else {
             data -= DC_BIAS;
             data >>= OUTPUT_SCALE;
             /* Clip if needed. */
-            if( (int16_t) data != data ) {
-                data = 0x8000;
+            if( data < INT16_MIN ) {
+                data = INT16_MIN;
             }
         }
 
