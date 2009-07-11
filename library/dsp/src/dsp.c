@@ -34,9 +34,9 @@
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
 #define DSP_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE + 1000)
-#define DSP_OUT_MSG_MAX     40
+#define DSP_OUT_MSG_MAX     10
 #define DSP_IN_MSG_MAX      10
-#define DSP_BUFFER_SIZE     512
+#define DSP_BUFFER_SIZE     441
 
 #define GAIN_SCALE      8
 #define OUTPUT_SCALE    13
@@ -257,6 +257,7 @@ static void __dsp_task( void *params )
                     out->signal_played = false;
                     in->offset = 0;
                     xQueueSendToBack( __output_queued, &out, portMAX_DELAY );
+                    out = NULL;
                 }
                 playing_music = false;
                 __queue_silence();
@@ -330,16 +331,20 @@ static void __dac_buffer_complete( void )
         disable_dac = false;
     }
 
-    /* Queue the next pending buffer for playback. */
-    status = xQueueReceiveFromISR( __output_queued, &out, &ignore );
-    if( pdTRUE == status ) {
-        /* This can't fail because one of the two buffers just
-         * became available the only other failure is parameter error. */
-        pdca_queue_buffer( PDCA_CHANNEL_ID_DAC, out->samples, out->used << 2 );
+    while( (pdFALSE == xQueueIsQueueFullFromISR(__output_active)) &&
+           (pdFALSE == xQueueIsQueueEmptyFromISR(__output_queued)) )
+    {
+        /* Queue the next pending buffer for playback. */
+        status = xQueueReceiveFromISR( __output_queued, &out, &ignore );
+        if( pdTRUE == status ) {
+            /* This can't fail because one of the two buffers just
+             * became available the only other failure is parameter error. */
+            pdca_queue_buffer( PDCA_CHANNEL_ID_DAC, out->samples, out->used << 2 );
 
-        xQueueSendToBackFromISR( __output_active, &out, &ignore );
+            xQueueSendToBackFromISR( __output_active, &out, &ignore );
 
-        disable_dac = false;
+            disable_dac = false;
+        }
     }
 
     pdca_isr_clear( PDCA_CHANNEL_ID_DAC );
