@@ -34,6 +34,7 @@
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
 #define MIN(a, b)   ((a) < (b)) ? (a) : (b)
+#define NODE_COUNT  2
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -147,6 +148,7 @@ media_status_t media_flac_play( const char *filename,
 {
     FLACContext  fc;
     media_status_t rv;
+    int32_t node_count;
     int32_t i;
     int32_t dsp_scale_factor;
 
@@ -181,7 +183,8 @@ media_status_t media_flac_play( const char *filename,
         fstream_release_buffer( 4 );
     }
 
-    i = MIN(queue_size, 2);
+    node_count = MIN( queue_size, NODE_COUNT );
+    i = node_count;
     while( 0 < i-- ) {
         flac_data_node_t *node;
 
@@ -193,6 +196,7 @@ media_status_t media_flac_play( const char *filename,
         node->idle = idle;
         xQueueSendToBack( idle, &node, 0 );
     }
+    i = node_count;
 
     /* Initialize the FLACContext data */
     memset( &fc, 0, sizeof(FLACContext) );
@@ -205,7 +209,6 @@ media_status_t media_flac_play( const char *filename,
 
 error_1:
 
-    i = MIN(queue_size, 2);
     while( 0 < i-- ) {
         flac_data_node_t *node;
 
@@ -687,6 +690,8 @@ static media_status_t play_song( FLACContext *fc,
         dsp_queue_data( node->decode_0, node->decode_1, fc->blocksize,
                         44100, gain, &dsp_callback, node );
 
+        node = NULL;
+
         consumed = fc->gb.index / 8;
 
         fstream_release_buffer( consumed );
@@ -694,7 +699,9 @@ static media_status_t play_song( FLACContext *fc,
 
 done:
     fstream_release_buffer( 0 );
-    xQueueSendToBack( idle, &node, 0 );
+    if( NULL != node ) {
+        xQueueSendToBack( idle, &node, 0 );
+    }
     dsp_data_complete( NULL, NULL );
     return rv;
 }
