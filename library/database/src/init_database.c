@@ -16,7 +16,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <linked-list/linked-list.h>
 #include "database.h"
 #include "internal_database.h"
@@ -26,14 +25,9 @@
 root_database_node_t rdn;
 
 /* See database.h for information */
-bool init_database( void
-                    /* function for metadata */
-                    )
+bool init_database( media_interface_t *mi )
 {
-    if( false == mi_init() ) {
-        return false;
-    }
-    srand(12);
+    mi_init( mi );
     rdn.initialized = true;
     
     return true;

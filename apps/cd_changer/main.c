@@ -11,6 +11,8 @@
 #include <memcard/memcard.h>
 #include <display/display.h>
 #include <dsp/dsp.h>
+#include <media-interface/media-interface.h>
+#include <media-flac/media-flac.h>
 
 #include "radio-interface.h"
 #include "playback.h"
@@ -51,14 +53,24 @@ void vPortFree( void *ptr )
 
 int main( void )
 {
+    media_interface_t *mi_list = NULL;
+    
     printf( "--------------------------------------------------------------------------------\n" );
+
+    srand( 12 );
+
+    mi_list = media_new();
+
+    media_register_codec( mi_list, "flac", media_flac_command,
+                          media_flac_play, media_flac_get_type,
+                          media_flac_get_metadata );
 
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();
     playback_init();
 //    display_init( ibus_print , 5000, 15000, 10000, 1, true);
-    init_database();
+    init_database( mi_list );
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );
 
     /* Start the RTOS - never returns. */

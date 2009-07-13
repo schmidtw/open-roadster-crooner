@@ -80,14 +80,14 @@ typedef enum {
 
 /**
  * Sets up the database function pointers for use.
+ *
+ * @param mi the media interface to associate with the database
  * 
  * @return true if the database initialized properly.  False if the passed
  *              in strings are too long or if an error occurs while
  *              initializing
  */
-bool init_database( void
-                    /* function for metadata */
-                    );
+bool init_database( media_interface_t *mi );
 
 /**
  * Accesses the next/previous/random song at a specified level.
