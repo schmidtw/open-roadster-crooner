@@ -29,7 +29,10 @@
 #include <freertos/queue.h>
 
 #include "media-mp3.h"
-#include "decoder.h"
+
+#include "stream.h"
+#include "synth.h"
+#include "frame.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -41,8 +44,15 @@
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
 typedef struct {
+    int32_t left[1152];
+    int32_t right[1152];
     xQueueHandle idle;
 } mp3_data_node_t;
+
+typedef struct {
+    struct mad_frame frame;
+    struct mad_synth synth;
+} mp3_data_t;
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -53,11 +63,14 @@ static volatile media_command_t __cmd;
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static void dsp_callback( int32_t *left, int32_t *right, void *data );
-static enum mad_flow mp3_input( void *user, struct mad_stream *stream );
-static enum mad_flow mp3_header( void *user, struct mad_header const *header );
-static enum mad_flow mp3_output( void *user,
-                                 struct mad_header const *header,
-                                 struct mad_pcm * pcm );
+static media_status_t decode_song( xQueueHandle idle,
+                                   const int32_t gain,
+                                   mp3_data_t *data );
+static media_status_t input_data( struct mad_stream *stream );
+static void output_data( xQueueHandle idle,
+                         const struct mad_pcm *pcm,
+                         const int32_t gain,
+                         const uint32_t bitrate );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -84,6 +97,7 @@ media_status_t media_mp3_play( const char *filename,
                                media_free_fn_t free_fn )
 {
     media_status_t rv;
+    mp3_data_t *data;
     int32_t node_count;
     int32_t i;
     int32_t dsp_scale_factor;
@@ -121,10 +135,18 @@ media_status_t media_mp3_play( const char *filename,
     }
     i = node_count;
 
+    data = (mp3_data_t *) (*malloc_fn)( sizeof(mp3_data_t) );
+    if( NULL == data ) {
+        goto error_1;
+    }
+
     /* Decode song */
+    rv = decode_song( idle, dsp_scale_factor, data );
 #if 0
     rv = stream__process_file( &fc, idle, dsp_scale_factor );
 #endif
+
+    (*free_fn)( data );
 
 error_1:
 
@@ -191,4 +213,125 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data )
 
     //printf( "%s() : 0x%08x\n", __func__, node->idle );
     xQueueSendToBack( node->idle, &node, 0 );
+}
+
+static media_status_t decode_song( xQueueHandle idle,
+                                   const int32_t gain,
+                                   mp3_data_t *data )
+{
+    media_status_t rv;
+    uint32_t bitrate;
+
+    struct mad_stream stream;   /* sizeof() = 64 */
+    //struct mad_frame *frame;    /* sizeof() = 9268 */
+    //struct mad_synth *synth;    /* sizeof() = 8716 */
+
+    bitrate = 0;
+
+    mad_stream_init( &stream );
+    mad_frame_init( &data->frame );
+    mad_synth_init( &data->synth );
+
+    rv = MI_RETURN_OK;
+    while( MI_RETURN_OK == rv ) {
+
+        if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
+
+        rv = input_data( &stream );
+        if( MI_ERROR_DECODE_ERROR == rv ) {
+            goto error;
+        }
+
+        if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
+
+        if( 0 == bitrate ) {
+            if( -1 == mad_header_decode(&data->frame.header, &stream) ) {
+                printf( "0x%08x\n", stream.error );
+                if( MAD_RECOVERABLE(stream.error) ) {
+                    rv = MI_ERROR_DECODE_ERROR;
+                    goto error;
+                }
+            } else {
+                /* Got a header */
+                printf( "Got header: %d\n", data->frame.header.samplerate );
+                bitrate = data->frame.header.samplerate;
+            }
+        }
+
+        printf( "%s:%d\n", __FILE__, __LINE__ );
+        if( -1 == mad_frame_decode(&data->frame, &stream) ) {
+            printf( "0x%08x\n", stream.error );
+            if( MAD_RECOVERABLE(stream.error) ) {
+                rv = MI_ERROR_DECODE_ERROR;
+                goto error;
+            }
+        }
+        printf( "%s:%d\n", __FILE__, __LINE__ );
+
+        if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
+
+        printf( "%s:%d\n", __FILE__, __LINE__ );
+        if( 0 < bitrate ) {
+            printf( "%s:%d\n", __FILE__, __LINE__ );
+            mad_synth_frame( &data->synth, &data->frame );
+            printf( "%s:%d\n", __FILE__, __LINE__ );
+
+            if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
+
+            printf( "%s:%d\n", __FILE__, __LINE__ );
+            output_data( idle, &data->synth.pcm, gain, bitrate );
+            printf( "%s:%d\n", __FILE__, __LINE__ );
+        }
+    }
+
+early_exit:
+error:
+
+    mad_synth_finish( &data->synth );
+    mad_frame_finish( &data->frame );
+    mad_stream_finish( &stream );
+
+    return rv;
+}
+
+static media_status_t input_data( struct mad_stream *stream )
+{
+    size_t got;
+    uint8_t *buffer;
+    uint32_t get;
+
+    get = 1536;
+
+    buffer = (uint8_t *) fstream_get_buffer( get, &got );
+    if( 0 < got ) {
+        mad_stream_buffer( stream, buffer, got );
+    }
+    fstream_release_buffer( got );
+
+    if( 0 == got ) {
+        return MI_ERROR_DECODE_ERROR;
+    }
+    if( get != got ) {
+        return MI_END_OF_SONG;
+    }
+    return MI_RETURN_OK;
+}
+
+static void output_data( xQueueHandle idle,
+                         const struct mad_pcm *pcm,
+                         const int32_t gain,
+                         const uint32_t bitrate )
+{
+    mp3_data_node_t *node;
+    int i;
+
+    xQueueReceive( idle, &node, portMAX_DELAY );
+
+    for( i = 0; i < pcm->length; i++ ) {
+        node->left[i] = ((int32_t) pcm->samples[0][i]) << 12;
+        node->right[i] = ((int32_t) pcm->samples[1][i]) << 12;
+    }
+
+    dsp_queue_data( node->left, node->right, pcm->length,
+                    bitrate, gain, &dsp_callback, node );
 }
