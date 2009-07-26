@@ -48,8 +48,6 @@ char const mad_build[] = ""
   "FPM_INTEL "
 # elif defined(FPM_ARM)
   "FPM_ARM "
-# elif defined(FPM_AVR32)
-  "FPM_AVR32 "
 # elif defined(FPM_MIPS)
   "FPM_MIPS "
 # elif defined(FPM_SPARC)

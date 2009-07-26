@@ -13,6 +13,7 @@
 #include <dsp/dsp.h>
 #include <media-interface/media-interface.h>
 #include <media-flac/media-flac.h>
+#include <media-mp3/media-mp3.h>
 
 #include "radio-interface.h"
 #include "playback.h"
@@ -64,6 +65,9 @@ int main( void )
     media_register_codec( mi_list, "flac", media_flac_command,
                           media_flac_play, media_flac_get_type,
                           media_flac_get_metadata );
+    media_register_codec( mi_list, "mp3", media_mp3_command,
+                          media_mp3_play, media_mp3_get_type,
+                          media_mp3_get_metadata );
 
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );

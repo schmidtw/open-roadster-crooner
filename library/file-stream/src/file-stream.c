@@ -206,14 +206,16 @@ void* fstream_get_buffer( const size_t wanted, size_t *got )
 void fstream_release_buffer( const size_t consumed )
 {
     _D1( "%s( %ld )\n", __func__, consumed );
-    if( consumed <= __big_buffer.valid_bytes ) {
+    if( 0 < consumed ) {
+        if( consumed <= __big_buffer.valid_bytes ) {
 
-        if( consumed < __big_buffer.valid_bytes ) {
-            memmove( __big_buffer.buffer, &__big_buffer.buffer[consumed],
-                     (__big_buffer.valid_bytes - consumed) );
+            if( consumed < __big_buffer.valid_bytes ) {
+                memmove( __big_buffer.buffer, &__big_buffer.buffer[consumed],
+                         (__big_buffer.valid_bytes - consumed) );
+            }
+
+            __big_buffer.valid_bytes -= consumed;
         }
-
-        __big_buffer.valid_bytes -= consumed;
     }
 
     _D2( "%s( %ld )\n", __func__, consumed );

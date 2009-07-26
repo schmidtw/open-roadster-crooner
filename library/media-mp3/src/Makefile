@@ -10,27 +10,19 @@ HEADERS = \
 SOURCES = \
     media-mp3.c \
     bit.c \
-    dct32_avr32.S \
-    decoder.c \
     fixed.c \
     frame.c \
     huffman.c \
-    imdct_avr32.S \
     layer12.c \
     layer3.c \
     stream.c \
     synth.c \
-    synth_avr32.S \
     timer.c \
     version.c
 
 CFLAGS = \
-    -DOPT_SSO \
-	-DOPT_STACK \
-	-DHAVE_LIMITS_H \
-	-DHAVE_ASSERT_H \
-	-DWORDS_BIGENDIAN \
-    -DFPM_AVR32
+    -DFPM_AVR32=1 \
+    -DHAVE_CONFIG_H=1
 
 OPTIMIZATIONS = -O3
 

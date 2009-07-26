@@ -142,9 +142,6 @@ media_status_t media_mp3_play( const char *filename,
 
     /* Decode song */
     rv = decode_song( idle, dsp_scale_factor, data );
-#if 0
-    rv = stream__process_file( &fc, idle, dsp_scale_factor );
-#endif
 
     (*free_fn)( data );
 
@@ -246,41 +243,32 @@ static media_status_t decode_song( xQueueHandle idle,
 
         if( 0 == bitrate ) {
             if( -1 == mad_header_decode(&data->frame.header, &stream) ) {
-                printf( "0x%08x\n", stream.error );
                 if( MAD_RECOVERABLE(stream.error) ) {
                     rv = MI_ERROR_DECODE_ERROR;
                     goto error;
                 }
             } else {
                 /* Got a header */
-                printf( "Got header: %d\n", data->frame.header.samplerate );
+                //printf( "Got header: %d\n", data->frame.header.samplerate );
                 bitrate = data->frame.header.samplerate;
             }
         }
 
-        printf( "%s:%d\n", __FILE__, __LINE__ );
         if( -1 == mad_frame_decode(&data->frame, &stream) ) {
-            printf( "0x%08x\n", stream.error );
             if( MAD_RECOVERABLE(stream.error) ) {
                 rv = MI_ERROR_DECODE_ERROR;
                 goto error;
             }
         }
-        printf( "%s:%d\n", __FILE__, __LINE__ );
 
         if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
 
-        printf( "%s:%d\n", __FILE__, __LINE__ );
         if( 0 < bitrate ) {
-            printf( "%s:%d\n", __FILE__, __LINE__ );
             mad_synth_frame( &data->synth, &data->frame );
-            printf( "%s:%d\n", __FILE__, __LINE__ );
 
             if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
 
-            printf( "%s:%d\n", __FILE__, __LINE__ );
             output_data( idle, &data->synth.pcm, gain, bitrate );
-            printf( "%s:%d\n", __FILE__, __LINE__ );
         }
     }
 
@@ -299,14 +287,19 @@ static media_status_t input_data( struct mad_stream *stream )
     size_t got;
     uint8_t *buffer;
     uint32_t get;
+    uint32_t consumed;
 
-    get = 1536;
+    consumed = stream->next_frame - stream->this_frame;
+
+    fstream_skip( consumed );
+
+    get = 3072;
 
     buffer = (uint8_t *) fstream_get_buffer( get, &got );
     if( 0 < got ) {
         mad_stream_buffer( stream, buffer, got );
     }
-    fstream_release_buffer( got );
+    fstream_release_buffer( 0 );
 
     if( 0 == got ) {
         return MI_ERROR_DECODE_ERROR;
@@ -328,8 +321,8 @@ static void output_data( xQueueHandle idle,
     xQueueReceive( idle, &node, portMAX_DELAY );
 
     for( i = 0; i < pcm->length; i++ ) {
-        node->left[i] = ((int32_t) pcm->samples[0][i]) << 12;
-        node->right[i] = ((int32_t) pcm->samples[1][i]) << 12;
+        node->left[i] = ((int32_t) pcm->samples[0][i]) << 1;
+        node->right[i] = ((int32_t) pcm->samples[1][i]) << 1;
     }
 
     dsp_queue_data( node->left, node->right, pcm->length,
