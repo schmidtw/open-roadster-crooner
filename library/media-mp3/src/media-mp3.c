@@ -30,6 +30,8 @@
 
 #include "media-mp3.h"
 
+#include "id3.h"
+
 #include "stream.h"
 #include "synth.h"
 #include "frame.h"
@@ -80,7 +82,9 @@ static void output_data( xQueueHandle idle,
 media_status_t media_mp3_command( const media_command_t cmd )
 {
     if( (MI_PLAY == cmd) || (MI_STOP == cmd) ) {
-        __cmd = cmd;
+        if( MI_STOP != __cmd ) {
+            __cmd = cmd;
+        }
         return MI_RETURN_OK;
     }
 
@@ -169,13 +173,11 @@ bool media_mp3_get_type( const char *filename )
 
         if( 3 < len ) {
             if( 0 == strcasecmp("mp3", &filename[len - 3]) ) {
-                printf( "Yes to: '%s'\n", filename );
                 return true;
             }
         }
     }
 
-    printf( "No to: '%s'\n", filename );
     return false;
 }
 
@@ -183,21 +185,57 @@ bool media_mp3_get_type( const char *filename )
 media_status_t media_mp3_get_metadata( const char *filename,
                                        media_metadata_t *metadata )
 {
-    static int32_t tn = 1;
+    media_status_t rv;
+    struct mp3entry entry;
+    FIL file;
 
-    metadata->track_number = tn++;
-    metadata->disc_number = 1;
-    strcpy( metadata->title, "Fake Title" );
-    strcpy( metadata->album, "Fake Album" );
-    strcpy( metadata->artist, "Fake Artist" );
+    rv = MI_RETURN_OK;
+
+    if( (NULL == filename) || (NULL == metadata) ) {
+        rv = MI_ERROR_PARAMETER;
+        goto error_0;
+    }
+
+    if( FR_OK != f_open(&file, filename, FA_READ|FA_OPEN_EXISTING) ) {
+        rv = MI_ERROR_PARAMETER;
+        goto error_0;
+    }
+
+    get_mp3_metadata( &file, &entry );
+
+    metadata->track_number = entry.tracknum;
+    metadata->disc_number = entry.discnum;
+
+    if( NULL != entry.title ) {
+        strncpy( metadata->title, entry.title, MEDIA_TITLE_LENGTH );
+    } else {
+        metadata->title[0] = '\0';
+    }
+    metadata->title[MEDIA_TITLE_LENGTH] = '\0';
+
+    if( NULL != entry.album ) {
+        strncpy( metadata->album, entry.album, MEDIA_ALBUM_LENGTH );
+    } else {
+        metadata->album[0] = '\0';
+    }
+    metadata->album[MEDIA_ALBUM_LENGTH] = '\0';
+
+    if( NULL != entry.artist ) {
+        strncpy( metadata->artist, entry.artist, MEDIA_ARTIST_LENGTH  );
+    } else {
+        metadata->artist[0] = '\0';
+    }
+    metadata->artist[MEDIA_ARTIST_LENGTH] = '\0';
+
+    /* Not supported for now. */
     metadata->reference_loudness = 0.0;
     metadata->track_gain = 0.0;
     metadata->track_peak = 0.0;
     metadata->album_gain = 0.0;
     metadata->album_peak = 0.0;
 
-    return MI_RETURN_OK;
-    //return MI_ERROR_INVALID_FORMAT;
+error_0:
+    return rv;
 }
 
 /*----------------------------------------------------------------------------*/

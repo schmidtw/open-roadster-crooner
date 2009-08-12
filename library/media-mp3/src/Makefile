@@ -18,7 +18,8 @@ SOURCES = \
     stream.c \
     synth.c \
     timer.c \
-    version.c
+    version.c \
+    id3.c
 
 CFLAGS = \
     -DFPM_AVR32=1 \
