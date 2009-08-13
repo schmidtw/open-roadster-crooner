@@ -60,6 +60,10 @@
 #include "list.h"
 #include "StackMacros.h"
 
+#if ( configUSE_NEWLIB_REENTRANT == 1 )
+    #include <sys/reent.h>
+#endif
+
 /*
  * Macro to define the amount of stack available to the idle task.
  */
@@ -77,6 +81,9 @@ typedef struct tskTaskControlBlock
 	unsigned portBASE_TYPE	uxPriority;			/*< The priority of the task where 0 is the lowest priority. */
 	portSTACK_TYPE			*pxStack;			/*< Points to the start of the stack. */
 	signed portCHAR			pcTaskName[ configMAX_TASK_NAME_LEN ];/*< Descriptive name given to the task when created.  Facilitates debugging only. */
+    #if ( configUSE_NEWLIB_REENTRANT == 1 )
+        struct _reent reent;
+    #endif
 
 	#if ( portSTACK_GROWTH > 0 )
 		portSTACK_TYPE *pxEndOfStack;			/*< Used for stack overflow checking on architectures where the stack grows up from low memory. */
@@ -1416,6 +1423,9 @@ void vTaskSwitchContext( void )
 	/* listGET_OWNER_OF_NEXT_ENTRY walks through the list, so the tasks of the
 	same priority get an equal share of the processor time. */
 	listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopReadyPriority ] ) );
+    #if ( configUSE_NEWLIB_REENTRANT == 1 )
+        _impure_ptr = &pxCurrentTCB->reent;
+    #endif
 
 	traceTASK_SWITCHED_IN();
 	vWriteTraceToBuffer();
@@ -1711,6 +1721,10 @@ static void prvInitialiseTCBVariables( tskTCB *pxTCB, const signed portCHAR * co
 		pxTCB->pxTaskTag = NULL;
 	}
 	#endif	
+
+    #if ( configUSE_NEWLIB_REENTRANT == 1 )
+        _REENT_INIT_PTR( (&(pxTCB->reent)) );
+    #endif
 }
 /*-----------------------------------------------------------*/
 
