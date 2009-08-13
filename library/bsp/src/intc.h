@@ -147,14 +147,6 @@ inline void enable_global_exceptions( void );
 inline bool are_global_exceptions_enabled( void );
 
 /**
- *  Used to initialize the interrupt handling code.  Must be called
- *  before any intc_register_isr calls are made.
- *
- *  @TODO Should this be made automatically?
- */
-void intc_init( void );
-
-/**
  *  Used to register an interrupt handler.
  *
  *  @note Lower priority interrupts may be interrupted by higher

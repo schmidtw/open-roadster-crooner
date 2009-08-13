@@ -9,6 +9,7 @@ CFLAGS = -DSTRICT_PARAMS=1
 HEADERS = \
     bsp_errors.h \
     delay.h \
+    cpu.h \
     gpio.h \
     pm.h \
     usart.h \
@@ -23,6 +24,7 @@ HEADERS = \
 
 SOURCES = \
     delay.c \
+    cpu.c \
     gpio.c \
     pm.c \
     usart.c \

@@ -33,10 +33,17 @@
 
 #include <bsp/boards/boards.h>
 #include <bsp/usart.h>
+#include <bsp/pdca.h>
 #include <bsp/intc.h>
 #include <bsp/pm.h>
+#include <bsp/cpu.h>
 
 #define SYSCALL_DEBUG
+
+static volatile bool __debug_sent;
+
+__attribute__((__interrupt__))
+static void __debug_tx_done( void );
 
 static void init_debug_usart( void )
 {
@@ -61,6 +68,14 @@ static void init_debug_usart( void )
         .periodic     = false,
         .cts_fn       = NULL
     };
+
+    enable_global_interrupts();
+
+    intc_register_isr( &__debug_tx_done,
+                       PDCA_GET_ISR_NAME(PDCA_CHANNEL_ID_DEBUG_TX),
+                       ISR_LEVEL__2 );
+
+    pdca_channel_init( PDCA_CHANNEL_ID_DEBUG_TX, DEBUG_TX_PDCA_PID, 8 );
 
     usart_init_rs232( DEBUG_USART, &debug_usart_options );
 }
@@ -112,6 +127,26 @@ int _file_read( int file, char *ptr, int len )
     return 0;
 }
 
+__attribute__((weak))
+void _debug_isr_tx_complete( void )
+{
+}
+
+__attribute__((weak))
+void _debug_block( void )
+{
+}
+
+__attribute__((weak))
+void _debug_lock( void )
+{
+}
+
+__attribute__((weak))
+void _debug_unlock( void )
+{
+}
+
 void _exit( int code )
 {
 #ifdef SYSCALL_DEBUG
@@ -140,12 +175,28 @@ int _read( int file, char *ptr, int len )
 int _write( int file, char *ptr, int len )
 {
     if( (1 == file) || (2 == file) ) {
-        int i;
+        if( (CEM__APPLICATION == cpu_get_mode()) &&
+            (true == are_global_interrupts_enabled()) )
+        {
+            _debug_lock();
+            __debug_sent = false;
 
-        for( i = 0; i < len; i++ ) {
-            while( false == usart_tx_ready(DEBUG_USART) ) { ; }
+            pdca_queue_buffer( PDCA_CHANNEL_ID_DEBUG_TX, ptr, len );
+            pdca_isr_enable( PDCA_CHANNEL_ID_DEBUG_TX, PDCA_ISR__TRANSFER_COMPLETE );
+            pdca_enable( PDCA_CHANNEL_ID_DEBUG_TX );
 
-            usart_write_char( DEBUG_USART, ptr[i] );
+            _debug_block();
+
+            while( false == __debug_sent ) { ; }
+
+            _debug_unlock();
+        } else {
+            int i;
+            for( i = 0; i < len; i++ ) {
+                while( false == usart_tx_ready(DEBUG_USART) ) { ; }
+
+                usart_write_char( DEBUG_USART, ptr[i] );
+            }
         }
 
         return len;
@@ -156,4 +207,13 @@ int _write( int file, char *ptr, int len )
     }
 
     return _file_write( file, ptr, len );
+}
+
+__attribute__((__interrupt__))
+static void __debug_tx_done( void )
+{
+    pdca_disable( PDCA_CHANNEL_ID_DEBUG_TX );
+    pdca_isr_disable( PDCA_CHANNEL_ID_DEBUG_TX, PDCA_ISR__TRANSFER_COMPLETE );
+    __debug_sent = true;
+    _debug_isr_tx_complete();
 }
