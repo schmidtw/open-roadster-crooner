@@ -234,6 +234,7 @@ media_status_t media_mp3_get_metadata( const char *filename,
     metadata->album_gain = 0.0;
     metadata->album_peak = 0.0;
 
+    f_close( &file );
 error_0:
     return rv;
 }
