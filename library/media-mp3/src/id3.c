@@ -37,7 +37,6 @@
 #include <stddef.h>
 #include <ctype.h>
 
-#include <util/xxd.h>
 #include <fatfs/ff.h>
 
 #include "metadata.h"
@@ -305,7 +304,6 @@ static int skip_unsynched(FIL *file, int len)
 /* parse numeric value from string */
 static int parsetracknum( struct mp3entry* entry, char* tag, int bufferpos )
 {
-    printf( "%s( '%s' )\n", __func__, tag );
     entry->tracknum = atoi( tag );
     return bufferpos;
 }
@@ -548,8 +546,6 @@ static int unicode_munge(char* string, char* utf8buf, int *len)
     switch (str[0]) {
         case 0x01: /* Unicode with or without BOM */
         case 0x02:
-            printf( "Danger area\n" );
-            xxd( str, *len );
             str++;
             (*len)--;
             *utf8 = 0;
@@ -558,16 +554,12 @@ static int unicode_munge(char* string, char* utf8buf, int *len)
 
         case 0x00: /* Type 0x00 is ordinary ISO 8859-1 */
         case 0x03: /* UTF-8 encoded string */
-            //printf( "UTF-8 or 8859-1\n" );
-            //xxd( str, *len );
             for(i=0; i < *len; i++)
                 utf8[i] = str[i+1];
             (*len)--;
             break;
 
         default: /* Plain old string */
-            //printf( "Plain old string\n" );
-            //xxd( str, *len );
             while( (*len)-- ) {
                 *utf8++ = *str++;
             }
