@@ -30,6 +30,7 @@
 #include <sys/times.h>
 #include <sys/stat.h>
 #include <sys/sysregs.h>
+#include <sys/reent.h>
 
 #include <bsp/boards/boards.h>
 #include <bsp/usart.h>
@@ -39,11 +40,14 @@
 #include <bsp/cpu.h>
 
 #define SYSCALL_DEBUG
+#define USE_INTERRUPT_DEBUG
 
 static volatile bool __debug_sent;
 
+#ifdef USE_INTERRUPT_DEBUG
 __attribute__((__interrupt__))
 static void __debug_tx_done( void );
+#endif
 
 static void init_debug_usart( void )
 {
@@ -69,6 +73,7 @@ static void init_debug_usart( void )
         .cts_fn       = NULL
     };
 
+#ifdef USE_INTERRUPT_DEBUG
     enable_global_interrupts();
 
     intc_register_isr( &__debug_tx_done,
@@ -76,6 +81,7 @@ static void init_debug_usart( void )
                        ISR_LEVEL__2 );
 
     pdca_channel_init( PDCA_CHANNEL_ID_DEBUG_TX, DEBUG_TX_PDCA_PID, 8 );
+#endif
 
     usart_init_rs232( DEBUG_USART, &debug_usart_options );
 }
@@ -147,7 +153,7 @@ void _debug_unlock( void )
 {
 }
 
-void _exit( int code )
+void _exit_r( struct _reent *reent, int code )
 {
 #ifdef SYSCALL_DEBUG
     /* Signal exit */
@@ -161,7 +167,7 @@ void _exit( int code )
     while( 1 ) { ; }
 }
 
-int _read( int file, char *ptr, int len )
+int _read_r( struct _reent *reent, int file, char *ptr, int len )
 {
     return _file_read( file, ptr, len );
 }
@@ -172,9 +178,10 @@ int _read( int file, char *ptr, int len )
  * data to correct location.
  * 1 and 2 is stdout and stderr which goes to usart
  */
-int _write( int file, char *ptr, int len )
+int _write_r( struct _reent *reent, int file, char *ptr, int len )
 {
     if( (1 == file) || (2 == file) ) {
+#ifdef USE_INTERRUPT_DEBUG
         if( (CEM__APPLICATION == cpu_get_mode()) &&
             (true == are_global_interrupts_enabled()) )
         {
@@ -190,7 +197,9 @@ int _write( int file, char *ptr, int len )
             while( false == __debug_sent ) { ; }
 
             _debug_unlock();
-        } else {
+        } else
+#endif
+        {
             int i;
             for( i = 0; i < len; i++ ) {
                 while( false == usart_tx_ready(DEBUG_USART) ) { ; }
@@ -198,7 +207,6 @@ int _write( int file, char *ptr, int len )
                 usart_write_char( DEBUG_USART, ptr[i] );
             }
         }
-
         return len;
     }
 
@@ -209,6 +217,7 @@ int _write( int file, char *ptr, int len )
     return _file_write( file, ptr, len );
 }
 
+#ifdef USE_INTERRUPT_DEBUG
 __attribute__((__interrupt__))
 static void __debug_tx_done( void )
 {
@@ -217,3 +226,4 @@ static void __debug_tx_done( void )
     __debug_sent = true;
     _debug_isr_tx_complete();
 }
+#endif
