@@ -748,7 +748,7 @@ portTickType xTaskGetTickCount( void );
 unsigned portBASE_TYPE uxTaskGetNumberOfTasks( void );
 
 
-#if ((1 == configUSE_TRACE_FACILITY) && (1 == INCLUDE_vTaskDelete) && (1 == INCLUDE_vTaskSuspend))
+#if (1 == configUSE_TRACE_FACILITY) 
 /**
  *  Lists all the current tasks, along with their current state and stack
  *  usage high water mark.

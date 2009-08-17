@@ -1135,7 +1135,7 @@ unsigned portBASE_TYPE uxTaskGetNumberOfTasks( void )
 }
 /*-----------------------------------------------------------*/
 
-#if ( ( configUSE_TRACE_FACILITY == 1 ) && ( INCLUDE_vTaskDelete == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) )
+#if ( configUSE_TRACE_FACILITY == 1 )
 
 	void vTaskList( signed portCHAR *pcWriteBuffer )
 	{
@@ -1174,15 +1174,20 @@ unsigned portBASE_TYPE uxTaskGetNumberOfTasks( void )
 				prvListTaskWithinSingleList( pcWriteBuffer, ( xList * ) pxOverflowDelayedTaskList, tskBLOCKED_CHAR );
 			}
 
+#if ( INCLUDE_vTaskDelete == 1 )
 			if( !listLIST_IS_EMPTY( &xTasksWaitingTermination ) )
 			{
 				prvListTaskWithinSingleList( pcWriteBuffer, ( xList * ) &xTasksWaitingTermination, tskDELETED_CHAR );
 			}
+#endif
 
+#if ( INCLUDE_vTaskSuspend == 1 )
 			if( !listLIST_IS_EMPTY( &xSuspendedTaskList ) )
 			{
 				prvListTaskWithinSingleList( pcWriteBuffer, ( xList * ) &xSuspendedTaskList, tskSUSPENDED_CHAR );
 			}
+#endif
+
 		}
         xTaskResumeAll();
 	}

@@ -25,19 +25,19 @@
 #define configUSE_CO_ROUTINES           0
 #define configMAX_CO_ROUTINE_PRIORITIES 0
 #define configKERNEL_INTERRUPT_PRIORITY 0
-#define configUSE_TRACE_FACILITY        0
+#define configUSE_TRACE_FACILITY        1
 #define configUSE_NEWLIB_REENTRANT      1
 
 /* Code inclusion optimizations */
-#define INCLUDE_vTaskPrioritySet            1
+#define INCLUDE_vTaskPrioritySet            0
 #define INCLUDE_uxTaskPriorityGet           0
 #define INCLUDE_vTaskDelete                 0
 #define INCLUDE_vTaskCleanUpResources       0
-#define INCLUDE_vTaskSuspend                1
+#define INCLUDE_vTaskSuspend                0
 #define INCLUDE_vTaskDelayUntil             0
 #define INCLUDE_vTaskDelay                  1
-#define INCLUDE_xTaskGetCurrentTaskHandle   1
+#define INCLUDE_xTaskGetCurrentTaskHandle   0
 #define INCLUDE_xTaskGetSchedulerState		0
-#define INCLUDE_xTaskResumeFromISR          1
+#define INCLUDE_xTaskResumeFromISR          0
 #define INCLUDE_uxTaskGetStackHighWaterMark 1
 #endif
