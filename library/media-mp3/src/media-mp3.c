@@ -201,6 +201,8 @@ media_status_t media_mp3_get_metadata( const char *filename,
         goto error_0;
     }
 
+    memset( &entry, 0, sizeof(entry) );
+
     get_mp3_metadata( &file, &entry );
 
     metadata->track_number = entry.tracknum;

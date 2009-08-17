@@ -41,7 +41,6 @@
 #include <fatfs/ff.h>
 
 #include "metadata.h"
-//#include "unicode.h"
 
 #define MIN(a,b)    ((a) < (b)) ? (a) : (b)
 #define MAX(a,b)    ((a) < (b)) ? (b) : (a)
@@ -901,10 +900,7 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
              * particular) be updated to handle the case of being called
              * multiple times, or should the "*ptag" check be removed?
              */
-            printf( "tag: '%.*s' =?= '%.*s' :header 0x%08x 0x%08x\n", tr->tag_length, tr->tag, tr->tag_length, header,
-            (unsigned int) ptag, ((NULL == ptag) ? 0 : (unsigned int) *ptag) );
             if( (!ptag || !*ptag) && !memcmp( header, tr->tag, tr->tag_length ) ) {
-                printf( "Found a match\n" );
 
                 /* found a tag matching one in tagList, and not yet filled */
                 tag = buffer + bufferpos;
