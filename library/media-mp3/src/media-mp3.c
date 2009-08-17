@@ -68,7 +68,6 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data );
 static media_status_t decode_song( xQueueHandle idle,
                                    const int32_t gain,
                                    mp3_data_t *data );
-static media_status_t input_data( struct mad_stream *stream );
 static void output_data( xQueueHandle idle,
                          const struct mad_pcm *pcm,
                          const int32_t gain,
@@ -249,7 +248,6 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data )
 {
     mp3_data_node_t *node = (mp3_data_node_t*) data;
 
-    //printf( "%s() : 0x%08x\n", __func__, node->idle );
     xQueueSendToBack( node->idle, &node, 0 );
 }
 
@@ -272,20 +270,31 @@ static media_status_t decode_song( xQueueHandle idle,
 
     rv = MI_RETURN_OK;
     while( MI_RETURN_OK == rv ) {
+        uint8_t *buffer;
+        size_t got;
+        uint32_t get;
 
         if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
 
-        rv = input_data( &stream );
-        if( MI_ERROR_DECODE_ERROR == rv ) {
+        get = 3072;
+
+        buffer = (uint8_t *) fstream_get_buffer( get, &got );
+        if( 0 == got ) {
+            rv = MI_ERROR_DECODE_ERROR;
+            fstream_release_buffer( 0 );
             goto error;
         }
+        if( get != got ) {
+            rv = MI_END_OF_SONG;
+        }
 
-        if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
+        mad_stream_buffer( &stream, buffer, got );
 
         if( 0 == bitrate ) {
             if( -1 == mad_header_decode(&data->frame.header, &stream) ) {
-                if( MAD_RECOVERABLE(stream.error) ) {
+                if( !MAD_RECOVERABLE(stream.error) ) {
                     rv = MI_ERROR_DECODE_ERROR;
+                    fstream_release_buffer( 0 );
                     goto error;
                 }
             } else {
@@ -296,21 +305,20 @@ static media_status_t decode_song( xQueueHandle idle,
         }
 
         if( -1 == mad_frame_decode(&data->frame, &stream) ) {
-            if( MAD_RECOVERABLE(stream.error) ) {
+            if( !MAD_RECOVERABLE(stream.error) ) {
                 rv = MI_ERROR_DECODE_ERROR;
+                fstream_release_buffer( 0 );
                 goto error;
             }
         }
 
-        if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
-
         if( 0 < bitrate ) {
             mad_synth_frame( &data->synth, &data->frame );
 
-            if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
-
             output_data( idle, &data->synth.pcm, gain, bitrate );
         }
+
+        fstream_release_buffer( stream.next_frame - stream.this_frame + stream.skiplen );
     }
 
 early_exit:
@@ -321,34 +329,6 @@ error:
     mad_stream_finish( &stream );
 
     return rv;
-}
-
-static media_status_t input_data( struct mad_stream *stream )
-{
-    size_t got;
-    uint8_t *buffer;
-    uint32_t get;
-    uint32_t consumed;
-
-    consumed = stream->next_frame - stream->this_frame;
-
-    fstream_skip( consumed );
-
-    get = 3072;
-
-    buffer = (uint8_t *) fstream_get_buffer( get, &got );
-    if( 0 < got ) {
-        mad_stream_buffer( stream, buffer, got );
-    }
-    fstream_release_buffer( 0 );
-
-    if( 0 == got ) {
-        return MI_ERROR_DECODE_ERROR;
-    }
-    if( get != got ) {
-        return MI_END_OF_SONG;
-    }
-    return MI_RETURN_OK;
 }
 
 static void output_data( xQueueHandle idle,
