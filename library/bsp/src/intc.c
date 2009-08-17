@@ -19,6 +19,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/reent.h>
 
 #include <avr32/io.h>
 
@@ -233,8 +234,13 @@ void __intc_init( void )
 __attribute__ ((__interrupt__))
 static void __unhandled_interrupt( void )
 {
-    printf( "\nunhandled interrupt\n" );
-    fflush( stdout );
+    struct _reent reent;
+
+    _REENT_INIT_PTR( (&(reent)) );
+    _impure_ptr = &reent;
+
+    fprintf( stderr, "\nunhandled interrupt\n" );
+    fflush( stderr );
     while( 1 ) { ; }
 }
 
@@ -294,41 +300,49 @@ void __bsp_exception_handler( uint32_t exception_cause, uint32_t return_address 
 {
     uint32_t bear = __builtin_mfsr( AVR32_BEAR );
 
-    printf( "\nException: " );
+    struct _reent reent;
+
+    _REENT_INIT_PTR( (&(reent)) );
+    _impure_ptr = &reent;
+
+    fprintf( stderr, "\nException: " );
     switch( exception_cause ) {
-        case 0x00: printf( "Unrecoverable exception\n" );               break;
-        case 0x04: printf( "TLB multiple hit\n" );                      break;
-        case 0x08: printf( "Bus error data fetch 0x%08lx\n", bear );    break;
-        case 0x0c: printf( "Bus error instruction fetch\n" );           break;
-        case 0x10: printf( "Non maskible interrupt\n" );                break;
-        case 0x14: printf( "Instruction address\n" );                   break;
-        case 0x18: printf( "ITLB protection\n" );                       break;
-        case 0x1c: printf( "Breakpoint\n" );                            break;
-        case 0x20: printf( "Illegal opcode\n" );                        break;
-        case 0x24: printf( "Unimplemented instruction\n" );             break;
-        case 0x28: printf( "Privilege violation\n" );                   break;
-        case 0x2c: printf( "Floating point\n" );                        break;
-        case 0x30: printf( "Copressor absent\n" );                      break;
-        case 0x34: printf( "Data address (read)\n" );                   break;
-        case 0x38: printf( "Data address (write)\n" );                  break;
-        case 0x3c: printf( "DTLB protection (read)\n" );                break;
-        case 0x40: printf( "DTLB protection (write)\n" );               break;
-        case 0x44: printf( "DTLB modified\n" );                         break;
-        case 0x50: printf( "ITLB miss\n" );                             break;
-        case 0x60: printf( "DTLB miss (read)\n" );                      break;
-        case 0x70: printf( "DTLB miss (write)\n" );                     break;
-        default:   printf( "Unknown '0x%08lx'\n", exception_cause );    break;
+        case 0x00: fprintf( stderr, "Unrecoverable exception\n" );               break;
+        case 0x04: fprintf( stderr, "TLB multiple hit\n" );                      break;
+        case 0x08: fprintf( stderr, "Bus error data fetch 0x%08lx\n", bear );    break;
+        case 0x0c: fprintf( stderr, "Bus error instruction fetch\n" );           break;
+        case 0x10: fprintf( stderr, "Non maskible interrupt\n" );                break;
+        case 0x14: fprintf( stderr, "Instruction address\n" );                   break;
+        case 0x18: fprintf( stderr, "ITLB protection\n" );                       break;
+        case 0x1c: fprintf( stderr, "Breakpoint\n" );                            break;
+        case 0x20: fprintf( stderr, "Illegal opcode\n" );                        break;
+        case 0x24: fprintf( stderr, "Unimplemented instruction\n" );             break;
+        case 0x28: fprintf( stderr, "Privilege violation\n" );                   break;
+        case 0x2c: fprintf( stderr, "Floating point\n" );                        break;
+        case 0x30: fprintf( stderr, "Copressor absent\n" );                      break;
+        case 0x34: fprintf( stderr, "Data address (read)\n" );                   break;
+        case 0x38: fprintf( stderr, "Data address (write)\n" );                  break;
+        case 0x3c: fprintf( stderr, "DTLB protection (read)\n" );                break;
+        case 0x40: fprintf( stderr, "DTLB protection (write)\n" );               break;
+        case 0x44: fprintf( stderr, "DTLB modified\n" );                         break;
+        case 0x50: fprintf( stderr, "ITLB miss\n" );                             break;
+        case 0x60: fprintf( stderr, "DTLB miss (read)\n" );                      break;
+        case 0x70: fprintf( stderr, "DTLB miss (write)\n" );                     break;
+        default:   fprintf( stderr, "Unknown '0x%08lx'\n", exception_cause );    break;
     }
 
     switch( exception_cause ) {
         case 0x08:
         case 0x0c:
         case 0x10:
-            printf( "First non-issued instruction: 0x%08lx\n", return_address );
+            fprintf( stderr, "First non-issued instruction: 0x%08lx\n", return_address );
             break;
 
         default:
-            printf( "Offending instruction: 0x%08lx\n", return_address );
+            fprintf( stderr, "Offending instruction: 0x%08lx\n", return_address );
     }
+    fflush( stderr );
     fflush( stdout );
+
+    while( 1 ) { ; }
 }
