@@ -33,7 +33,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define DSP_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE + 1000)
+#define DSP_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE)
 #define DSP_OUT_MSG_MAX     10
 #define DSP_IN_MSG_MAX      10
 #define DSP_BUFFER_SIZE     441

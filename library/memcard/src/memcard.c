@@ -46,7 +46,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE + 1400)
+#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE)
 #define AUTOMOUNT_PRIORITY      (tskIDLE_PRIORITY+1)
 #define AUTOMOUNT_CALLBACK_MAX  3
 
@@ -255,7 +255,7 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
     pdca_channel_init( PDCA_CHANNEL_ID_MC_RX, MC_PDCA_RX_PERIPHERAL_ID, 8 );
     pdca_channel_init( PDCA_CHANNEL_ID_MC_TX, MC_PDCA_TX_PERIPHERAL_ID, 8 );
 
-    xTaskCreate( __automount_task, (signed portCHAR *) "AMNT",
+    xTaskCreate( __automount_task, (signed portCHAR *) "Auto Mnt",
                  AUTOMOUNT_STACK_SIZE, NULL, AUTOMOUNT_PRIORITY, NULL );
 
     return MC_RETURN_OK;

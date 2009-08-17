@@ -29,7 +29,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define FSTREAM_TASK_STACK_SIZE         (configMINIMAL_STACK_SIZE + 400)
+#define FSTREAM_TASK_STACK_SIZE         (configMINIMAL_STACK_SIZE)
 #define FSTREAM_BIG_BUFFER_SIZE         (32*1024)
 #define FSTREAM_TOTAL_BUFFER_SIZE       (128*1024)
 #define FSTREAM_SMALL_BUFFER_SIZE       512
@@ -129,7 +129,7 @@ bool fstream_init( const uint32_t priority,
         xQueueSendToBack( __idle, &n, 0 );
     }
 
-    xTaskCreate( __task, (signed portCHAR *) "FSTR",
+    xTaskCreate( __task, (signed portCHAR *) "FileStrm",
                  FSTREAM_TASK_STACK_SIZE, NULL, priority,
                  NULL );
 

@@ -160,7 +160,7 @@ void ibus_physical_init( void )
 
     usart_init_rs232( IBUS_USART, &ibus_options );
 
-    xTaskCreate( __tx_task, (signed portCHAR *) "IPTX",
+    xTaskCreate( __tx_task, (signed portCHAR *) "iBusPTX",
                  TX_TASK_STACK_SIZE, NULL, TX_TASK_PRIORITY, NULL );
     return;
 
