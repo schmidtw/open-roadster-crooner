@@ -345,8 +345,6 @@ static void __tx_msg_sent( void )
 {
     portBASE_TYPE ignore;
 
-    _D2( "%s()\n", __func__ );
-
     pdca_disable( PDCA_CHANNEL_ID_IBUS_TX );
     pdca_isr_disable( PDCA_CHANNEL_ID_IBUS_TX, PDCA_ISR__TRANSFER_COMPLETE );
 
