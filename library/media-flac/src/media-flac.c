@@ -1022,6 +1022,5 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data )
 {
     flac_data_node_t *node = (flac_data_node_t*) data;
 
-    //printf( "%s() : 0x%08x\n", __func__, node->idle );
     xQueueSendToBack( node->idle, &node, 0 );
 }
