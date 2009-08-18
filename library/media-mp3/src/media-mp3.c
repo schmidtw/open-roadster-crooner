@@ -272,13 +272,10 @@ static media_status_t decode_song( xQueueHandle idle,
                                    mp3_data_t *data )
 {
     media_status_t rv;
-    uint32_t bitrate;
 
     struct mad_stream stream;   /* sizeof() = 64 */
     //struct mad_frame *frame;    /* sizeof() = 9268 */
     //struct mad_synth *synth;    /* sizeof() = 8716 */
-
-    bitrate = 0;
 
     mad_stream_init( &stream );
     mad_frame_init( &data->frame );
@@ -306,20 +303,6 @@ static media_status_t decode_song( xQueueHandle idle,
 
         mad_stream_buffer( &stream, buffer, got );
 
-        if( 0 == bitrate ) {
-            if( -1 == mad_header_decode(&data->frame.header, &stream) ) {
-                if( !MAD_RECOVERABLE(stream.error) ) {
-                    rv = MI_ERROR_DECODE_ERROR;
-                    fstream_release_buffer( 0 );
-                    goto error;
-                }
-            } else {
-                /* Got a header */
-                //printf( "Got header: %d\n", data->frame.header.samplerate );
-                bitrate = data->frame.header.samplerate;
-            }
-        }
-
         if( -1 == mad_frame_decode(&data->frame, &stream) ) {
             if( !MAD_RECOVERABLE(stream.error) ) {
                 rv = MI_ERROR_DECODE_ERROR;
@@ -327,11 +310,10 @@ static media_status_t decode_song( xQueueHandle idle,
                 goto error;
             }
         } else {
-            if( 0 < bitrate ) {
-                mad_synth_frame( &data->synth, &data->frame );
+            mad_synth_frame( &data->synth, &data->frame );
 
-                rv = output_data( idle, &data->synth.pcm, gain, bitrate );
-            }
+            rv = output_data( idle, &data->synth.pcm, gain,
+                              data->frame.header.samplerate );
         }
 
         if( stream.next_frame == stream.this_frame ) {
@@ -370,10 +352,6 @@ static media_status_t output_data( xQueueHandle idle,
     status = dsp_queue_data( node->left, node->right, pcm->length,
                              bitrate, gain, &dsp_callback, node );
     if( DSP_RETURN_OK != status ) {
-#if 0
-        printf( "Failed to accept data: 0x%08x dsp_queue_data( %p, %p, %d, %lu %ld, %p, %p )\n", status,
-                node->left, node->right, pcm->length, bitrate, gain, &dsp_callback, node );
-#endif
         xQueueSendToBack( idle, &node, 0 );
         return MI_ERROR_DECODE_ERROR;
     }
