@@ -53,6 +53,7 @@
 typedef struct {
     int16_t samples[DSP_BUFFER_SIZE * 2];
     size_t used;
+    uint32_t bitrate;
     bool silence;
 } dsp_output_t;
 
@@ -81,8 +82,10 @@ static xQueueHandle __input_queued;
 static dsp_input_t __input[DSP_IN_MSG_MAX];
 
 static const dsp_output_t __silence[DSP_SILENCE_MSG_MAX] = {
-    { .used = DSP_BUFFER_SIZE, .silence = true },
-    { .used = DSP_BUFFER_SIZE, .silence = true } };
+    { .used = DSP_BUFFER_SIZE, .silence = true, .bitrate = 0 },
+    { .used = DSP_BUFFER_SIZE, .silence = true, .bitrate = 0 } };
+
+static volatile uint32_t __bitrate;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -112,6 +115,8 @@ dsp_status_t dsp_init( const uint32_t priority )
 {
     portBASE_TYPE status;
     int32_t i;
+
+    __bitrate = 44100;
 
     __output_idle = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
     if( NULL == __output_idle ) {
@@ -151,7 +156,7 @@ dsp_status_t dsp_init( const uint32_t priority )
     }
 
     for( i = 0; i < DSP_SILENCE_MSG_MAX; i++ ) {
-        dsp_output_t *out = &__silence[i];
+        const dsp_output_t *out = &__silence[i];
         xQueueSendToBack( __output_idle_silence, &out, 0 );
     }
 
@@ -230,7 +235,7 @@ static void __dsp_task( void *params )
 {
     dsp_output_t *out;
 
-    dac_set_sample_rate( 44100 );
+    dac_set_sample_rate( __bitrate );
 
     out = NULL;
 
@@ -294,6 +299,8 @@ void isr_puts( const char *s )
 __attribute__ ((__interrupt__))
 static void __dac_buffer_complete( void )
 {
+    static bool bitrate_change = false;
+    static uint32_t new_bitrate = 0;
     dsp_output_t *out;
     portBASE_TYPE status;
     portBASE_TYPE ignore;
@@ -312,33 +319,64 @@ static void __dac_buffer_complete( void )
         }
     }
 
-    for( i = 0; i < 2; i++ ) {
-        xQueueHandle current;
-        if( 0 == i ) {
-            current = __output_queued;
-        } else {
-            current = __output_idle_silence;
-        }
+    if( false == bitrate_change ) {
+        /* Look at the first message in the queue to see if the bitrate changes. */
+        status = xQueueReceiveFromISR( __output_queued, &out, &ignore );
+        if( pdTRUE == status ) {
+            xQueueSendToFrontFromISR( __output_queued, &out, &ignore );
 
-        while( (pdFALSE == xQueueIsQueueFullFromISR(__output_active)) &&
-               (pdFALSE == xQueueIsQueueEmptyFromISR(current)) )
-        {
-            /* Queue the next pending buffer for playback. */
-            status = xQueueReceiveFromISR( current, &out, &ignore );
-            if( pdTRUE == status ) {
-                bsp_status_t queue_status;
-                /* This can't fail because one of the two buffers just
-                 * became available the only other failure is parameter error. */
-                queue_status = pdca_queue_buffer( PDCA_CHANNEL_ID_DAC,
-                                                  out->samples, out->used << 2 );
-
-                if( BSP_RETURN_OK == queue_status ) {
+            if( __bitrate != out->bitrate ) {
+                bitrate_change = true;
+                new_bitrate = out->bitrate;
+                status = xQueueReceiveFromISR( __output_idle_silence, &out, &ignore );
+                if( pdTRUE == status ) {
                     xQueueSendToBackFromISR( __output_active, &out, &ignore );
-                } else {
-                    isr_puts( "Bad pdca_queue_buffer() return value\n" );
-                    xQueueSendToFrontFromISR( current, &out, &ignore );
                 }
             }
+        }
+
+        /* Put the next audio clip into the playback system or add
+         * silence. */
+        for( i = 0; i < 2; i++ ) {
+            xQueueHandle current;
+            if( 0 == i ) {
+                current = __output_queued;
+            } else {
+                current = __output_idle_silence;
+            }
+
+            while( (pdFALSE == xQueueIsQueueFullFromISR(__output_active)) &&
+                   (pdFALSE == xQueueIsQueueEmptyFromISR(current)) )
+            {
+                /* Queue the next pending buffer for playback. */
+                status = xQueueReceiveFromISR( current, &out, &ignore );
+                if( pdTRUE == status ) {
+                    bsp_status_t queue_status;
+                    /* This can't fail because one of the two buffers just
+                     * became available the only other failure is parameter error. */
+                    queue_status = pdca_queue_buffer( PDCA_CHANNEL_ID_DAC,
+                                                      out->samples, out->used << 2 );
+
+                    if( BSP_RETURN_OK == queue_status ) {
+                        xQueueSendToBackFromISR( __output_active, &out, &ignore );
+                    } else {
+                        isr_puts( "Bad pdca_queue_buffer() return value\n" );
+                        xQueueSendToFrontFromISR( current, &out, &ignore );
+                    }
+                }
+            }
+        }
+    } else {
+        /* If we are in the bitrate change mode, change the bitrate and
+         * queue the next silent audio clip. */
+        __bitrate = new_bitrate;
+        dac_set_sample_rate( __bitrate );
+        bitrate_change = false;
+        new_bitrate = 0;
+
+        status = xQueueReceiveFromISR( __output_idle_silence, &out, &ignore );
+        if( pdTRUE == status ) {
+            xQueueSendToBackFromISR( __output_active, &out, &ignore );
         }
     }
 
@@ -375,6 +413,7 @@ static void __process_samples( dsp_input_t *in, dsp_output_t *out )
 
     in->offset += process_size;
     out->used += process_size;
+    out->bitrate = in->bitrate;
 }
 
 /**

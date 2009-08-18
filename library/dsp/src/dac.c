@@ -38,12 +38,32 @@
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
-/* none */
+typedef struct {
+    const uint32_t bitrate;
+    const uint32_t mult;
+    const uint32_t div;
+    const bool divide_by_two;
+    const uint32_t gcctrl_div;
+} bitrate_map_t;
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
 /* none */
+static const bitrate_map_t bitrate_map[] = {
+#if ((BOARD == CROONER_1_0) || (BOARD == CROONER_2_0))
+    { .bitrate = 44100, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 7  },
+    { .bitrate = 22050, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 15 },
+    { .bitrate = 11025, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 31 },
+
+    { .bitrate = 48000, .mult = 7,  .div = 1, .divide_by_two = false, .gcctrl_div = 3  },
+    { .bitrate = 32000, .mult = 10, .div = 1, .divide_by_two = false, .gcctrl_div = 7  },
+    { .bitrate = 24000, .mult = 7,  .div = 1, .divide_by_two = false, .gcctrl_div = 7  },
+    { .bitrate = 12000, .mult = 7,  .div = 1, .divide_by_two = false, .gcctrl_div = 9  },
+    { .bitrate =  8000, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 43 },
+#endif
+    { .bitrate =     0, .mult = 0,  .div = 0, .divide_by_two = false, .gcctrl_div = 0  }
+};
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -117,47 +137,38 @@ void dac_stop( void )
 /* See dac.h for details. */
 dsp_status_t dac_set_sample_rate( const uint32_t rate )
 {
-    switch( rate ) {
-#if ((BOARD == CROONER_1_0) || (BOARD == CROONER_2_0))
-        case 44100:
-        case 22050:
-        case 11025:
-            pm_enable_pll( PM__PLL1, PM__OSC0, 14, 1, false, 16 );
-            if( 44100 == rate ) {
-                AVR32_PM.GCCTRL[5].div = 7;
-            } else if( 22050 == rate ) {
-                AVR32_PM.GCCTRL[5].div = 15;
-            } else if( 11025 == rate ) {
-                AVR32_PM.GCCTRL[5].div = 31;
-            }
+    int i;
+
+    for( i = 0; i < sizeof(bitrate_map)/sizeof(bitrate_map_t) - 1; i++ ) {
+        if( rate == bitrate_map[i].bitrate ) {
+            pm_enable_pll( PM__PLL1, PM__OSC0, bitrate_map[i].mult,
+                           bitrate_map[i].div, bitrate_map[i].divide_by_two,
+                           16 );
+            AVR32_PM.GCCTRL[5].div = bitrate_map[i].gcctrl_div;
             AVR32_PM.GCCTRL[5].diven = 1;
             AVR32_PM.GCCTRL[5].pllsel = 1;
             AVR32_PM.GCCTRL[5].oscsel = 1;
             AVR32_PM.GCCTRL[5].cen = 1;
-            break;
-#endif
-        default:
-            return DSP_UNSUPPORTED_BITRATE;
+
+            return DSP_RETURN_OK;
+        }
     }
 
-    return DSP_RETURN_OK;
+    return DSP_UNSUPPORTED_BITRATE;
 }
 
 /* See dac.h for details. */
 bool dac_is_supported_bitrate( const uint32_t rate )
 {
-    switch( rate ) {
-#if ((BOARD == CROONER_1_0) || (BOARD == CROONER_2_0))
-        case 44100:
-        case 22050:
-        case 11025:
-            break;
-#endif
-        default:
-            return false;
+    int i;
+
+    for( i = 0; i < sizeof(bitrate_map)/sizeof(bitrate_map_t) - 1; i++ ) {
+        if( rate == bitrate_map[i].bitrate ) {
+            return true;
+        }
     }
 
-    return true;
+    return false;
 }
 
 /*----------------------------------------------------------------------------*/
