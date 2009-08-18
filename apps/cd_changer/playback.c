@@ -28,7 +28,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define PB_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 5000)
+#define PB_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 4096)
 #define PB_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define DIR_MAP_SIZE        6
 #define IDLE_QUEUE_SIZE     10
@@ -69,7 +69,7 @@ void playback_init( void )
     vSemaphoreCreateBinary( __card_mounted );
     xSemaphoreTake( __card_mounted, 0 );
 
-    xTaskCreate( __pb_task, ( signed portCHAR *) "PLYB",
+    xTaskCreate( __pb_task, ( signed portCHAR *) "Playbck",
                  PB_TASK_STACK_SIZE, NULL, PB_TASK_PRIORITY, NULL );
 }
 
@@ -215,10 +215,12 @@ static void __pb_task( void *params )
                     }
 
                     play_fn = __current_song->play_fn;
+                    printf( "Playing song '%s' 0x%08x\n", __current_song->title, play_fn );
                     ms = (*play_fn)( (const char*) __current_song->file_location,
                                      __current_song->track_gain,
                                      __current_song->track_peak,
                                      __idle, IDLE_QUEUE_SIZE, &malloc, &free );
+                    printf( "Played song\n" );
 
                     if( MI_STOPPED_BY_REQUEST != ms ) {
                         db_status_t rv;

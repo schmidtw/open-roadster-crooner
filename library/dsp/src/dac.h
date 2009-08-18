@@ -27,11 +27,9 @@
  *  Used to initialize the DAC hardware.
  *
  *  @param complete_isr the isr function to call when a buffer is completed
- *  @param underrun_isr the isr function to call when there is an underrun
  *  @param swap_channels if true, the L & R audio channels are swapped
  */
 void dac_init( void (*complete_isr)(void),
-               void (*underrun_isr)(void),
                const bool swap_channels );
 
 /**
@@ -70,9 +68,4 @@ dsp_status_t dac_set_sample_rate( const uint32_t rate );
  *  @return true if supported, false otherwise
  */
 bool dac_is_supported_bitrate( const uint32_t rate );
-
-/**
- *  Used to clear the underrun ISR flag.
- */
-void dac_clear_underrun( void );
 #endif

@@ -55,7 +55,6 @@
 /*----------------------------------------------------------------------------*/
 /* See dac.h for details. */
 void dac_init( void (*complete_isr)(void),
-               void (*underrun_isr)(void),
                const bool swap_channels )
 {
     /* Reset all settings. */
@@ -65,14 +64,10 @@ void dac_init( void (*complete_isr)(void),
 
     pdca_channel_init( PDCA_CHANNEL_ID_DAC, AVR32_PDCA_PID_ABDAC_TX, 32 );
 
-    /* Enable the underrun counter ISR */
-    AVR32_ABDAC.IER.underrun = 1;
-    intc_register_isr( underrun_isr, AUDIO_DAC_ISR, ISR_LEVEL__2 );
-
     /* Enable the transfer ISR settings. */
     intc_register_isr( complete_isr, DAC_PDCA_ISR, ISR_LEVEL__2 );
 
-        /* Setup the mute functionality */
+    /* Setup the mute functionality */
     gpio_set_options( AUDIO_DAC_MUTE_PIN,
                       GPIO_DIRECTION__OUTPUT,
                       GPIO_PULL_UP__ENABLE,
@@ -163,14 +158,6 @@ bool dac_is_supported_bitrate( const uint32_t rate )
     }
 
     return true;
-}
-
-/* See dac.h for details. */
-void dac_clear_underrun( void )
-{
-    AVR32_ABDAC.isr;
-
-    AVR32_ABDAC.ICR.underrun = 1;
 }
 
 /*----------------------------------------------------------------------------*/

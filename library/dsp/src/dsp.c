@@ -25,6 +25,9 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 
+#include <bsp/boards/boards.h>
+#include <bsp/usart.h>
+
 #include <bsp/pdca.h>
 
 #include "dsp.h"
@@ -34,9 +37,10 @@
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
 #define DSP_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE)
-#define DSP_OUT_MSG_MAX     10
+#define DSP_OUT_MSG_MAX     20
 #define DSP_IN_MSG_MAX      10
 #define DSP_BUFFER_SIZE     441
+#define DSP_SILENCE_MSG_MAX 2
 
 #define GAIN_SCALE      8
 #define OUTPUT_SCALE    13
@@ -49,7 +53,7 @@
 typedef struct {
     int16_t samples[DSP_BUFFER_SIZE * 2];
     size_t used;
-    bool signal_played;
+    bool silence;
 } dsp_output_t;
 
 typedef struct {
@@ -66,26 +70,25 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xSemaphoreHandle __signal_played;
-
 static xQueueHandle __output_idle;
 static xQueueHandle __output_active;
 static xQueueHandle __output_queued;
+static xQueueHandle __output_idle_silence;
 static dsp_output_t __output[DSP_OUT_MSG_MAX];
 
 static xQueueHandle __input_idle;
 static xQueueHandle __input_queued;
 static dsp_input_t __input[DSP_IN_MSG_MAX];
 
-static volatile uint32_t __dac_underflow_count;
+static const dsp_output_t __silence[DSP_SILENCE_MSG_MAX] = {
+    { .used = DSP_BUFFER_SIZE, .silence = true },
+    { .used = DSP_BUFFER_SIZE, .silence = true } };
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static void __dsp_task( void *params );
-static void __queue_silence( void );
 __attribute__ ((__interrupt__)) static void __dac_buffer_complete( void );
-__attribute__ ((__interrupt__)) static void __dac_underrun( void );
 static void __process_samples( dsp_input_t *in, dsp_output_t *out );
 static int32_t __convert_gain( const double gain );
 static void __mono_to_stereo_out( const int32_t *in, int16_t *out,
@@ -110,12 +113,12 @@ dsp_status_t dsp_init( const uint32_t priority )
     portBASE_TYPE status;
     int32_t i;
 
-    __dac_underflow_count = 0;
-
-    vSemaphoreCreateBinary( __signal_played );
-
     __output_idle = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
     if( NULL == __output_idle ) {
+        goto failure_0;
+    }
+    __output_idle_silence = xQueueCreate( DSP_SILENCE_MSG_MAX, sizeof(dsp_output_t*) );
+    if( NULL == __output_idle_silence ) {
         goto failure_0;
     }
     __output_active = xQueueCreate( 2, sizeof(dsp_output_t*) );
@@ -138,12 +141,18 @@ dsp_status_t dsp_init( const uint32_t priority )
 
     for( i = 0; i < DSP_OUT_MSG_MAX; i++ ) {
         dsp_output_t *out = &__output[i];
+        out->silence = false;
         xQueueSendToBack( __output_idle, &out, 0 );
     }
 
     for( i = 0; i < DSP_IN_MSG_MAX; i++ ) {
         dsp_input_t *in = &__input[i];
         xQueueSendToBack( __input_idle, &in, 0 );
+    }
+
+    for( i = 0; i < DSP_SILENCE_MSG_MAX; i++ ) {
+        dsp_output_t *out = &__silence[i];
+        xQueueSendToBack( __output_idle_silence, &out, 0 );
     }
 
     status = xTaskCreate( __dsp_task, ( signed portCHAR *) "DSP ",
@@ -153,7 +162,7 @@ dsp_status_t dsp_init( const uint32_t priority )
         goto failure_5;
     }
 
-    dac_init( &__dac_buffer_complete, &__dac_underrun, false );
+    dac_init( &__dac_buffer_complete, false );
 
     return DSP_RETURN_OK;
 
@@ -220,24 +229,9 @@ void dsp_data_complete( dsp_buffer_return_fct cb,
 static void __dsp_task( void *params )
 {
     dsp_output_t *out;
-    bool playing_music;
 
     dac_set_sample_rate( 44100 );
 
-    /* We're always playing - queue a bunch of silence */
-    __queue_silence();
-
-    /* Move the two active playing data samples to the active list
-     * and add them to the DMA controller list. */
-    xQueueReceive( __output_queued, &out, 0 );
-    xQueueSendToBack( __output_active, &out, 0 );
-    pdca_queue_buffer( PDCA_CHANNEL_ID_DAC, out->samples, out->used << 2 );
-
-    xQueueReceive( __output_queued, &out, 0 );
-    xQueueSendToBack( __output_active, &out, 0 );
-    pdca_queue_buffer( PDCA_CHANNEL_ID_DAC, out->samples, out->used << 2 );
-
-    playing_music = false;
     out = NULL;
 
     /* Start playing. */
@@ -246,7 +240,7 @@ static void __dsp_task( void *params )
     while( 1 ) {
         dsp_input_t *in;
 
-        if( pdTRUE == xQueueReceive( __input_queued, &in, TASK_DELAY_MS(2)) ) {
+        if( pdTRUE == xQueueReceive( __input_queued, &in, portMAX_DELAY) ) {
 
             if( 0 == in->count ) {
                 /* No more data - play silence. */
@@ -254,19 +248,15 @@ static void __dsp_task( void *params )
                     memset( &out->samples[out->used*2], 0,
                             (sizeof(int16_t)*2*(DSP_BUFFER_SIZE - out->used)) );
                     out->used = DSP_BUFFER_SIZE;
-                    out->signal_played = false;
                     in->offset = 0;
                     xQueueSendToBack( __output_queued, &out, portMAX_DELAY );
                     out = NULL;
                 }
-                playing_music = false;
-                __queue_silence();
             } else {
                 while( in->offset < in->count ) {
                     if( NULL == out ) {
                         xQueueReceive( __output_idle, &out, portMAX_DELAY );
                         out->used = 0;
-                        out->signal_played = false;
                     }
 
                     __process_samples( in, out );
@@ -276,7 +266,6 @@ static void __dsp_task( void *params )
                         out = NULL;
                     }
                 }
-                playing_music = true;
             }
 
             /* We're done - send the buffer back & re-queue the message. */
@@ -284,25 +273,17 @@ static void __dsp_task( void *params )
                 (*in->cb)( in->left, in->right, in->data );
             }
             xQueueSendToBack( __input_idle, &in, portMAX_DELAY );
-        } else {
-            if( false == playing_music ) {
-                /* No new samples - play silence */
-                __queue_silence();
-            }
         }
     }
 }
 
-static void __queue_silence( void )
+void isr_puts( const char *s )
 {
-    dsp_output_t *out;
+    int i;
+    for( i = 0; 0 != s[i]; i++ ) {
+        while( false == usart_tx_ready(DEBUG_USART) ) { ; }
 
-    /* We're always playing - queue a bunch of silence */
-    while( pdTRUE == xQueueReceive(__output_idle, &out, 0) ) {
-        memset( out->samples, 0, sizeof(int16_t)*2*DSP_BUFFER_SIZE );
-        out->used = DSP_BUFFER_SIZE;
-        out->signal_played = false;
-        xQueueSendToBack( __output_queued, &out, portMAX_DELAY );
+        usart_write_char( DEBUG_USART, s[i] );
     }
 }
 
@@ -313,56 +294,61 @@ static void __queue_silence( void )
 __attribute__ ((__interrupt__))
 static void __dac_buffer_complete( void )
 {
-    bool disable_dac;
     dsp_output_t *out;
     portBASE_TYPE status;
     portBASE_TYPE ignore;
 
-    disable_dac = true;
+    int i;
+
+    //isr_puts( "__dac_buffer_complete()\n" );
 
     /* Move the transferred message to the idle queue. */
     status = xQueueReceiveFromISR( __output_active, &out, &ignore );
     if( pdTRUE == status ) {
-        xQueueSendToBackFromISR( __output_idle, &out, &ignore );
-
-        if( out->signal_played ) {
-            xSemaphoreGiveFromISR( __signal_played, &ignore );
-        }
-        disable_dac = false;
-    }
-
-    while( (pdFALSE == xQueueIsQueueFullFromISR(__output_active)) &&
-           (pdFALSE == xQueueIsQueueEmptyFromISR(__output_queued)) )
-    {
-        /* Queue the next pending buffer for playback. */
-        status = xQueueReceiveFromISR( __output_queued, &out, &ignore );
-        if( pdTRUE == status ) {
-            /* This can't fail because one of the two buffers just
-             * became available the only other failure is parameter error. */
-            pdca_queue_buffer( PDCA_CHANNEL_ID_DAC, out->samples, out->used << 2 );
-
-            xQueueSendToBackFromISR( __output_active, &out, &ignore );
-
-            disable_dac = false;
+        if( true == out->silence ) {
+            xQueueSendToBackFromISR( __output_idle_silence, &out, &ignore );
+        } else {
+            xQueueSendToBackFromISR( __output_idle, &out, &ignore );
         }
     }
 
-    pdca_isr_clear( PDCA_CHANNEL_ID_DAC );
+    for( i = 0; i < 2; i++ ) {
+        xQueueHandle current;
+        if( 0 == i ) {
+            current = __output_queued;
+        } else {
+            current = __output_idle_silence;
+        }
 
-    if( true == disable_dac ) {
-        dac_pause();
+        while( (pdFALSE == xQueueIsQueueFullFromISR(__output_active)) &&
+               (pdFALSE == xQueueIsQueueEmptyFromISR(current)) )
+        {
+            /* Queue the next pending buffer for playback. */
+            status = xQueueReceiveFromISR( current, &out, &ignore );
+            if( pdTRUE == status ) {
+                bsp_status_t queue_status;
+                /* This can't fail because one of the two buffers just
+                 * became available the only other failure is parameter error. */
+                queue_status = pdca_queue_buffer( PDCA_CHANNEL_ID_DAC,
+                                                  out->samples, out->used << 2 );
+
+                if( BSP_RETURN_OK == queue_status ) {
+                    xQueueSendToBackFromISR( __output_active, &out, &ignore );
+                } else {
+                    isr_puts( "Bad pdca_queue_buffer() return value\n" );
+                    xQueueSendToFrontFromISR( current, &out, &ignore );
+                }
+            }
+        }
+    }
+
+    /* If there is a bubble in the audio, play silence */
+
+    if( BSP_RETURN_OK != pdca_isr_clear(PDCA_CHANNEL_ID_DAC) ) {
+        isr_puts( "pdca_isr_clear returned BSP_ERROR_PARAMETER\n" );
     }
 }
 
-/**
- *  This is called when there is an audio underrun.
- */
-__attribute__ ((__interrupt__))
-static void __dac_underrun( void )
-{
-    dac_clear_underrun();
-    __dac_underflow_count++;
-}
 
 static void __process_samples( dsp_input_t *in, dsp_output_t *out )
 {

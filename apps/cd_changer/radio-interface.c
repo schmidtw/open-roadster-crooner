@@ -33,9 +33,12 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define RI_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 1400)
+#define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
+#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE)
 #define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define RI_POLL_TIMEOUT     (TASK_DELAY_S(15))  /* 15 seconds */
+
+#define RI_DEBUG 0
 
 #define _D1(...)
 #define _D2(...)
@@ -92,10 +95,10 @@ bool ri_init( void )
     __state.current_disc = 0;
     __state.current_track = 0;
 
-    xTaskCreate( __poll_task, (signed portCHAR *) "POLL",
-                 RI_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
-    xTaskCreate( __msg_task, (signed portCHAR *) "iMsg",
-                 RI_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
+    xTaskCreate( __poll_task, (signed portCHAR *) "iBusPoll",
+                 RI_POLL_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
+    xTaskCreate( __msg_task, (signed portCHAR *) "iBusMsg",
+                 RI_MSG_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
     return true;
 }
 

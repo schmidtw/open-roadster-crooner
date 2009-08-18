@@ -68,10 +68,10 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data );
 static media_status_t decode_song( xQueueHandle idle,
                                    const int32_t gain,
                                    mp3_data_t *data );
-static void output_data( xQueueHandle idle,
-                         const struct mad_pcm *pcm,
-                         const int32_t gain,
-                         const uint32_t bitrate );
+static media_status_t output_data( xQueueHandle idle,
+                                   const struct mad_pcm *pcm,
+                                   const int32_t gain,
+                                   const uint32_t bitrate );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -251,6 +251,22 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data )
     xQueueSendToBack( node->idle, &node, 0 );
 }
 
+static void print_stream( struct mad_stream *stream, int line )
+{
+        printf( "- %d -----------------------------\n", line );
+        printf( "stream->buffer: %p\n", stream->buffer );
+        printf( "stream->bufend: %p\n", stream->bufend );
+        printf( "stream->skiplen: %lu\n", stream->skiplen );
+        printf( "stream->sync: %d\n", stream->sync );
+        printf( "stream->freerate: %lu\n", stream->freerate );
+        printf( "stream->this_frame: %p\n", stream->this_frame );
+        printf( "stream->next_frame: %p\n", stream->next_frame );
+        printf( "stream->md_len: %u\n", stream->md_len );
+        printf( "stream->options: %d\n", stream->options );
+        printf( "stream->error: 0x%08x\n", stream->error );
+        printf( "------------------------------\n" );
+}
+
 static media_status_t decode_song( xQueueHandle idle,
                                    const int32_t gain,
                                    mp3_data_t *data )
@@ -310,15 +326,19 @@ static media_status_t decode_song( xQueueHandle idle,
                 fstream_release_buffer( 0 );
                 goto error;
             }
+        } else {
+            if( 0 < bitrate ) {
+                mad_synth_frame( &data->synth, &data->frame );
+
+                rv = output_data( idle, &data->synth.pcm, gain, bitrate );
+            }
         }
 
-        if( 0 < bitrate ) {
-            mad_synth_frame( &data->synth, &data->frame );
-
-            output_data( idle, &data->synth.pcm, gain, bitrate );
+        if( stream.next_frame == stream.this_frame ) {
+            fstream_release_buffer( got );
+        } else {
+            fstream_release_buffer( stream.next_frame - stream.this_frame );
         }
-
-        fstream_release_buffer( stream.next_frame - stream.this_frame + stream.skiplen );
     }
 
 early_exit:
@@ -331,21 +351,31 @@ error:
     return rv;
 }
 
-static void output_data( xQueueHandle idle,
-                         const struct mad_pcm *pcm,
-                         const int32_t gain,
-                         const uint32_t bitrate )
+static media_status_t output_data( xQueueHandle idle,
+                                   const struct mad_pcm *pcm,
+                                   const int32_t gain,
+                                   const uint32_t bitrate )
 {
+    dsp_status_t status;
     mp3_data_node_t *node;
     int i;
 
     xQueueReceive( idle, &node, portMAX_DELAY );
 
     for( i = 0; i < pcm->length; i++ ) {
-        node->left[i] = ((int32_t) pcm->samples[0][i]) << 1;
-        node->right[i] = ((int32_t) pcm->samples[1][i]) << 1;
+        node->left[i] = ((int32_t) pcm->samples[0][i]);
+        node->right[i] = ((int32_t) pcm->samples[1][i]);
     }
 
-    dsp_queue_data( node->left, node->right, pcm->length,
-                    bitrate, gain, &dsp_callback, node );
+    status = dsp_queue_data( node->left, node->right, pcm->length,
+                             bitrate, gain, &dsp_callback, node );
+    if( DSP_RETURN_OK != status ) {
+#if 0
+        printf( "Failed to accept data: 0x%08x dsp_queue_data( %p, %p, %d, %lu %ld, %p, %p )\n", status,
+                node->left, node->right, pcm->length, bitrate, gain, &dsp_callback, node );
+#endif
+        xQueueSendToBack( idle, &node, 0 );
+        return MI_ERROR_DECODE_ERROR;
+    }
+    return MI_RETURN_OK;
 }
