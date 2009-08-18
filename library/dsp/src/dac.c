@@ -57,8 +57,9 @@ static const bitrate_map_t bitrate_map[] = {
     { .bitrate = 11025, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 31 },
 
     { .bitrate = 48000, .mult = 7,  .div = 1, .divide_by_two = false, .gcctrl_div = 3  },
-    { .bitrate = 32000, .mult = 10, .div = 1, .divide_by_two = false, .gcctrl_div = 7  },
+    { .bitrate = 32000, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 10 },
     { .bitrate = 24000, .mult = 7,  .div = 1, .divide_by_two = false, .gcctrl_div = 7  },
+    { .bitrate = 16000, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 21 },
     { .bitrate = 12000, .mult = 7,  .div = 1, .divide_by_two = false, .gcctrl_div = 9  },
     { .bitrate =  8000, .mult = 14, .div = 1, .divide_by_two = false, .gcctrl_div = 43 },
 #endif
