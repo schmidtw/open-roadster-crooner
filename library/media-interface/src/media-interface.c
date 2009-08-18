@@ -34,7 +34,6 @@ typedef struct {
     const char *name;
     ll_node_t node;
 
-    media_command_fn_t command;
     media_play_fn_t play;
     media_get_type_fn_t get_type;
     media_get_metadata_fn_t get_metadata;
@@ -76,7 +75,6 @@ media_interface_t *media_new( void )
 /** See media-interface.h for details. */
 media_status_t media_register_codec( media_interface_t *interface,
                                      const char *name,
-                                     media_command_fn_t command,
                                      media_play_fn_t play,
                                      media_get_type_fn_t get_type,
                                      media_get_metadata_fn_t get_metadata )
@@ -86,7 +84,7 @@ media_status_t media_register_codec( media_interface_t *interface,
 
     codec_list = (ll_list_t *) interface;
 
-    if( (NULL == codec_list) || (NULL == name) || (NULL == command) ||
+    if( (NULL == codec_list) || (NULL == name) ||
         (NULL == play) || (NULL == get_type) || (NULL == get_metadata) )
     {
         return MI_ERROR_PARAMETER;
@@ -99,7 +97,6 @@ media_status_t media_register_codec( media_interface_t *interface,
 
     ll_init_node( &node->node, node );
     node->name = name;
-    node->command = command;
     node->play = play;
     node->get_type = get_type;
     node->get_metadata = get_metadata;
@@ -113,7 +110,6 @@ media_status_t media_register_codec( media_interface_t *interface,
 media_status_t media_get_information( media_interface_t *interface,
                                       const char *filename,
                                       media_metadata_t *metadata,
-                                      media_command_fn_t *command_fn,
                                       media_play_fn_t *play_fn )
 {
     media_iterator_t info;
@@ -122,7 +118,7 @@ media_status_t media_get_information( media_interface_t *interface,
     codec_list = (ll_list_t *) interface;
 
     if( (NULL == codec_list) || (NULL == filename) ||
-        ((NULL == metadata) && (NULL == command_fn) && (NULL == play_fn)) )
+        ((NULL == metadata) && (NULL == play_fn)) )
     {
         return MI_ERROR_PARAMETER;
     }
@@ -133,10 +129,6 @@ media_status_t media_get_information( media_interface_t *interface,
 
     if( NULL == info.node ) {
         return MI_ERROR_NOT_SUPPORTED;
-    }
-
-    if( NULL != command_fn ) {
-        *command_fn = info.node->command;
     }
 
     if( NULL != play_fn ) {

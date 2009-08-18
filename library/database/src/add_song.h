@@ -19,8 +19,6 @@
  *        name
  * @param song pointer to the NULL terminated string representing the song
  *        name
- * @param command_fn function which is to be used when issuing commands
- *        (Play/Pause/etc) for this song
  * @param play_fn function which is to be used when initially playing this song
  * @param file_location NULL terminated string representing the location of
  *        this song
@@ -32,7 +30,6 @@ song_node_t * add_song_to_group( group_node_t * group,
         const char * song, const uint16_t track_number,
         const double track_gain, const double track_peak,
         const double album_gain, const double album_peak,
-        media_command_fn_t command_fn,
         media_play_fn_t play_fn,
         const char * file_location );
 

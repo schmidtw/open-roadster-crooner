@@ -80,14 +80,15 @@ typedef media_status_t (*file__block_handler_t)( FIL *file,
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static volatile media_command_t __cmd;
+/* None */
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static media_status_t play_song( FLACContext *fc,
                                  xQueueHandle idle,
-                                 const int32_t gain );
+                                 const int32_t gain,
+                                 media_command_fn_t command_fn );
 static void process_metadata_block_header( uint8_t *header,
                                            bool *last,
                                            flac_block_type_t *type,
@@ -96,7 +97,8 @@ static void process_metadata_block_header( uint8_t *header,
 /*---------- Stream based metadata handlers ----------*/
 static media_status_t stream__process_file( FLACContext *fc,
                                             xQueueHandle idle,
-                                            const int32_t gain );
+                                            const int32_t gain,
+                                            media_command_fn_t command_fn );
 static media_status_t stream__process_metadata( FLACContext *fc );
 static media_status_t stream__metadata_block_ignore( FLACContext *fc,
                                                      const uint32_t length );
@@ -127,43 +129,31 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data );
 /*----------------------------------------------------------------------------*/
 
 /** See media-interface.h for details. */
-media_status_t media_flac_command( const media_command_t cmd )
-{
-    if( (MI_PLAY == cmd) || (MI_STOP == cmd) ) {
-        __cmd = cmd;
-        return MI_RETURN_OK;
-    }
-
-    return MI_ERROR_NOT_SUPPORTED;
-}
-
-/** See media-interface.h for details. */
 media_status_t media_flac_play( const char *filename,
                                 const double gain,
                                 const double peak,
                                 xQueueHandle idle,
                                 const size_t queue_size,
                                 media_malloc_fn_t malloc_fn,
-                                media_free_fn_t free_fn )
+                                media_free_fn_t free_fn,
+                                media_command_fn_t command_fn )
 {
     FLACContext  fc;
     media_status_t rv;
     int32_t node_count;
-    int32_t i;
+    int32_t i = 0;
     int32_t dsp_scale_factor;
 
     rv = MI_RETURN_OK;
 
     if( (NULL == filename) || (NULL == idle) || (0 == queue_size) ||
-        (NULL == malloc_fn) || (NULL == free_fn) )
+        (NULL == malloc_fn) || (NULL == free_fn) || (NULL == command_fn) )
     {
         rv = MI_ERROR_PARAMETER;
         goto error_0;
     }
 
     dsp_scale_factor = dsp_determine_scale_factor( peak, gain );
-
-    __cmd = MI_PLAY;
 
     if( true != fstream_open(filename) ) {
         rv = MI_ERROR_INVALID_FORMAT;
@@ -205,7 +195,7 @@ media_status_t media_flac_play( const char *filename,
     fc.filesize = fstream_get_filesize();
     fc.metadatalength = 4;
 
-    rv = stream__process_file( &fc, idle, dsp_scale_factor );
+    rv = stream__process_file( &fc, idle, dsp_scale_factor, command_fn );
 
 error_1:
 
@@ -298,7 +288,8 @@ error_0:
  */
 static media_status_t stream__process_file( FLACContext *fc,
                                             xQueueHandle idle,
-                                            const int32_t gain )
+                                            const int32_t gain,
+                                            media_command_fn_t command_fn )
 {
     media_status_t status;
 
@@ -307,7 +298,7 @@ static media_status_t stream__process_file( FLACContext *fc,
         return status;
     }
 
-    status = play_song( fc, idle, gain );
+    status = play_song( fc, idle, gain, command_fn );
 
     return status;
 }
@@ -363,7 +354,6 @@ static media_status_t stream__process_metadata( FLACContext *fc )
     }
 
     fc->bitrate = ((fc->filesize - fc->metadatalength) * 8) / fc->length;
-    //printf( "bitrate: %ld\n", fc->bitrate );
 
     return MI_RETURN_OK;
 }
@@ -651,7 +641,8 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
 
 static media_status_t play_song( FLACContext *fc,
                                  xQueueHandle idle,
-                                 const int32_t gain )
+                                 const int32_t gain,
+                                 media_command_fn_t command_fn )
 {
     flac_data_node_t *node;
     media_status_t rv;
@@ -672,7 +663,7 @@ static media_status_t play_song( FLACContext *fc,
             goto done;
         }
 
-        if( MI_STOP == __cmd ) {
+        if( false == (*command_fn)() ) {
             rv = MI_STOPPED_BY_REQUEST;
             goto done;
         }
@@ -682,13 +673,13 @@ static media_status_t play_song( FLACContext *fc,
             goto done;
         }
 
-        if( MI_STOP == __cmd ) {
+        if( false == (*command_fn)() ) {
             rv = MI_STOPPED_BY_REQUEST;
             goto done;
         }
 
         dsp_queue_data( node->decode_0, node->decode_1, fc->blocksize,
-                        44100, gain, &dsp_callback, node );
+                        fc->samplerate, gain, &dsp_callback, node );
 
         node = NULL;
 

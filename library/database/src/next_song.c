@@ -21,7 +21,7 @@
 #include "internal_database.h"
 
 /* See database.h for information */
-db_status_t next_song( volatile song_node_t ** current_song,
+db_status_t next_song( song_node_t ** current_song,
                        const db_traverse_t operation,
                        const db_level_t level )
 {

@@ -33,12 +33,17 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
-#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE)
+#define RI_DEBUG 0
+
+#define DEBUG_STACK_BUFFER  0
+#if (defined(RI_DEBUG) && (0 < RI_DEBUG))
+#define DEBUG_STACK_BUFFER  100
+#endif
+
+#define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
+#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
 #define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define RI_POLL_TIMEOUT     (TASK_DELAY_S(15))  /* 15 seconds */
-
-#define RI_DEBUG 0
 
 #define _D1(...)
 #define _D2(...)
@@ -68,7 +73,7 @@ typedef struct {
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
 static xSemaphoreHandle __poll_cmd;
-static ri_state_t __state;
+static volatile ri_state_t __state;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -196,18 +201,19 @@ static void __msg_task( void *params )
 
                 case IRP_CMD__STOP:
                     _D2( "IRP_CMD__STOP\n" );
-                    playback_stop();
+                    playback_command( PB_CMD__pause, 0 );
                     __state.device_status = IRP_STATE__STOPPED;
                     break;
 
                 case IRP_CMD__PAUSE:
                     _D2( "IRP_CMD__PAUSE\n" );
+                    playback_command( PB_CMD__pause, 0 );
                     __state.device_status = IRP_STATE__PAUSED;
                     break;
 
                 case IRP_CMD__PLAY:
                     _D2( "IRP_CMD__PLAY\n" );
-                    playback_play();
+                    playback_command( PB_CMD__play, 0 );
                     __state.device_status = IRP_STATE__PLAYING;
                     break;
 
@@ -216,7 +222,7 @@ static void __msg_task( void *params )
 
                     if( IRP_STATE__FAST_PLAYING__FORWARD != __state.device_status ) {
                         __state.device_status = IRP_STATE__FAST_PLAYING__FORWARD;
-                        playback_album_next();
+                        playback_command( PB_CMD__album_next, 0 );
                     }
                     break;
 
@@ -224,7 +230,7 @@ static void __msg_task( void *params )
                     _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
                     if( IRP_STATE__FAST_PLAYING__REVERSE != __state.device_status ) {
                         __state.device_status = IRP_STATE__FAST_PLAYING__REVERSE;
-                        playback_album_prev();
+                        playback_command( PB_CMD__album_prev, 0 );
                     }
                     break;
 
@@ -236,7 +242,7 @@ static void __msg_task( void *params )
                     if( 99 < __state.current_track ) {
                         __state.current_track = 1;
                     }
-                    playback_song_next();
+                    playback_command( PB_CMD__song_next, 0 );
                     __state.device_status = IRP_STATE__PLAYING;
                     break;
 
@@ -244,7 +250,7 @@ static void __msg_task( void *params )
                     _D2( "IRP_CMD__SEEK__PREV\n" );
                     __state.device_status = IRP_STATE__SEEKING__PREV;
                     __send_state();
-                    playback_song_prev();
+                    playback_command( PB_CMD__song_prev, 0 );
                     __state.current_track--;
                     if( __state.current_track < 1) {
                         __state.current_track = 99;
@@ -256,7 +262,7 @@ static void __msg_task( void *params )
                     _D2( "IRP_CMD__CHANGE_DISC\n" );
                     __state.device_status = IRP_STATE__LOADING_DISC;
                     __send_state();
-                    playback_disc( msg.disc );
+                    playback_command( PB_CMD__change_disc, msg.disc );
                     __state.current_disc = msg.disc;
                     __state.current_track = 1;
                     __state.device_status = IRP_STATE__PLAYING;
@@ -313,7 +319,7 @@ static void __card_status( const mc_card_status_t status )
             /* This is a temporary solution - we still get the:
              * "da-da-da-da-da-da" sound sometimes when the disc
              * is just removed. */
-            playback_stop();
+            playback_command( PB_CMD__stop, 0 );
             _D2( "New card status: MC_CARD__REMOVED\n" );
             led_off( led_all );
             led_on( led_red );

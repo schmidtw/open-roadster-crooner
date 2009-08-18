@@ -30,12 +30,6 @@
 #define MEDIA_ARTIST_LENGTH 127
 
 typedef enum {
-    MI_PLAY,
-    MI_PAUSE,
-    MI_STOP
-} media_command_t;
-
-typedef enum {
     MI_RETURN_OK            = 0x0000,
     MI_STOPPED_BY_REQUEST   = 0x0001,
     MI_END_OF_SONG          = 0x0002,
@@ -76,15 +70,13 @@ typedef void* (*media_malloc_fn_t)( const size_t size );
 typedef void (*media_free_fn_t)( void *ptr );
 
 /**
- *  Used to command the decoder while it is busy decoding.
+ *  Used to ask if the decoder should continue decoding.
  *
- *  @note There may only be 1 instance of playback decoder
+ *  @note May block - this is by design.
  *
- *  @param cmd the command to apply to the current decoder
- *
- *  @return the status of the request
+ *  @return true to continue decoding, false otherwise
  */
-typedef media_status_t (*media_command_fn_t)( const media_command_t cmd );
+typedef bool (*media_command_fn_t)( void );
 
 /**
  *  The media decoder function.
@@ -103,7 +95,8 @@ typedef media_status_t (*media_play_fn_t)( const char *filename,
                                            xQueueHandle idle,
                                            const size_t queue_size,
                                            media_malloc_fn_t malloc_fn,
-                                           media_free_fn_t free_fn );
+                                           media_free_fn_t free_fn,
+                                           media_command_fn_t command_fn );
 
 /**
  *  Used to determine if a file is if a particular media type.
@@ -149,7 +142,6 @@ media_interface_t* media_new( void );
 media_status_t media_get_information( media_interface_t *interface,
                                       const char *filename,
                                       media_metadata_t *metadata,
-                                      media_command_fn_t *command_fn,
                                       media_play_fn_t *play_fn );
 
 /**
@@ -164,7 +156,6 @@ media_status_t media_get_information( media_interface_t *interface,
  */
 media_status_t media_register_codec( media_interface_t *interface,
                                      const char *name,
-                                     media_command_fn_t command,
                                      media_play_fn_t play,
                                      media_get_type_fn_t get_type,
                                      media_get_metadata_fn_t get_metadata );

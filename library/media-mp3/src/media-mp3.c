@@ -59,7 +59,7 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static volatile media_command_t __cmd;
+/* none */
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -67,7 +67,8 @@ static volatile media_command_t __cmd;
 static void dsp_callback( int32_t *left, int32_t *right, void *data );
 static media_status_t decode_song( xQueueHandle idle,
                                    const int32_t gain,
-                                   mp3_data_t *data );
+                                   mp3_data_t *data,
+                                   media_command_fn_t command_fn );
 static media_status_t output_data( xQueueHandle idle,
                                    const struct mad_pcm *pcm,
                                    const int32_t gain,
@@ -78,26 +79,14 @@ static media_status_t output_data( xQueueHandle idle,
 /*----------------------------------------------------------------------------*/
 
 /** See media-interface.h for details. */
-media_status_t media_mp3_command( const media_command_t cmd )
-{
-    if( (MI_PLAY == cmd) || (MI_STOP == cmd) ) {
-        if( MI_STOP != __cmd ) {
-            __cmd = cmd;
-        }
-        return MI_RETURN_OK;
-    }
-
-    return MI_ERROR_NOT_SUPPORTED;
-}
-
-/** See media-interface.h for details. */
 media_status_t media_mp3_play( const char *filename,
                                const double gain,
                                const double peak,
                                xQueueHandle idle,
                                const size_t queue_size,
                                media_malloc_fn_t malloc_fn,
-                               media_free_fn_t free_fn )
+                               media_free_fn_t free_fn,
+                               media_command_fn_t command_fn )
 {
     media_status_t rv;
     mp3_data_t *data;
@@ -108,15 +97,13 @@ media_status_t media_mp3_play( const char *filename,
     rv = MI_RETURN_OK;
 
     if( (NULL == filename) || (NULL == idle) || (0 == queue_size) ||
-        (NULL == malloc_fn) || (NULL == free_fn) )
+        (NULL == malloc_fn) || (NULL == free_fn) || (NULL == command_fn) )
     {
         rv = MI_ERROR_PARAMETER;
         goto error_0;
     }
 
     dsp_scale_factor = dsp_determine_scale_factor( peak, gain );
-
-    __cmd = MI_PLAY;
 
     if( true != fstream_open(filename) ) {
         rv = MI_ERROR_INVALID_FORMAT;
@@ -144,7 +131,7 @@ media_status_t media_mp3_play( const char *filename,
     }
 
     /* Decode song */
-    rv = decode_song( idle, dsp_scale_factor, data );
+    rv = decode_song( idle, dsp_scale_factor, data, command_fn );
 
     (*free_fn)( data );
 
@@ -208,21 +195,21 @@ media_status_t media_mp3_get_metadata( const char *filename,
     metadata->disc_number = entry.discnum;
 
     if( NULL != entry.title ) {
-        strncpy( metadata->title, entry.title, MEDIA_TITLE_LENGTH );
+        strncpy( (char*) metadata->title, entry.title, MEDIA_TITLE_LENGTH );
     } else {
         metadata->title[0] = '\0';
     }
     metadata->title[MEDIA_TITLE_LENGTH] = '\0';
 
     if( NULL != entry.album ) {
-        strncpy( metadata->album, entry.album, MEDIA_ALBUM_LENGTH );
+        strncpy( (char*) metadata->album, entry.album, MEDIA_ALBUM_LENGTH );
     } else {
         metadata->album[0] = '\0';
     }
     metadata->album[MEDIA_ALBUM_LENGTH] = '\0';
 
     if( NULL != entry.artist ) {
-        strncpy( metadata->artist, entry.artist, MEDIA_ARTIST_LENGTH  );
+        strncpy( (char*) metadata->artist, entry.artist, MEDIA_ARTIST_LENGTH  );
     } else {
         metadata->artist[0] = '\0';
     }
@@ -269,7 +256,8 @@ static void print_stream( struct mad_stream *stream, int line )
 
 static media_status_t decode_song( xQueueHandle idle,
                                    const int32_t gain,
-                                   mp3_data_t *data )
+                                   mp3_data_t *data,
+                                   media_command_fn_t command_fn )
 {
     media_status_t rv;
 
@@ -287,7 +275,9 @@ static media_status_t decode_song( xQueueHandle idle,
         size_t got;
         uint32_t get;
 
-        if( MI_STOP == __cmd ) { goto early_exit; } while( MI_PAUSE == __cmd ) { ; }
+        if( false == (*command_fn)() ) {
+            goto early_exit;
+        }
 
         get = 3072;
 

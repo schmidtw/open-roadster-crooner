@@ -18,7 +18,7 @@
 #include "radio-interface.h"
 #include "playback.h"
 
-#define ENABLE_STATUS_TASK  1
+#define ENABLE_STATUS_TASK  0
 #define REPORT_ALL_MALLOC   0
 
 void* pvPortMalloc( size_t size )
@@ -96,8 +96,8 @@ void _debug_isr_tx_complete( void )
 }
 
 
-static char task_buffer[512];
 #if (1 == ENABLE_STATUS_TASK)
+static char task_buffer[512];
 static void __idle_task( void *params )
 {
     while( 1 ) {
@@ -128,12 +128,10 @@ int main( void )
 
     mi_list = media_new();
 
-    media_register_codec( mi_list, "flac", media_flac_command,
-                          media_flac_play, media_flac_get_type,
-                          media_flac_get_metadata );
-    media_register_codec( mi_list, "mp3", media_mp3_command,
-                          media_mp3_play, media_mp3_get_type,
-                          media_mp3_get_metadata );
+    media_register_codec( mi_list, "flac", media_flac_play,
+                          media_flac_get_type, media_flac_get_metadata );
+    media_register_codec( mi_list, "mp3", media_mp3_play,
+                          media_mp3_get_type, media_mp3_get_metadata );
 
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );

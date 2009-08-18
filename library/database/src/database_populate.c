@@ -239,11 +239,9 @@ bool put_songs_into_groups( const char * RootDirectory )
         } else { /* This is a file */
             media_status_t rv;
             media_metadata_t metadata;
-            media_command_fn_t command_fn;
             media_play_fn_t play_fn;
             /* Place this file into the miscellaneous group */
-            rv = mi_get_information( base_dir, &metadata,
-                    &command_fn, &play_fn );
+            rv = mi_get_information( base_dir, &metadata, &play_fn );
             if( MI_RETURN_OK == rv ) {
                 uint16_t adjusted_track_number;
                 adjusted_track_number = metadata.track_number;
@@ -255,7 +253,7 @@ bool put_songs_into_groups( const char * RootDirectory )
                         (char *)metadata.title, adjusted_track_number,
                         metadata.track_gain, metadata.track_peak,
                         metadata.album_gain, metadata.album_peak,
-                        command_fn, play_fn, base_dir );
+                        play_fn, base_dir );
             }
             /* After sending the fully qualified path into add the song
              * to the group, move the end of the string back to the
@@ -371,12 +369,10 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
             } else { /* This is a file */
                 media_status_t rv;
                 media_metadata_t metadata;
-                media_command_fn_t command_fn;
                 media_play_fn_t play_fn;
                 char junk_filename[MAX_SHORT_FILENAME_W_NULL];
                 /* Place this file into the miscellaneous group */
-                rv = mi_get_information( full_path, &metadata,
-                        &command_fn, &play_fn );
+                rv = mi_get_information( full_path, &metadata, &play_fn );
                 if( MI_RETURN_OK == rv ) {
                     uint16_t adjusted_track_number;
                     adjusted_track_number = metadata.track_number;
@@ -387,7 +383,7 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
                             (char *)metadata.title, adjusted_track_number,
                             metadata.track_gain, metadata.track_peak,
                             metadata.album_gain, metadata.album_peak,
-                            command_fn, play_fn, full_path );
+                            play_fn, full_path );
                 }
                 if( false == get_last_dir_name( junk_filename, full_path ) ) {
                     return false;

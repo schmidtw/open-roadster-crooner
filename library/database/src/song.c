@@ -28,7 +28,7 @@ ll_node_t * get_new_song_and_node(
         const double album_peak,
         const double track_gain,
         const double track_peak,
-        media_command_fn_t command_fn, media_play_fn_t play_fn,
+        media_play_fn_t play_fn,
         const char * file_location );
 
 song_node_t * find_or_create_song( album_node_t * album,
@@ -38,7 +38,6 @@ song_node_t * find_or_create_song( album_node_t * album,
                                    const double album_peak,
                                    const double track_gain,
                                    const double track_peak,
-                                   media_command_fn_t command_fn,
                                    media_play_fn_t play_fn,
                                    const char * file_location )
 {
@@ -107,7 +106,7 @@ song_node_t * find_or_create_song( album_node_t * album,
     }
     
     node = get_new_song_and_node(song, track_number, album_gain, album_peak,
-                                 track_gain, track_peak, command_fn, play_fn,
+                                 track_gain, track_peak, play_fn,
                                  file_location);
     if( NULL == node ) {
         return NULL;
@@ -126,13 +125,11 @@ ll_node_t * get_new_song_and_node( const char * name,
         const double album_peak,
         const double track_gain,
         const double track_peak,
-        media_command_fn_t command_fn,
         media_play_fn_t play_fn, const char * file_location )
 {
     song_node_t * sn;
     
     if(    ( NULL == name )
-        || ( NULL == command_fn )
         || ( NULL == play_fn )
         || ( NULL == file_location ) )
     {
@@ -152,7 +149,6 @@ ll_node_t * get_new_song_and_node( const char * name,
     sn->album_peak = album_peak;
     sn->track_gain = track_gain;
     sn->track_peak = track_peak;
-    sn->command_fn = command_fn;
     sn->play_fn = play_fn;
     strcpy(sn->file_location, file_location);
     

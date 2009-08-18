@@ -19,24 +19,43 @@
 
 #include <fatfs/ff.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <memcard/memcard.h>
 #include <database/database.h>
 
 #include "radio-interface.h"
+#include "playback.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define PB_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 4096)
+#define PB_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 5000)
 #define PB_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define DIR_MAP_SIZE        6
 #define IDLE_QUEUE_SIZE     10
+#define PB_COMMAND_MSG_MAX  20
+
+#define _D1(...)
+#define _D2(...)
+
+#if (defined(PB_DEBUG) && (0 < PB_DEBUG))
+#undef  _D1
+#define _D1(...) printf( __VA_ARGS__ )
+#endif
+
+#if (defined(PB_DEBUG) && (1 < PB_DEBUG))
+#undef  _D2
+#define _D2(...) printf( __VA_ARGS__ )
+#endif
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
-/* none */
+typedef struct {
+    pb_command_t cmd;
+    uint8_t disc;
+} pb_command_msg_t;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -44,6 +63,8 @@
 static void __pb_task( void *params );
 static void __mount_status( const mc_card_status_t status );
 static uint8_t __determine_map( void );
+static bool __continue_decoding( void );
+static void __handle_messages( song_node_t **current );
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -52,142 +73,88 @@ static xQueueHandle __idle;
 static xSemaphoreHandle __card_mounted;
 static volatile mc_card_status_t __card_status;
 static const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
-static volatile song_node_t *__current_song;
-static volatile media_command_t __playback_mode;
 
+static xQueueHandle __commands_idle;
+static xQueueHandle __commands_queued;
+static pb_command_msg_t __commands[PB_COMMAND_MSG_MAX];
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
-void playback_init( void )
+int32_t playback_init( void )
 {
-    printf( "playback_init()\n" );
+    portBASE_TYPE status;
+    int32_t i;
+    
+    _D1( "playback_init()\n" );
 
-    __current_song = NULL;
-    __playback_mode = MI_STOP;
+    __idle = NULL;
+    __card_mounted = NULL;
+    __commands_idle = NULL;
+    __commands_queued = NULL;
 
     __idle = xQueueCreate( IDLE_QUEUE_SIZE, sizeof(void*) );
+    __commands_idle = xQueueCreate( PB_COMMAND_MSG_MAX, sizeof(pb_command_msg_t*) );
+    __commands_queued = xQueueCreate( PB_COMMAND_MSG_MAX, sizeof(pb_command_msg_t*) );
+
     vSemaphoreCreateBinary( __card_mounted );
+
+    if( (NULL == __idle) || (NULL == __card_mounted) ||
+        (NULL == __commands_idle) || (NULL == __commands_queued) )
+    {
+        goto failure;
+    }
+
+    for( i = 0; i < PB_COMMAND_MSG_MAX; i++ ) {
+        pb_command_msg_t *cmd = &__commands[i];
+        xQueueSendToBack( __commands_idle, &cmd, 0 );
+    }
+
     xSemaphoreTake( __card_mounted, 0 );
 
-    xTaskCreate( __pb_task, ( signed portCHAR *) "Playbck",
-                 PB_TASK_STACK_SIZE, NULL, PB_TASK_PRIORITY, NULL );
+    status = xTaskCreate( __pb_task, ( signed portCHAR *) "Playbck",
+                          PB_TASK_STACK_SIZE, NULL, PB_TASK_PRIORITY, NULL );
+
+    if( pdPASS != status ) {
+        goto failure;
+    }
+
+    return 0;
+
+failure:
+    if( NULL == __idle ) {
+        vQueueDelete( __idle );
+    }
+    if( NULL == __card_mounted ) {
+    }
+    if( NULL == __commands_idle ) {
+        vQueueDelete( __commands_idle );
+    }
+    if( NULL == __commands_queued ) {
+        vQueueDelete( __commands_queued );
+    }
+
+    return -1;
 }
 
-void playback_album_next( void )
+void playback_command( const pb_command_t command, const uint8_t disc )
 {
-    db_status_t rv;
+    pb_command_msg_t *cmd;
 
-    if( NULL != __current_song ) {
-        __current_song->command_fn( MI_STOP );
-    }
+    xQueueReceive( __commands_idle, &cmd, portMAX_DELAY );
 
-    rv = next_song( &__current_song, DT_NEXT, DL_ALBUM );
-    if( DS_END_OF_LIST == rv ) {
-        rv = next_song( &__current_song, DT_NEXT, DL_ARTIST );
-    }
+    cmd->cmd = command;
+    cmd->disc = disc;
 
-    __playback_mode = MI_PLAY;
+    xQueueSendToBack( __commands_queued, &cmd, portMAX_DELAY );
 }
 
-void playback_album_prev( void )
-{
-    db_status_t rv;
-
-    if( NULL != __current_song ) {
-        __current_song->command_fn( MI_STOP );
-    }
-
-    rv = next_song( &__current_song, DT_PREVIOUS, DL_ALBUM );
-    if( DS_END_OF_LIST == rv ) {
-        rv = next_song( &__current_song, DT_PREVIOUS, DL_ARTIST );
-    }
-
-    __playback_mode = MI_PLAY;
-}
-
-void playback_song_next( void )
-{
-    db_status_t rv;
-
-    if( NULL != __current_song ) {
-        __current_song->command_fn( MI_STOP );
-    }
-
-    rv = next_song( &__current_song, DT_NEXT, DL_SONG );
-    if( DS_END_OF_LIST == rv ) {
-        rv = next_song( &__current_song, DT_NEXT, DL_ALBUM );
-    }
-    if( DS_END_OF_LIST == rv ) {
-        rv = next_song( &__current_song, DT_NEXT, DL_ARTIST );
-    }
-
-    __playback_mode = MI_PLAY;
-}
-
-void playback_song_prev( void )
-{
-    db_status_t rv;
-
-    if( NULL != __current_song ) {
-        __current_song->command_fn( MI_STOP );
-    }
-
-    rv = next_song( &__current_song, DT_PREVIOUS, DL_SONG );
-    if( DS_END_OF_LIST == rv ) {
-        rv = next_song( &__current_song, DT_PREVIOUS, DL_ALBUM );
-    }
-    if( DS_END_OF_LIST == rv ) {
-        rv = next_song( &__current_song, DT_PREVIOUS, DL_ARTIST );
-    }
-
-    __playback_mode = MI_PLAY;
-}
-
-void playback_disc( const uint8_t disc )
-{
-    db_status_t rv;
-
-    if( NULL != __current_song ) {
-        __current_song->command_fn( MI_STOP );
-    }
-
-    __current_song = NULL;
-    rv = DS_SUCCESS;
-
-    while( DS_SUCCESS == rv ) {
-        rv = next_song( &__current_song, DT_NEXT, DL_GROUP );
-        if( DS_FAILURE != rv ) {
-            if( 0 == strcasecmp(dir_map[disc - 1],
-                                __current_song->album->artist->group->name) )
-            {
-                rv = DS_END_OF_LIST;
-            }
-        }
-    }
-}
-
-void playback_stop( void )
-{
-    if( NULL != __current_song ) {
-        __current_song->command_fn( MI_STOP );
-    }
-    __playback_mode = MI_STOP;
-}
-
-void playback_play( void )
-{
-    if( NULL != __current_song ) {
-        __current_song->command_fn( MI_PLAY );
-    }
-
-    __playback_mode = MI_PLAY;
-}
 
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
 static void __pb_task( void *params )
 {
+    song_node_t *current_song;
     mc_register( &__mount_status );
 
     while( 1 ) {
@@ -197,42 +164,41 @@ static void __pb_task( void *params )
 
         if( 0 == f_mount(0, &fs) ) {
 
-            //printf( "mounted fs.\n" );
+            _D1( "mounted fs.\n" );
             ri_checking_for_discs();
             if( true == populate_database(dir_map, DIR_MAP_SIZE, "/") ) {
                 media_status_t ms;
 
                 ri_checking_complete( __determine_map() );
 
-                __current_song = NULL;
+                current_song = NULL;
                 ms = MI_STOPPED_BY_REQUEST;
-                next_song( &__current_song, DT_NEXT, DL_SONG );
+                next_song( &current_song, DT_NEXT, DL_SONG );
                 while( MC_CARD__MOUNTED == __card_status ) {
                     media_play_fn_t play_fn;
 
-                    while( MI_PLAY != __playback_mode ) {
-                        vTaskDelay( TASK_DELAY_MS(10) );
-                    }
+                    __handle_messages( &current_song );
 
-                    play_fn = __current_song->play_fn;
-                    printf( "Playing song '%s' 0x%08x\n", __current_song->title, play_fn );
-                    ms = (*play_fn)( (const char*) __current_song->file_location,
-                                     __current_song->track_gain,
-                                     __current_song->track_peak,
-                                     __idle, IDLE_QUEUE_SIZE, &malloc, &free );
-                    printf( "Played song\n" );
+                    play_fn = current_song->play_fn;
+                    _D2( "Playing song '%s'\n", current_song->title );
+                    ms = (*play_fn)( (const char*) current_song->file_location,
+                                     current_song->track_gain,
+                                     current_song->track_peak,
+                                     __idle, IDLE_QUEUE_SIZE, &malloc, &free,
+                                     &__continue_decoding );
+                    _D2( "Played song\n" );
 
                     if( MI_STOPPED_BY_REQUEST != ms ) {
                         db_status_t rv;
 
                         ri_song_ended_playing_next();
 
-                        rv = next_song( &__current_song, DT_NEXT, DL_SONG );
+                        rv = next_song( &current_song, DT_NEXT, DL_SONG );
                         if( DS_END_OF_LIST == rv ) {
-                            rv = next_song( &__current_song, DT_NEXT, DL_ALBUM );
+                            rv = next_song( &current_song, DT_NEXT, DL_ALBUM );
                         }
                         if( DS_END_OF_LIST == rv ) {
-                            rv = next_song( &__current_song, DT_NEXT, DL_ARTIST );
+                            rv = next_song( &current_song, DT_NEXT, DL_ARTIST );
                         }
                         if( DS_FAILURE == rv ) {
                             break;
@@ -240,7 +206,7 @@ static void __pb_task( void *params )
                     }
                 }
 
-                __current_song = NULL;
+                current_song = NULL;
                 database_purge();
             } else {
                 ri_checking_complete( 0x00 );
@@ -271,7 +237,7 @@ static uint8_t __determine_map( void )
 
     status = DS_SUCCESS;
     while( DS_SUCCESS == status ) {
-        status = next_song( (volatile song_node_t**) &song, DT_NEXT, DL_GROUP );
+        status = next_song( &song, DT_NEXT, DL_GROUP );
 
         if( DS_FAILURE == status ) {
             map = 0x00;
@@ -293,4 +259,111 @@ static uint8_t __determine_map( void )
 done:
 
     return map;
+}
+
+static bool __continue_decoding( void )
+{
+    pb_command_msg_t *cmd;
+
+    if( pdTRUE == xQueueReceive(__commands_queued, &cmd, 0) ) {
+        /* If we are told to pause, block until we get a new message.  If the
+         * new message is play, continue, otherwise, stop decoding. */
+        if( PB_CMD__pause == cmd->cmd ) {
+            xQueueSendToBack( __commands_idle, &cmd, 0 );
+            xQueueReceive( __commands_queued, &cmd, portMAX_DELAY );
+            if( PB_CMD__play == cmd->cmd ) {
+                xQueueSendToBack( __commands_idle, &cmd, 0 );
+                return true;
+            }
+        }
+        xQueueSendToFront( __commands_queued, &cmd, 0 );
+
+        return false;
+    }
+
+    return true;
+}
+
+static void __handle_messages( song_node_t **current )
+{
+    db_status_t rv;
+    pb_command_msg_t *cmd;
+
+    _D2( "%s()\n", __func__ );
+retry:
+
+    if( pdTRUE == xQueueReceive(__commands_queued, &cmd, 0) ) {
+        _D2( "Got a message\n" );
+        switch( cmd->cmd ) {
+            case PB_CMD__album_next:
+                _D2( "PB_CMD__album_next\n" );
+                rv = next_song( current, DT_NEXT, DL_ALBUM );
+                if( DS_END_OF_LIST == rv ) {
+                    next_song( current, DT_NEXT, DL_ARTIST );
+                }
+                break;
+
+            case PB_CMD__album_prev:
+                _D2( "PB_CMD__album_prev\n" );
+                rv = next_song( current, DT_PREVIOUS, DL_ALBUM );
+                if( DS_END_OF_LIST == rv ) {
+                    next_song( current, DT_PREVIOUS, DL_ARTIST );
+                }
+                break;
+
+            case PB_CMD__song_next:
+                _D2( "PB_CMD__song_next\n" );
+                rv = next_song( current, DT_NEXT, DL_SONG );
+                if( DS_END_OF_LIST == rv ) {
+                    rv = next_song( current, DT_NEXT, DL_ALBUM );
+                }
+                if( DS_END_OF_LIST == rv ) {
+                    rv =next_song( current, DT_NEXT, DL_ARTIST );
+                }
+                break;
+
+            case PB_CMD__song_prev:
+                _D2( "PB_CMD__song_prev\n" );
+                rv = next_song( current, DT_PREVIOUS, DL_SONG );
+                if( DS_END_OF_LIST == rv ) {
+                    rv = next_song( current, DT_PREVIOUS, DL_ALBUM );
+                }
+                if( DS_END_OF_LIST == rv ) {
+                    rv =next_song( current, DT_PREVIOUS, DL_ARTIST );
+                }
+                break;
+
+            case PB_CMD__play:
+                _D2( "PB_CMD__play\n" );
+                /* Do nothing, just exit so we can play. */
+                break;
+
+            case PB_CMD__pause:
+                _D2( "PB_CMD__pause\n" );
+            case PB_CMD__stop:
+                _D2( "PB_CMD__stop\n" );
+                /* Stall until a new command. */
+                xQueueSendToBack( __commands_idle, &cmd, 0 );
+                xQueuePeek( __commands_queued, &cmd, portMAX_DELAY );
+                goto retry;
+
+            case PB_CMD__change_disc:
+                _D2( "PB_CMD__change_disc\n" );
+                *current = NULL;
+                rv = DS_SUCCESS;
+                while( DS_SUCCESS == rv ) {
+                    rv = next_song( current, DT_NEXT, DL_GROUP );
+                    if( DS_FAILURE != rv ) {
+                        if( 0 == strcasecmp(dir_map[cmd->disc - 1],
+                                            (*current)->album->artist->group->name) )
+                        {
+                            rv = DS_END_OF_LIST;
+                        }
+                    }
+                }
+                break;
+        }
+
+        xQueueSendToBack( __commands_idle, &cmd, 0 );
+    }
 }
