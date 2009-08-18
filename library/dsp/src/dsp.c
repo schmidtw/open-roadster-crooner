@@ -118,30 +118,25 @@ dsp_status_t dsp_init( const uint32_t priority )
 
     __bitrate = 44100;
 
-    __output_idle = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
-    if( NULL == __output_idle ) {
-        goto failure_0;
-    }
-    __output_idle_silence = xQueueCreate( DSP_SILENCE_MSG_MAX, sizeof(dsp_output_t*) );
-    if( NULL == __output_idle_silence ) {
-        goto failure_0;
-    }
-    __output_active = xQueueCreate( 2, sizeof(dsp_output_t*) );
-    if( NULL == __output_active ) {
-        goto failure_1;
-    }
-    __output_queued = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
-    if( NULL == __output_queued ) {
-        goto failure_2;
-    }
+    __output_idle = NULL;
+    __output_idle_silence = NULL;
+    __output_active = NULL;
+    __output_queued = NULL;
+    __input_idle = NULL;
+    __input_queued = NULL;
 
+    __output_idle = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
+    __output_idle_silence = xQueueCreate( DSP_SILENCE_MSG_MAX, sizeof(dsp_output_t*) );
+    __output_active = xQueueCreate( 2, sizeof(dsp_output_t*) );
+    __output_queued = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
     __input_idle = xQueueCreate( DSP_IN_MSG_MAX, sizeof(dsp_input_t*) );
-    if( NULL == __input_idle ) {
-        goto failure_3;
-    }
     __input_queued = xQueueCreate( DSP_IN_MSG_MAX, sizeof(dsp_input_t*) );
-    if( NULL == __input_queued ) {
-        goto failure_4;
+
+    if( (NULL == __output_idle) || (NULL == __output_idle_silence) ||
+        (NULL == __output_active) || (NULL == __output_queued) ||
+        (NULL == __input_idle) || (NULL == __input_queued) )
+    {
+        goto failure;
     }
 
     for( i = 0; i < DSP_OUT_MSG_MAX; i++ ) {
@@ -164,24 +159,33 @@ dsp_status_t dsp_init( const uint32_t priority )
                           DSP_TASK_STACK_SIZE, NULL, priority, NULL );
 
     if( pdPASS != status ) {
-        goto failure_5;
+        goto failure;
     }
 
     dac_init( &__dac_buffer_complete, false );
 
     return DSP_RETURN_OK;
 
-failure_5:
-    vQueueDelete( __input_queued );
-failure_4:
-    vQueueDelete( __input_idle );
-failure_3:
-    vQueueDelete( __output_queued );
-failure_2:
-    vQueueDelete( __output_active );
-failure_1:
-    vQueueDelete( __output_idle );
-failure_0:
+failure:
+    if( NULL == __output_idle ) {
+        vQueueDelete( __output_idle );
+    }
+    if( NULL == __output_idle_silence ) {
+        vQueueDelete( __output_idle_silence );
+    }
+    if( NULL == __output_active ) {
+        vQueueDelete( __output_active );
+    }
+    if( NULL == __output_queued ) {
+        vQueueDelete( __output_queued );
+    }
+    if( NULL == __input_idle )  {
+        vQueueDelete( __input_idle );
+    }
+    if( NULL == __input_queued ) {
+        vQueueDelete( __input_queued );
+    }
+
     return DSP_RESOURCE_ERROR;
 }
 
