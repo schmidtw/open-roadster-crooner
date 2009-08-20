@@ -17,6 +17,7 @@ HEADERS = \
     pdca.h \
     spi.h \
     led.h \
+    wdt.h \
     boards/boards.h \
     boards/evk1100.h \
     boards/crooner-1.0.h \
@@ -32,6 +33,7 @@ SOURCES = \
     intc.c \
     pdca.c \
     spi.c \
-    led.c
+    led.c \
+    wdt.c
 
 include ../../make/Makefile.common

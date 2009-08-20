@@ -78,6 +78,7 @@
 #include <bsp/intc.h>
 #include <bsp/pm.h>
 #include <bsp/usart.h>
+#include <bsp/wdt.h>
 
 #define CHANNEL_TO_ISR( id )    __CHANNEL_TO_ISR( id )
 #define __CHANNEL_TO_ISR( id )  ISR__TC_ ## id
@@ -286,3 +287,10 @@ static void prvSetupTimerInterrupt(void)
     /* Start the timer/counter */
     channel->ccr = AVR32_TC_SWTRG_MASK | AVR32_TC_CLKEN_MASK;
 }
+
+#if ( configUSE_IDLE_HOOK == 1 )
+void vApplicationIdleHook( void )
+{
+    wdt_heartbeat();
+}
+#endif

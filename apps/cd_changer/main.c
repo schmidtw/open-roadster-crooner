@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include <bsp/boards/boards.h>
+#include <bsp/wdt.h>
 #include <freertos/task.h>
 #include <file-stream/file-stream.h>
 #include <display/display.h>
@@ -114,6 +115,7 @@ int main( void )
     media_interface_t *mi_list = NULL;
 
     printf( "--------------------------------------------------------------------------------\n" );
+    wdt_start( WDT__36s );
 
     vSemaphoreCreateBinary( __debug_mutex );
     vSemaphoreCreateBinary( __debug_block );
