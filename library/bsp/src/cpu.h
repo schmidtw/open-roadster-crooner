@@ -36,4 +36,9 @@ typedef enum {
  *  @return the execution mode of the cpu
  */
 cpu_execution_mode_t cpu_get_mode( void );
+
+/**
+ *  Used to reboot the chip.
+ */
+void cpu_reboot( void );
 #endif

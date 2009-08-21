@@ -19,6 +19,7 @@
 #include <avr32/io.h>
 
 #include "cpu.h"
+#include "wdt.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -54,6 +55,14 @@ cpu_execution_mode_t cpu_get_mode( void )
     sr >>= AVR32_SR_M0_OFFSET;
 
     return (cpu_execution_mode_t) sr;
+}
+
+/* See cpu.h for details. */
+void cpu_reboot( void )
+{
+    wdt_start( WDT__17us );
+
+    while( 1 ) { ; }
 }
 
 /*----------------------------------------------------------------------------*/
