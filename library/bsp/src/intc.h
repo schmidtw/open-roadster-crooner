@@ -165,4 +165,15 @@ inline bool are_global_exceptions_enabled( void );
 bsp_status_t intc_register_isr( const intc_handler_t handler,
                                 const intc_isr_t isr,
                                 const intc_level_t level );
+
+/**
+ *  Used to output a string while in an ISR.
+ *
+ *  @note DO NOT use any of the printf routines for output in
+ *        an ISR because the reentrancy is not correct.
+ *
+ *  @param out the string to output
+ */
+void intc_isr_puts( const char *out );
+
 #endif

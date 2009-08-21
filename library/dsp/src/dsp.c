@@ -25,9 +25,7 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 
-#include <bsp/boards/boards.h>
-#include <bsp/usart.h>
-
+#include <bsp/intc.h>
 #include <bsp/pdca.h>
 
 #include "dsp.h"
@@ -286,16 +284,6 @@ static void __dsp_task( void *params )
     }
 }
 
-void isr_puts( const char *s )
-{
-    int i;
-    for( i = 0; 0 != s[i]; i++ ) {
-        while( false == usart_tx_ready(DEBUG_USART) ) { ; }
-
-        usart_write_char( DEBUG_USART, s[i] );
-    }
-}
-
 /**
  *  This is called when a buffer is completed & does the needed ISR cleanup
  *  and buffer management.
@@ -311,7 +299,7 @@ static void __dac_buffer_complete( void )
 
     int i;
 
-    //isr_puts( "__dac_buffer_complete()\n" );
+    //intc_isr_puts( "__dac_buffer_complete()\n" );
 
     /* Move the transferred message to the idle queue. */
     status = xQueueReceiveFromISR( __output_active, &out, &ignore );
@@ -364,7 +352,7 @@ static void __dac_buffer_complete( void )
                     if( BSP_RETURN_OK == queue_status ) {
                         xQueueSendToBackFromISR( __output_active, &out, &ignore );
                     } else {
-                        isr_puts( "Bad pdca_queue_buffer() return value\n" );
+                        intc_isr_puts( "Bad pdca_queue_buffer() return value\n" );
                         xQueueSendToFrontFromISR( current, &out, &ignore );
                     }
                 }
@@ -387,7 +375,7 @@ static void __dac_buffer_complete( void )
     /* If there is a bubble in the audio, play silence */
 
     if( BSP_RETURN_OK != pdca_isr_clear(PDCA_CHANNEL_ID_DAC) ) {
-        isr_puts( "pdca_isr_clear returned BSP_ERROR_PARAMETER\n" );
+        intc_isr_puts( "pdca_isr_clear returned BSP_ERROR_PARAMETER\n" );
     }
 }
 

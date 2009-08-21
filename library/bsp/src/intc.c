@@ -24,7 +24,9 @@
 
 #include <avr32/io.h>
 
+#include "boards/boards.h"
 #include "intc.h"
+#include "usart.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -199,6 +201,17 @@ bsp_status_t intc_register_isr( const intc_handler_t handler,
     }
 
     return BSP_RETURN_OK;
+}
+
+/* See intc.h for details. */
+void intc_isr_puts( const char *out )
+{
+    int i;
+    for( i = 0; 0 != out[i]; i++ ) {
+        while( false == usart_tx_ready(DEBUG_USART) ) { ; }
+
+        usart_write_char( DEBUG_USART, out[i] );
+    }
 }
 
 /*----------------------------------------------------------------------------*/
