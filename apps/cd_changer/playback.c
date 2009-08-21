@@ -36,6 +36,8 @@
 #define IDLE_QUEUE_SIZE     10
 #define PB_COMMAND_MSG_MAX  20
 
+#define PB_DEBUG 2
+
 #define _D1(...)
 #define _D2(...)
 
