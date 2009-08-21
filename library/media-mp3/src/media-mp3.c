@@ -303,8 +303,10 @@ static media_status_t decode_song( xQueueHandle idle,
         } else {
             mad_synth_frame( &data->synth, &data->frame );
 
-            rv = output_data( idle, &data->synth.pcm, gain,
-                              data->frame.header.samplerate );
+            if( 0 < data->synth.pcm.length ) {
+                rv = output_data( idle, &data->synth.pcm, gain,
+                                  data->frame.header.samplerate );
+            }
         }
 
         if( stream.next_frame == stream.this_frame ) {
@@ -316,6 +318,8 @@ static media_status_t decode_song( xQueueHandle idle,
 
 early_exit:
 error:
+
+    dsp_data_complete( NULL, NULL );
 
     mad_synth_finish( &data->synth );
     mad_frame_finish( &data->frame );
