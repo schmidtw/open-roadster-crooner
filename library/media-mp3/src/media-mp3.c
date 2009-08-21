@@ -276,6 +276,7 @@ static media_status_t decode_song( xQueueHandle idle,
         uint32_t get;
 
         if( false == (*command_fn)() ) {
+            rv = MI_STOPPED_BY_REQUEST;
             goto early_exit;
         }
 
