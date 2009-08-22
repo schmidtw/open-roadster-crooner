@@ -369,12 +369,10 @@ static int parseuser( struct mp3entry* entry, char* tag, int bufferpos )
             strncpy(tag, value, value_len);
             tag[value_len - 1] = 0;
             entry->albumartist = tag;
-#if 0
-#if CONFIG_CODEC == SWCODEC
         } else {
-            value_len = parse_replaygain(tag, value, entry, tag,
-                value_len);
-#endif
+            /* Add the parsing here for user comment based gains */
+#if 0
+            value_len = parse_replaygain(tag, value, entry, tag, value_len);
 #endif
         }
     }
@@ -382,8 +380,6 @@ static int parseuser( struct mp3entry* entry, char* tag, int bufferpos )
     return tag - entry->id3v2buf + value_len;
 }
 
-#if 0
-#if CONFIG_CODEC == SWCODEC
 /* parse RVA2 binary data and convert to replaygain information. */
 static int parserva2( struct mp3entry* entry, char* tag, int bufferpos )
 {
@@ -391,7 +387,7 @@ static int parserva2( struct mp3entry* entry, char* tag, int bufferpos )
     int start_pos = tag - entry->id3v2buf;
     int end_pos = start_pos + desc_len + 5;
     int value_len = 0;
-    unsigned char* value = tag + desc_len + 1;
+    unsigned char* value = (unsigned char*) (tag + desc_len + 1);
 
     /* Only parse RVA2 replaygain tags if tag version == 2.4 and channel
      * type is master volume.
@@ -440,19 +436,22 @@ static int parserva2( struct mp3entry* entry, char* tag, int bufferpos )
             /* Only accept non-track values if we don't have any previous
              * value.
              */
-            if (entry->track_gain != 0) {
+            if (entry->track_gain != 0.0) {
                 return start_pos;
             }
         }
-            
-        value_len = parse_replaygain_int(album, gain, peak * 2, entry,
-            tag, sizeof(entry->id3v2buf) - start_pos);
+
+        if( true == album ) {
+            entry->album_gain = (double) gain;
+            entry->album_gain /= 512;
+        } else {
+            entry->track_gain = (double) gain;
+            entry->track_gain /= 512;
+        }
     }
 
     return start_pos + value_len;
 }
-#endif
-#endif
 
 static int parsembtid( struct mp3entry* entry, char* tag, int bufferpos )
 {
@@ -501,11 +500,7 @@ static const struct tag_resolver taglist[] = {
     { "TCON", 4, offsetof(struct mp3entry, genre_string), &parsegenre, false },
     { "TCO",  3, offsetof(struct mp3entry, genre_string), &parsegenre, false },
     { "TXXX", 4, 0, &parseuser, false },
-#if 0
-#if CONFIG_CODEC == SWCODEC
     { "RVA2", 4, 0, &parserva2, true },
-#endif
-#endif
     { "UFID", 4, 0, &parsembtid, false },
 };
 
@@ -1012,9 +1007,7 @@ int getid3v2len(FIL *file)
  * about an MP3 file and updates it's entry accordingly. */
 void get_mp3_metadata(FIL *file, struct mp3entry *entry)
 {
-#if CONFIG_CODEC != SWCODEC
     memset(entry, 0, sizeof(struct mp3entry));
-#endif
 
     entry->title = NULL;
     entry->id3v2len = getid3v2len(file);

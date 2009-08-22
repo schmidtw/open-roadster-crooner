@@ -187,8 +187,6 @@ media_status_t media_mp3_get_metadata( const char *filename,
         goto error_0;
     }
 
-    memset( &entry, 0, sizeof(entry) );
-
     get_mp3_metadata( &file, &entry );
 
     metadata->track_number = entry.tracknum;
@@ -217,10 +215,10 @@ media_status_t media_mp3_get_metadata( const char *filename,
 
     /* Not supported for now. */
     metadata->reference_loudness = 0.0;
-    metadata->track_gain = 0.0;
-    metadata->track_peak = 0.0;
-    metadata->album_gain = 0.0;
-    metadata->album_peak = 0.0;
+    metadata->track_gain = entry.track_gain;
+    metadata->track_peak = entry.track_peak;
+    metadata->album_gain = entry.album_gain;
+    metadata->album_peak = entry.album_peak;
 
     f_close( &file );
 error_0:
