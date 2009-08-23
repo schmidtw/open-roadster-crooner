@@ -236,22 +236,6 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data )
     xQueueSendToBack( node->idle, &node, 0 );
 }
 
-static void print_stream( struct mad_stream *stream, int line )
-{
-        printf( "- %d -----------------------------\n", line );
-        printf( "stream->buffer: %p\n", stream->buffer );
-        printf( "stream->bufend: %p\n", stream->bufend );
-        printf( "stream->skiplen: %lu\n", stream->skiplen );
-        printf( "stream->sync: %d\n", stream->sync );
-        printf( "stream->freerate: %lu\n", stream->freerate );
-        printf( "stream->this_frame: %p\n", stream->this_frame );
-        printf( "stream->next_frame: %p\n", stream->next_frame );
-        printf( "stream->md_len: %u\n", stream->md_len );
-        printf( "stream->options: %d\n", stream->options );
-        printf( "stream->error: 0x%08x\n", stream->error );
-        printf( "------------------------------\n" );
-}
-
 static media_status_t decode_song( xQueueHandle idle,
                                    const int32_t gain,
                                    mp3_data_t *data,
@@ -272,13 +256,14 @@ static media_status_t decode_song( xQueueHandle idle,
         uint8_t *buffer;
         size_t got;
         uint32_t get;
+        uint32_t consumed;
 
         if( false == (*command_fn)() ) {
             rv = MI_STOPPED_BY_REQUEST;
             goto early_exit;
         }
 
-        get = 3072;
+        get = 4096;
 
         buffer = (uint8_t *) fstream_get_buffer( get, &got );
         if( 0 == got ) {
@@ -290,13 +275,24 @@ static media_status_t decode_song( xQueueHandle idle,
             rv = MI_END_OF_SONG;
         }
 
+        consumed = 0;
         mad_stream_buffer( &stream, buffer, got );
 
+decode_more_with_this_buffer:
+
         if( -1 == mad_frame_decode(&data->frame, &stream) ) {
-            if( !MAD_RECOVERABLE(stream.error) ) {
+            if( (0 != consumed) && (MAD_ERROR_BUFLEN == stream.error) ) {
+                /* If we think we don't have a large enough buffer, but
+                 * we've consumed some data, that's ok, try again with
+                 * a buffer without any data having been consumed. */
+            } else if( !MAD_RECOVERABLE(stream.error) ) {
                 rv = MI_ERROR_DECODE_ERROR;
                 fstream_release_buffer( 0 );
                 goto error;
+            } else {
+                consumed = stream.next_frame - buffer;
+                mad_stream_buffer( &stream, stream.next_frame, (got - consumed) );
+                goto decode_more_with_this_buffer;
             }
         } else {
             mad_synth_frame( &data->synth, &data->frame );
@@ -305,13 +301,10 @@ static media_status_t decode_song( xQueueHandle idle,
                 rv = output_data( idle, &data->synth.pcm, gain,
                                   data->frame.header.samplerate );
             }
+            consumed = stream.next_frame - buffer;
         }
 
-        if( stream.next_frame == stream.this_frame ) {
-            fstream_release_buffer( got );
-        } else {
-            fstream_release_buffer( stream.next_frame - stream.this_frame );
-        }
+        fstream_release_buffer( consumed );
     }
 
 early_exit:
