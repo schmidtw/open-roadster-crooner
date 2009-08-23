@@ -644,6 +644,7 @@ static media_status_t play_song( FLACContext *fc,
                                  const int32_t gain,
                                  media_command_fn_t command_fn )
 {
+    dsp_status_t status;
     flac_data_node_t *node;
     media_status_t rv;
 
@@ -655,7 +656,9 @@ static media_status_t play_song( FLACContext *fc,
         uint8_t *read_buffer;
         int32_t bytes_left;
 
-        xQueueReceive( idle, &node, portMAX_DELAY );
+        if( NULL == node ) {
+            xQueueReceive( idle, &node, portMAX_DELAY );
+        }
 
         read_buffer = (uint8_t*) fstream_get_buffer( fc->max_framesize, (size_t*) &bytes_left );
 
@@ -673,19 +676,21 @@ static media_status_t play_song( FLACContext *fc,
             goto done;
         }
 
-        if( false == (*command_fn)() ) {
-            rv = MI_STOPPED_BY_REQUEST;
-            goto done;
-        }
-
-        dsp_queue_data( node->decode_0, node->decode_1, fc->blocksize,
-                        fc->samplerate, gain, &dsp_callback, node );
-
-        node = NULL;
-
         consumed = fc->gb.index / 8;
 
         fstream_release_buffer( consumed );
+
+        if( 0 < fc->blocksize ) {
+            status = dsp_queue_data( node->decode_0, node->decode_1, fc->blocksize,
+                                     fc->samplerate, gain, &dsp_callback, node );
+            if( DSP_RETURN_OK != status ) {
+                xQueueSendToBack( idle, &node, 0 );
+                rv = MI_ERROR_DECODE_ERROR;
+                goto done;
+            }
+
+            node = NULL;
+        }
     }
 
 done:
