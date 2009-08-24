@@ -8,6 +8,7 @@ endif
 cc      = avr32-gcc
 ar      = avr32-ar
 objs    = $(addprefix $(gen_dir)/,$(filter %.o,$(SOURCES:.c=.o) $(SOURCES:.S=.o)))
+lists   = $(addprefix $(gen_dir)/,$(filter %.S,$(SOURCES:.c=.S)))
 deps    = $(addprefix $(gen_dir)/,$(filter %.d,$(SOURCES:.c=.d) $(SOURCES:.S=.d)))
 startup = $(addprefix $(gen_dir)/,$(filter %.o,$(STARTUP:.c=.o) $(STARTUP:.S=.o)))
 bins_su = $(addprefix $(lib_dir)/,$(filter %.o,$(STARTUP:.c=.o) $(STARTUP:.S=.o)))
@@ -66,6 +67,8 @@ arflags = \
 .PHONY: all
 all :: $(lib_temp_location) $(startup)
 
+listings: all $(lists)
+
 .PHONY: install
 install :: $(lib_dir)/$(lib_name) $(header_targets) $(bins_su)
 
@@ -83,6 +86,12 @@ $(lib_temp_location) : $(objs) $(gen_file)
 $(gen_file) :
 	$(QUIET)mkdir -p $(dir $@)
 	$(QUIET)touch $@
+
+$(gen_dir)/%.S : %.c $(gen_file)
+	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -o $@ -S $<
+
+$(gen_dir)/%.S : %.S $(gen_file)
+	$(QUIET)cp $< $@
 
 $(gen_dir)/%.o : %.c $(gen_file) $(makefile_dependency)
 	$(QUIET)mkdir -p $(dir $@)

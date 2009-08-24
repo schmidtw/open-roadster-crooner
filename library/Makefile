@@ -5,7 +5,7 @@ $(error "LIBRARIES must be defined.")
 endif
 
 QUIET   = @
-targets = all clean cleanall unit-test install docs
+targets = all clean cleanall unit-test install docs listings
 paths   = src unit-tests
 
 target_deps = $(foreach path,$(paths),$(addprefix $(1)-,$(addsuffix /$(path),$(LIBRARIES))))

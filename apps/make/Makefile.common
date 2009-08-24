@@ -7,6 +7,7 @@ objcopy      = avr32-objcopy
 jtag         = avr32program
 dfu          = dfu-programmer
 objs         = $(addprefix $(gen_dir)/,$(filter %.o,$(SOURCES:.c=.o) $(SOURCES:.S=.o)))
+lists        = $(addprefix $(gen_dir)/,$(filter %.S,$(SOURCES:.c=.S)))
 dependencies = $(objs:%.o=%.d)
 sleepusb     = 1
 empty_file   = .auto_gen_file
@@ -107,6 +108,8 @@ endif
 
 all :: $(target_hex)
 
+listings :: all $(lists)
+
 ifneq "$(MAKECMDGOALS)" "clean"
   -include $(dependencies)
 endif
@@ -120,6 +123,12 @@ $(target_elf) : $(objs) $(addsuffix .a,$(addprefix $(lib_dir)/lib,$(libraries) $
 $(gen_file) : $(MAKEFILE_LIST)
 	$(QUIET)mkdir -p $(dir $@)
 	$(QUIET)touch $@
+
+$(gen_dir)/%.S : %.c $(gen_file)
+	$(QUIET)$(cc) $(cflags) $(OPTIMIZATIONS) -g -c $(includes) -o $@ -S $<
+
+$(gen_dir)/%.S : %.S $(gen_file)
+	$(QUIET)cp $< $@
 
 $(gen_dir)/%.o : %.c $(gen_file) $(makefile_dependency)
 	$(QUIET)$(cc) $(cflags) $(includes) -M -MT $@ -MF $(@:%.o=%.d) $<
