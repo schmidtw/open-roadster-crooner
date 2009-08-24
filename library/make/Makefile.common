@@ -85,11 +85,13 @@ $(gen_file) :
 	$(QUIET)touch $@
 
 $(gen_dir)/%.o : %.c $(gen_file) $(makefile_dependency)
+	$(QUIET)mkdir -p $(dir $@)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -M -MT $@ -MF $(@:%.o=%.d) $<
 	$(QUIET)perl $(fillout_dependency_file) $(@:%.o=%.d)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -o $@ $<
 
 $(gen_dir)/%.o : %.S $(gen_file) $(makefile_dependency)
+	$(QUIET)mkdir -p $(dir $@)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -M -MT $@ -MF $(@:%.o=%.d) $<
 	$(QUIET)perl $(fillout_dependency_file) $(@:%.o=%.d)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -o $@ $<
