@@ -21,10 +21,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <dsp/dsp.h>
 #include <file-stream/file-stream.h>
-#include <fatfs/ff.h>
 #include <freertos/semphr.h>
 #include <freertos/queue.h>
 
@@ -173,7 +176,7 @@ media_status_t media_mp3_get_metadata( const char *filename,
 {
     media_status_t rv;
     struct mp3entry entry;
-    FIL file;
+    int fd;
 
     rv = MI_RETURN_OK;
 
@@ -182,12 +185,13 @@ media_status_t media_mp3_get_metadata( const char *filename,
         goto error_0;
     }
 
-    if( FR_OK != f_open(&file, filename, FA_READ|FA_OPEN_EXISTING) ) {
+    fd = open( filename, O_RDONLY );
+    if( -1 == fd ) {
         rv = MI_ERROR_PARAMETER;
         goto error_0;
     }
 
-    get_mp3_metadata( &file, &entry );
+    get_mp3_metadata( fd, &entry );
 
     metadata->track_number = entry.tracknum;
     metadata->disc_number = entry.discnum;
@@ -220,7 +224,7 @@ media_status_t media_mp3_get_metadata( const char *filename,
     metadata->album_gain = entry.album_gain;
     metadata->album_peak = entry.album_peak;
 
-    f_close( &file );
+    close( fd );
 error_0:
     return rv;
 }

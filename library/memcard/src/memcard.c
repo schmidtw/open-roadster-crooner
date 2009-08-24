@@ -16,10 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <avr32/io.h>
 
@@ -42,11 +40,13 @@
 #include "command.h"
 #include "timing-parameters.h"
 #include "io.h"
+#include "glue.h"
+#include "fatfs/ff.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE)
+#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE+200)
 #define AUTOMOUNT_PRIORITY      (tskIDLE_PRIORITY+1)
 #define AUTOMOUNT_CALLBACK_MAX  3
 
@@ -133,6 +133,7 @@ static mc_card_type_t mc_type;
 static uint64_t mc_size;
 static uint32_t mc_Nac_read;
 static uint32_t mc_block_size;  /**< In bytes. */
+volatile uint32_t __magic_insert_number;
 
 static xQueueHandle __idle;
 static xQueueHandle __pending;
@@ -230,6 +231,8 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
 {
     int32_t i;
 
+    glue_init();
+
     __card_status = MC_CARD__REMOVED;
     vSemaphoreCreateBinary( __card_state_change );
     xSemaphoreTake( __card_state_change, 0 );
@@ -316,7 +319,9 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
     }
 #endif
 
-    if( MC_CARD__MOUNTED != __card_status ) {
+    if( (MC_CARD__MOUNTED != __card_status) &&
+        (MC_CARD__MOUNTING != __card_status) )
+    {
         return MC_NOT_MOUNTED;
     }
 
@@ -374,7 +379,9 @@ mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer )
 /* See memcard.h for details. */
 mc_status_t mc_write_block( const uint32_t lba, const uint8_t *buffer )
 {
-    if( MC_CARD__MOUNTED != __card_status ) {
+    if( (MC_CARD__MOUNTED != __card_status) &&
+        (MC_CARD__MOUNTING != __card_status) )
+    {
         return MC_NOT_MOUNTED;
     }
 
@@ -391,7 +398,9 @@ mc_status_t mc_get_block_count( uint32_t *blocks )
     }
 #endif
 
-    if( MC_CARD__MOUNTED != __card_status ) {
+    if( (MC_CARD__MOUNTED != __card_status) &&
+        (MC_CARD__MOUNTING != __card_status) )
+    {
         return MC_NOT_MOUNTED;
     }
 
@@ -604,6 +613,7 @@ static void __card_change( void )
         io_unselect();
     }
 
+    __magic_insert_number++;
     xSemaphoreGiveFromISR( __card_state_change, &ignore );
 
     gpio_clr_interrupt_flag( MC_CD_PIN );
@@ -725,6 +735,8 @@ static inline uint32_t __find_and_process_block_start( mc_message_t *msg,
 
 static void __automount_task( void *data )
 {
+    FATFS fs;
+    
     /* Create an interrupt on the card ejection. */
     gpio_set_options( MC_CD_PIN,
                       GPIO_DIRECTION__INPUT,
@@ -756,8 +768,15 @@ static void __automount_task( void *data )
 
             status = __mc_mount();
             if( MC_RETURN_OK == status ) {
-                __card_status = MC_CARD__MOUNTED;
+                __card_status = MC_CARD__MOUNTING;
                 __call_all( __card_status );
+                if( FR_OK == f_mount(0, &fs) ) {
+                    __card_status = MC_CARD__MOUNTED;
+                } else {
+                    __card_status = MC_CARD__UNUSABLE;
+                }
+                __call_all( __card_status );
+
             } else if( MC_UNUSABLE == status ) {
                 __card_status = MC_CARD__UNUSABLE;
                 __call_all( __card_status );

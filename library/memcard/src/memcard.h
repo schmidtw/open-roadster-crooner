@@ -40,6 +40,7 @@ typedef enum {
 
 typedef enum {
     MC_CARD__INSERTED,
+    MC_CARD__MOUNTING,
     MC_CARD__MOUNTED,
     MC_CARD__UNUSABLE,
     MC_CARD__REMOVED
@@ -146,5 +147,15 @@ mc_status_t mc_write_block( const uint32_t lba, const uint8_t *buffer );
  *      @retval MC_NOT_MOUNTED      The card in the slot is not mounted.
  */
 mc_status_t mc_get_block_count( uint32_t *blocks );
+
+#include <sys/reent.h>
+#include <sys/stat.h>
+
+int _file_fstat_r( struct _reent *reent, int fd, struct stat *st );
+int _file_write_r( struct _reent *reent, int fd, void *buf, size_t len );
+int _file_read_r( struct _reent *reent, int fd, void *buf, size_t len );
+off_t _file_lseek_r( struct _reent *reent, int fd, off_t offset, int whence );
+int _file_close_r( struct _reent *reent, int fd );
+int _open_r( struct _reent *reent, const char *name, int flags, int mode );
 
 #endif

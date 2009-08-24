@@ -13,6 +13,7 @@
 / * Redistributions of source code must retain the above copyright notice.
 /----------------------------------------------------------------------------*/
 
+#include <stdint.h>
 #include "integer.h"
 
 /*---------------------------------------------------------------------------/
@@ -123,10 +124,9 @@
 /  a Unicode - OEM code conversion function ff_convert() must be added to
 /  the project. */
 
-
-#define _FS_REENTRANT	0
-#define _TIMEOUT		1000	/* Timeout period in unit of time ticks */
-#define	_SYNC_t			HANDLE	/* Type of sync object used on the OS. */
+#define _FS_REENTRANT	1
+#define _TIMEOUT		portMAX_DELAY   /* Timeout period in unit of time ticks */
+#define	_SYNC_t			uint32_t        /* Type of sync object used on the OS. */
 								/* e.g. HANDLE, OS_EVENT*, ID and etc.. */
 /* To make the FatFs module re-entrant, set _FS_REENTRANT to 1 and add user
 /  provided synchronization handlers, ff_req_grant, ff_rel_grant,
@@ -203,6 +203,8 @@ typedef struct _DIR {
 	WCHAR*	lfn;		/* Pointer to the LFN working buffer */
 	WORD	lfn_idx;	/* Last matched LFN index (0xFFFF:No LFN) */
 #endif
+    BOOL    end;        /* WTS: Added to allow me to know when I reach the end
+                         * of the directory listings. */
 } DIR;
 
 
@@ -227,6 +229,13 @@ typedef struct _FIL {
 	BYTE	buf[_MAX_SS];/* File R/W buffer */
 #endif
 } FIL;
+
+/* This is used to allocate memory for the newlib so that either structure
+ * will fit in the same space. */
+typedef union {
+    FIL file;
+    DIR dir;
+} FF_SLOT;
 
 
 

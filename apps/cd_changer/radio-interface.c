@@ -298,6 +298,9 @@ static void __card_status( const mc_card_status_t status )
             led_off( led_all );
             led_on( led_blue );
             break;
+        case MC_CARD__MOUNTING:
+            _D2( "New card status: MC_CARD__MOUNTING\n" );
+            break;
         case MC_CARD__MOUNTED:
             __state.magazine_present = true;
             __send_state();

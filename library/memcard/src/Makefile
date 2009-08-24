@@ -5,7 +5,8 @@ INCLUDE   = -I/usr/avr32/include \
             -I$(BASE)/bins/include
 
 HEADERS = \
-    memcard.h
+    memcard.h \
+    dirent.h
 
 SOURCES = \
     csd.c \
@@ -13,6 +14,11 @@ SOURCES = \
     crc.c \
     commands.c \
     command.c \
-    memcard.c
+    memcard.c \
+    glue.c \
+    dirent.c \
+    fatfs/ff.c \
+    fatfs/ccsbcs.c \
+    fatfs/avr32.c
 
 include ../../make/Makefile.common

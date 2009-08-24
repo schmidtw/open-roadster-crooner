@@ -13,11 +13,15 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
-#include <fatfs/ff.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
@@ -36,7 +40,7 @@
 #define IDLE_QUEUE_SIZE     10
 #define PB_COMMAND_MSG_MAX  20
 
-#define PB_DEBUG 2
+#define PB_DEBUG 0
 
 #define _D1(...)
 #define _D2(...)
@@ -160,71 +164,64 @@ static void __pb_task( void *params )
     mc_register( &__mount_status );
 
     while( 1 ) {
-        FATFS fs;
-
         xSemaphoreTake( __card_mounted, portMAX_DELAY );
 
-        if( 0 == f_mount(0, &fs) ) {
+        _D1( "mounted fs.\n" );
+        ri_checking_for_discs();
+        if( true == populate_database(dir_map, DIR_MAP_SIZE, "/") ) {
+            media_status_t ms;
 
-            _D1( "mounted fs.\n" );
-            ri_checking_for_discs();
-            if( true == populate_database(dir_map, DIR_MAP_SIZE, "/") ) {
-                media_status_t ms;
+            ri_checking_complete( __determine_map() );
 
-                ri_checking_complete( __determine_map() );
+            current_song = NULL;
+            ms = MI_STOPPED_BY_REQUEST;
+            next_song( &current_song, DT_NEXT, DL_SONG );
+            while( MC_CARD__MOUNTED == __card_status ) {
+                media_play_fn_t play_fn;
 
-                current_song = NULL;
-                ms = MI_STOPPED_BY_REQUEST;
-                next_song( &current_song, DT_NEXT, DL_SONG );
-                while( MC_CARD__MOUNTED == __card_status ) {
-                    media_play_fn_t play_fn;
+                __handle_messages( &current_song );
 
-                    __handle_messages( &current_song );
+                play_fn = current_song->play_fn;
+                _D2( "Playing song '%s'\n", current_song->title );
+                ms = (*play_fn)( (const char*) current_song->file_location,
+                                 current_song->track_gain,
+                                 current_song->track_peak,
+                                 __idle, IDLE_QUEUE_SIZE, &malloc, &free,
+                                 &__continue_decoding );
+                _D2( "Played song\n" );
 
-                    play_fn = current_song->play_fn;
-                    _D2( "Playing song '%s'\n", current_song->title );
-                    ms = (*play_fn)( (const char*) current_song->file_location,
-                                     current_song->track_gain,
-                                     current_song->track_peak,
-                                     __idle, IDLE_QUEUE_SIZE, &malloc, &free,
-                                     &__continue_decoding );
-                    _D2( "Played song\n" );
+                if( MI_STOPPED_BY_REQUEST != ms ) {
+                    db_status_t rv;
 
-                    if( MI_STOPPED_BY_REQUEST != ms ) {
-                        db_status_t rv;
+                    ri_song_ended_playing_next();
 
-                        ri_song_ended_playing_next();
-
-                        rv = next_song( &current_song, DT_NEXT, DL_SONG );
-                        if( DS_END_OF_LIST == rv ) {
-                            rv = next_song( &current_song, DT_NEXT, DL_ALBUM );
-                        }
-                        if( DS_END_OF_LIST == rv ) {
-                            rv = next_song( &current_song, DT_NEXT, DL_ARTIST );
-                        }
-                        if( DS_FAILURE == rv ) {
-                            break;
-                        }
+                    rv = next_song( &current_song, DT_NEXT, DL_SONG );
+                    if( DS_END_OF_LIST == rv ) {
+                        rv = next_song( &current_song, DT_NEXT, DL_ALBUM );
+                    }
+                    if( DS_END_OF_LIST == rv ) {
+                        rv = next_song( &current_song, DT_NEXT, DL_ARTIST );
+                    }
+                    if( DS_FAILURE == rv ) {
+                        break;
                     }
                 }
-
-                current_song = NULL;
-                database_purge();
-            } else {
-                ri_checking_complete( 0x00 );
             }
+
+            current_song = NULL;
+            database_purge();
+        } else {
+            ri_checking_complete( 0x00 );
         }
     }
 }
 
 static void __mount_status( const mc_card_status_t status )
 {
-    portBASE_TYPE ignore;
-
     __card_status = status;
 
     if( MC_CARD__MOUNTED == status ) {
-        xSemaphoreGiveFromISR( __card_mounted, &ignore );
+        xSemaphoreGive( __card_mounted );
     }
 }
 

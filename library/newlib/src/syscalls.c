@@ -27,6 +27,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sys/times.h>
 #include <sys/stat.h>
 #include <sys/sysregs.h>
@@ -116,8 +117,9 @@ int _init_startup( void )
 }
 
 __attribute__((weak))
-int _file_write( int file, char *ptr, int len )
+int _file_fstat_r( struct _reent *reent, int fd, struct stat *st )
 {
+    reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
     fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
@@ -125,13 +127,65 @@ int _file_write( int file, char *ptr, int len )
 }
 
 __attribute__((weak))
-int _file_read( int file, char *ptr, int len )
+int _file_write_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
+    reent->_errno = EBADF;
+#ifdef SYSCALL_DEBUG
+    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+#endif
+    return -1;
+}
+
+__attribute__((weak))
+int _file_read_r( struct _reent *reent, int fd, void *buf, size_t len )
+{
+    reent->_errno = EBADF;
+#ifdef SYSCALL_DEBUG
+    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+#endif
+    return -1;
+}
+
+__attribute__((weak))
+off_t _file_lseek_r( struct _reent *reent, int fd, off_t offset, int whence )
+{
+    reent->_errno = EBADF;
+#ifdef SYSCALL_DEBUG
+    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+#endif
+    return -1;
+}
+
+__attribute__((weak))
+int _file_close_r( struct _reent *reent, int fd )
+{
+    reent->_errno = EBADF;
+#ifdef SYSCALL_DEBUG
+    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+#endif
+    return -1;
+}
+
+__attribute__((weak))
+int _file_isatty_r( struct _reent *reent, int fd )
+{
+    reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
     fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
     return 0;
 }
+
+__attribute__((weak))
+int _open_r( struct _reent *reent, const char *name, int flags, int mode )
+{
+    reent->_errno = EBADF;
+#ifdef SYSCALL_DEBUG
+    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+#endif
+    return -1;
+}
+
 
 __attribute__((weak))
 void _debug_isr_tx_complete( void )
@@ -167,9 +221,78 @@ void _exit_r( struct _reent *reent, int code )
     while( 1 ) { ; }
 }
 
-int _read_r( struct _reent *reent, int file, char *ptr, int len )
+int _fstat_r( struct _reent *reent, int fd, struct stat *st )
 {
-    return _file_read( file, ptr, len );
+    if( (0 == fd) || (1 == fd) || (2 == fd) ) {
+        st->st_mode = S_IFCHR;
+        return 0;
+    }
+
+    return _file_fstat_r( reent, fd, st );
+}
+
+int _fstat( int fd, struct stat *st )
+{
+    return _fstat_r( _REENT, fd, st );
+}
+
+off_t _lseek_r( struct _reent *reent, int fd, off_t offset, int whence )
+{
+    if( (0 == fd) || (1 == fd) || (2 == fd) ) {
+        reent->_errno = EBADF;
+        return -1;
+    }
+
+    return _file_lseek_r( reent, fd, offset, whence );
+}
+
+off_t _lseek( int fd, off_t offset, int whence )
+{
+    return _lseek_r( _REENT, fd, offset, whence );
+}
+
+int _read_r( struct _reent *reent, int fd, void *buf, size_t len )
+{
+    if( (0 == fd) || (1 == fd) || (2 == fd) ) {
+        reent->_errno = EBADF;
+        return -1;
+    }
+
+    return _file_read_r( reent, fd, buf, len );
+}
+
+int _read( int fd, void *buf, size_t len )
+{
+    return _read_r( _REENT, fd, buf, len );
+}
+
+int _close_r( struct _reent *reent, int fd )
+{
+    if( (0 == fd) || (1 == fd) || (2 == fd) ) {
+        reent->_errno = EBADF;
+        return -1;
+    }
+
+    return _file_close_r( reent, fd );
+}
+
+int _close( int fd )
+{
+    return _close_r( _REENT, fd );
+}
+
+int _isatty_r( struct _reent *reent, int fd )
+{
+    if( (0 == fd) || (1 == fd) || (2 == fd) ) {
+        return 1;
+    }
+
+    return _file_isatty_r( reent, fd );
+}
+
+int _isatty( int fd )
+{
+    return _isatty_r( _REENT, fd );
 }
 
 /**
@@ -178,9 +301,9 @@ int _read_r( struct _reent *reent, int file, char *ptr, int len )
  * data to correct location.
  * 1 and 2 is stdout and stderr which goes to usart
  */
-int _write_r( struct _reent *reent, int file, char *ptr, int len )
+int _write_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
-    if( (1 == file) || (2 == file) ) {
+    if( (1 == fd) || (2 == fd) ) {
 #ifdef USE_INTERRUPT_DEBUG
         if( (CEM__APPLICATION == cpu_get_mode()) &&
             (true == are_global_interrupts_enabled()) )
@@ -188,7 +311,7 @@ int _write_r( struct _reent *reent, int file, char *ptr, int len )
             _debug_lock();
             __debug_sent = false;
 
-            pdca_queue_buffer( PDCA_CHANNEL_ID_DEBUG_TX, ptr, len );
+            pdca_queue_buffer( PDCA_CHANNEL_ID_DEBUG_TX, buf, len );
             pdca_isr_enable( PDCA_CHANNEL_ID_DEBUG_TX, PDCA_ISR__TRANSFER_COMPLETE );
             pdca_enable( PDCA_CHANNEL_ID_DEBUG_TX );
 
@@ -204,17 +327,28 @@ int _write_r( struct _reent *reent, int file, char *ptr, int len )
             for( i = 0; i < len; i++ ) {
                 while( false == usart_tx_ready(DEBUG_USART) ) { ; }
 
-                usart_write_char( DEBUG_USART, ptr[i] );
+                usart_write_char( DEBUG_USART, ((char *) buf)[i] );
             }
         }
         return len;
     }
 
-    if( 0 == file ) {
+    if( 0 == fd ) {
+        reent->_errno = EBADF;
         return -1;
     }
 
-    return _file_write( file, ptr, len );
+    return _file_write_r( reent, fd, buf, len );
+}
+
+int _write( int fd, void *buf, size_t len )
+{
+    return _write_r( _REENT, fd, buf, len );
+}
+
+int _open( const char *name, int flags, int mode )
+{
+    return _open_r( _REENT, name, flags, mode );
 }
 
 #ifdef USE_INTERRUPT_DEBUG

@@ -1728,6 +1728,7 @@ static void prvInitialiseTCBVariables( tskTCB *pxTCB, const signed portCHAR * co
 	#endif	
 
     #if ( configUSE_NEWLIB_REENTRANT == 1 )
+        memset( &(pxTCB->reent), 0, sizeof(struct _reent) );
         _REENT_INIT_PTR( (&(pxTCB->reent)) );
     #endif
 }

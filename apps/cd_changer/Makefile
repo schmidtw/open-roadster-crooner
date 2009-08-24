@@ -15,7 +15,6 @@ LIBRARIES = \
             file-stream \
             ibus-radio-protocol \
             ibus-physical \
-            fatfs \
             freertos \
             linked-list \
             display \

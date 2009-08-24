@@ -6,7 +6,6 @@ LIBRARIES = \
             newlib \
             freertos \
             memcard \
-            fatfs \
             file-stream \
             dsp \
             media-interface \

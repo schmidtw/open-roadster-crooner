@@ -20,10 +20,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <dsp/dsp.h>
 #include <file-stream/file-stream.h>
-#include <fatfs/ff.h>
 #include <freertos/semphr.h>
 #include <freertos/queue.h>
 
@@ -73,7 +76,7 @@ typedef enum {
 
 typedef media_status_t (*stream__block_handler_t)( FLACContext *fc,
                                                    const uint32_t length );
-typedef media_status_t (*file__block_handler_t)( FIL *file,
+typedef media_status_t (*file__block_handler_t)( int fd,
                                                  const uint32_t length,
                                                  media_metadata_t *metadata );
 
@@ -106,22 +109,19 @@ static media_status_t stream__metadata_streaminfo_block( FLACContext *fc,
                                                          const uint32_t length );
 
 /*---------- File based metadata handlers ----------*/
-static media_status_t file__process_metadata( FIL *file,
+static media_status_t file__process_metadata( int fd,
                                               media_metadata_t *metadata );
-static media_status_t file__metadata_vorbis_comment( FIL *file,
+static media_status_t file__metadata_vorbis_comment( int fd,
                                                      const uint32_t length,
                                                      media_metadata_t *metadata );
-static media_status_t file__metadata_block_ignore( FIL *file,
+static media_status_t file__metadata_block_ignore( int fd,
                                                    const uint32_t length,
                                                    media_metadata_t *metadata );
-static bool file__read_uint32_t( FIL *file, uint32_t *out );
-static inline bool file__read( FIL *file, uint8_t *buf, uint32_t len );
-static inline bool file__seek_from_current( FIL *file, uint32_t len );
-static inline bool file__read_char( FIL *file, char *c );
-static flac_metadata_t flac_get_key_value( FIL *file,
+static bool file__read_uint32_t( int fd, uint32_t *out );
+static flac_metadata_t flac_get_key_value( int fd,
                                            uint32_t *len );
-static bool flac_get_int32_t( FIL *file, uint32_t *len, int32_t *out );
-static bool flac_get_double( FIL *file, uint32_t *len, double *out );
+static bool flac_get_int32_t( int fd, uint32_t *len, int32_t *out );
+static bool flac_get_double( int fd, uint32_t *len, double *out );
 static void dsp_callback( int32_t *left, int32_t *right, void *data );
 
 /*----------------------------------------------------------------------------*/
@@ -236,7 +236,7 @@ media_status_t media_flac_get_metadata( const char *filename,
                                         media_metadata_t *metadata )
 {
     media_status_t rv;
-    FIL file;
+    int fd;
 
     rv = MI_RETURN_OK;
 
@@ -245,14 +245,15 @@ media_status_t media_flac_get_metadata( const char *filename,
         goto error_0;
     }
 
-    if( FR_OK != f_open(&file, filename, FA_READ|FA_OPEN_EXISTING) ) {
+    fd = open( filename, O_RDONLY );
+    if( -1 == fd ) {
         rv = MI_ERROR_PARAMETER;
         goto error_0;
     }
 
     {
         uint8_t buf[4];
-        if( false == file__read(&file, buf, 4) ) {
+        if( 4 != read(fd, buf, 4) ) {
             rv = MI_ERROR_INVALID_FORMAT;
             goto error_1;
         }
@@ -263,10 +264,10 @@ media_status_t media_flac_get_metadata( const char *filename,
         }
     }
 
-    rv = file__process_metadata( &file, metadata );
+    rv = file__process_metadata( fd, metadata );
 
 error_1:
-    f_close( &file );
+    close( fd );
 
 error_0:
 
@@ -365,7 +366,7 @@ static media_status_t stream__process_metadata( FLACContext *fc )
  *
  *  @retval MI_RETURN_OK
  */
-static media_status_t file__process_metadata( FIL *file,
+static media_status_t file__process_metadata( int fd,
                                               media_metadata_t *metadata )
 {
     media_status_t status;
@@ -391,14 +392,14 @@ static media_status_t file__process_metadata( FIL *file,
     while( !end ) {
         {
             uint8_t buf[4];
-            if( false == file__read(file, buf, 4) ) {
+            if( 4 != read(fd, buf, 4) ) {
                 return MI_ERROR_DECODE_ERROR;
             }
 
             process_metadata_block_header( buf, &end, &type, &block_length );
         }
 
-        status = (*handler[type])( file, block_length, metadata );
+        status = (*handler[type])( fd, block_length, metadata );
         if( MI_RETURN_OK != status ) {
             return status;
         }
@@ -465,11 +466,11 @@ static media_status_t stream__metadata_block_ignore( FLACContext *fc,
  *  @param length the number of bytes in the block
  *  @param buf ignored
  */
-static media_status_t file__metadata_block_ignore( FIL *file,
+static media_status_t file__metadata_block_ignore( int fd,
                                                    const uint32_t length,
                                                    media_metadata_t *metadata )
 {
-    if( true == file__seek_from_current(file, length) ) {
+    if( -1 != lseek(fd, length, SEEK_CUR) ) {
         return MI_RETURN_OK;
     }
 
@@ -515,7 +516,7 @@ static media_status_t stream__metadata_streaminfo_block( FLACContext *fc,
     return MI_RETURN_OK;
 }
 
-static media_status_t file__metadata_vorbis_comment( FIL *file,
+static media_status_t file__metadata_vorbis_comment( int fd,
                                                      const uint32_t length,
                                                      media_metadata_t *metadata )
 {
@@ -531,15 +532,15 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
 
     /* Skip the vendor information */
     {   uint32_t vendor_length;
-        if( false == file__read_uint32_t(file, &vendor_length) ) {
+        if( false == file__read_uint32_t(fd, &vendor_length) ) {
             return MI_ERROR_DECODE_ERROR;
         }
-        if( false == file__seek_from_current(file, vendor_length) ) {
+        if( -1 == lseek(fd, vendor_length, SEEK_CUR) ) {
             return MI_ERROR_DECODE_ERROR;
         }
     }
 
-    if( false == file__read_uint32_t(file, &list_size) ) {
+    if( false == file__read_uint32_t(fd, &list_size) ) {
         return MI_ERROR_DECODE_ERROR;
     }
 
@@ -549,18 +550,18 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
 
         list_size--;
 
-        if( false == file__read_uint32_t(file, &comment_length) ) {
+        if( false == file__read_uint32_t(fd, &comment_length) ) {
             return MI_ERROR_DECODE_ERROR;
         }
 
-        type = flac_get_key_value( file, &comment_length );
+        type = flac_get_key_value( fd, &comment_length );
         switch( type ) {
             case FM__ALBUM:
             {
                 uint32_t album_length;
 
                 album_length = MIN( MEDIA_ALBUM_LENGTH, comment_length );
-                if( false == file__read(file, (uint8_t*) &metadata->album, album_length) ) {
+                if( album_length != read(fd, &metadata->album, album_length) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 comment_length -= album_length;
@@ -572,7 +573,7 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
                 uint32_t artist_length;
 
                 artist_length = MIN( MEDIA_ARTIST_LENGTH, comment_length );
-                if( false == file__read(file, (uint8_t*) &metadata->artist, artist_length) ) {
+                if( artist_length != read(fd, &metadata->artist, artist_length) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 comment_length -= artist_length;
@@ -580,7 +581,7 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
             }
 
             case FM__DISCNUMBER:
-                if( false == flac_get_int32_t(file, &comment_length, &metadata->disc_number) ) {
+                if( false == flac_get_int32_t(fd, &comment_length, &metadata->disc_number) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
@@ -590,7 +591,7 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
                 uint32_t title_length;
 
                 title_length = MIN( MEDIA_TITLE_LENGTH, comment_length );
-                if( false == file__read(file, (uint8_t*) &metadata->title, title_length) ) {
+                if( title_length != read(fd, &metadata->title, title_length) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 comment_length -= title_length;
@@ -598,31 +599,31 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
             }
 
             case FM__TRACKNUMBER:
-                if( false == flac_get_int32_t(file, &comment_length, &metadata->track_number) ) {
+                if( false == flac_get_int32_t(fd, &comment_length, &metadata->track_number) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
 
             case FM__REPLAYGAIN_ALBUM_PEAK:
-                if( false == flac_get_double(file, &comment_length, &metadata->album_peak) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->album_peak) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
 
             case FM__REPLAYGAIN_ALBUM_GAIN:
-                if( false == flac_get_double(file, &comment_length, &metadata->album_gain) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->album_gain) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
 
             case FM__REPLAYGAIN_TRACK_PEAK:
-                if( false == flac_get_double(file, &comment_length, &metadata->track_peak) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->track_peak) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
 
             case FM__REPLAYGAIN_TRACK_GAIN:
-                if( false == flac_get_double(file, &comment_length, &metadata->track_gain) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->track_gain) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
@@ -631,7 +632,7 @@ static media_status_t file__metadata_vorbis_comment( FIL *file,
                 break;
         }
 
-        if( false == file__seek_from_current(file, comment_length) ) {
+        if( -1 == lseek(fd, comment_length, SEEK_CUR) ) {
             return MI_ERROR_DECODE_ERROR;
         }
     }
@@ -706,16 +707,16 @@ done:
  *  Used to read a uint32_t from a file and advance the file
  *  pointer.
  *
- *  @param file the file to read from
+ *  @param fd the file descriptor to read from
  *  @param out the uint32_t data to output
  *
  *  @return true on success, false otherwise
  */
-static bool file__read_uint32_t( FIL *file, uint32_t *out )
+static bool file__read_uint32_t( int fd, uint32_t *out )
 {
     uint8_t buf[4];
 
-    if( true == file__read(file, buf, 4) ) {
+    if( 4 == read(fd, buf, 4) ) {
         *out = buf[0];
         *out |= (buf[1] << 8);
         *out |= (buf[2] << 16);
@@ -728,93 +729,35 @@ static bool file__read_uint32_t( FIL *file, uint32_t *out )
 }
 
 /**
- *  Used to read bytes from a file and verify that the exact amount of
- *  data was returned.
- *
- *  @param file the file to read from
- *  @param buf the buffer location to read into
- *  @param len the number of bytes to read
- *
- *  @return true on success, false otherwise
- */
-static inline bool file__read( FIL *file, uint8_t *buf, uint32_t len )
-{
-    UINT got;
-
-    if( FR_OK == f_read(file, buf, len, &got) ) {
-        if( len == got ) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
- *  Used to seek from the current location in the file forward.  The
- *  normal f_lseek() doesn't seek from the current location.
- *
- *  @param file the file to read from
- *  @param len the number of bytes to skip
- *
- *  @return true on success, false otherwise
- */
-static inline bool file__seek_from_current( FIL *file, uint32_t len )
-{
-    DWORD current;
-
-    current = file->fptr;
-    if( FR_OK == f_lseek(file, (len + current)) ) {
-        return true;
-    }
-
-    return false;
-}
-
-/**
- *  Used to read 1 character from a file.
- *
- *  @param file the file to read from
- *  @param c the pointer to the character buffer
- *
- *  @return true on success, false otherwise
- */
-static inline bool file__read_char( FIL *file, char *c )
-{
-    return file__read( file, (uint8_t *) c, 1 );
-}
-
-/**
  *  Used to read out of a vorbis comment the key and point the
  *  next file character to the value if it is a known type.  If
  *  the type is unknown, the entire comment is skipped.
  *
- *  @param file the file to read from
+ *  @param fd the file descriptor to read from
  *  @param len the bytes in the comment (in), then the bytes
  *             left after processing
  *
  *  @return the metadata type of this comment
  */
-static flac_metadata_t flac_get_key_value( FIL *file,
-                                           uint32_t *len )
+static flac_metadata_t flac_get_key_value( int fd, uint32_t *len )
 {
     char c;
 
     if( 0 < *len ) {
-        if( true == file__read_char(file, &c) ) {
+        if( 1 == read(fd, &c, 1) ) {
             (*len)--;
             switch( c ) {
                 case 'a':
                 case 'A':
                     if( 5 < *len ) {
                         uint8_t buf[5];
-                        if( true == file__read(file, buf, 5) ) {
+                        if( 5 == read(fd, buf, 5) ) {
                             *len -= 5;
                             if( 0 == strncasecmp((char*) buf, "LBUM=", 5) ) {
                                 return FM__ALBUM;
                             }
                             if( 0 == strncasecmp((char*) buf, "RTIST", 5) ) {
-                                if( true == file__read_char(file, &c) ) {
+                                if( 1 == read(fd, &c, 1) ) {
                                     (*len)--;
                                     return FM__ARTIST;
                                 }
@@ -827,7 +770,7 @@ static flac_metadata_t flac_get_key_value( FIL *file,
                 case 'D':
                     if( 10 < *len ) {
                         uint8_t buf[10];
-                        if( true == file__read(file, buf, 10) ) {
+                        if( 10 == read(fd, buf, 10) ) {
                             *len -= 10;
                             if( 0 == strncasecmp((char*) buf, "ISCNUMBER=", 10) ) {
                                 return FM__DISCNUMBER;
@@ -840,7 +783,7 @@ static flac_metadata_t flac_get_key_value( FIL *file,
                 case 'R':
                     if( 21 < *len ) {
                         uint8_t buf[21];
-                        if( true == file__read(file, buf, 21) ) {
+                        if( 21 == read(fd, buf, 21) ) {
                             *len -= 21;
                             if( 0 == strncasecmp((char*) buf, "EPLAYGAIN_ALBUM_PEAK=", 21) ) {
                                 return FM__REPLAYGAIN_ALBUM_PEAK;
@@ -852,7 +795,7 @@ static flac_metadata_t flac_get_key_value( FIL *file,
                                 return FM__REPLAYGAIN_TRACK_GAIN;
                             } else if( 0 == strncasecmp((char*) buf, "EPLAYGAIN_REFERENCE_L", 21) ) {
                                 if( 8 < *len ) {
-                                    if( true == file__read(file, buf, 8) ) {
+                                    if( 8 == read(fd, buf, 8) ) {
                                         *len -= 8;
                                         if( 0 == strncasecmp((char*) buf, "OUDNESS=", 8) ) {
                                             return FM__REPLAYGAIN_REFERENCE_LOUDNESS;
@@ -868,14 +811,14 @@ static flac_metadata_t flac_get_key_value( FIL *file,
                 case 'T':
                     if( 5 < *len ) {
                         uint8_t buf[6];
-                        if( true == file__read(file, buf, 5) ) {
+                        if( 5 == read(fd, buf, 5) ) {
                             *len -= 5;
                             if( 0 == strncasecmp((char*) buf, "ITLE=", 5) ) {
                                 return FM__TITLE;
                             }
                             if( 0 == strncasecmp((char*) buf, "RACKN", 5) ) {
                                 if( 6 < *len ) {
-                                    if( true == file__read(file, buf, 6) ) {
+                                    if( 6 == read(fd, buf, 6) ) {
                                         *len -= 6;
                                         if( 0 == strncasecmp((char*) buf, "UMBER=", 6) ) {
                                             return FM__TRACKNUMBER;
@@ -893,7 +836,7 @@ static flac_metadata_t flac_get_key_value( FIL *file,
         }
     }
 
-    file__seek_from_current( file, *len );
+    lseek( fd, *len, SEEK_CUR );
     *len = 0;
     return FM__UNKNOWN;
 }
@@ -901,13 +844,13 @@ static flac_metadata_t flac_get_key_value( FIL *file,
 /**
  *  Used to read in an int32_t from a file as an ASCII string.
  *
- *  @param file the file to read and process
+ *  @param fd the file descriptor to read and process
  *  @param len the maximum valid number of of bytes
  *  @param out the output int32_t data
  *
  *  @return true if successful, false otherwise
  */
-static bool flac_get_int32_t( FIL *file, uint32_t *len, int32_t *out )
+static bool flac_get_int32_t( int fd, uint32_t *len, int32_t *out )
 {
     bool positive;
     bool got_sign;
@@ -919,7 +862,7 @@ static bool flac_get_int32_t( FIL *file, uint32_t *len, int32_t *out )
     while( 0 < *len ) {
         char c;
 
-        if( false == file__read_char(file, &c) ) {
+        if( 1 != read(fd, &c, 1) ) {
             return false;
         }
 
@@ -958,13 +901,13 @@ static bool flac_get_int32_t( FIL *file, uint32_t *len, int32_t *out )
 /**
  *  Used to read in double from a file as an ASCII string.
  *
- *  @param file the file to read and process
+ *  @param fd the file descriptor to read and process
  *  @param len the maximum valid number of of bytes
  *  @param out the output double data
  *
  *  @return true if successful, false otherwise
  */
-static bool flac_get_double( FIL *file, uint32_t *len, double *out )
+static bool flac_get_double( int fd, uint32_t *len, double *out )
 {
     bool positive;
     uint32_t number;
@@ -978,7 +921,7 @@ static bool flac_get_double( FIL *file, uint32_t *len, double *out )
     while( 0 < *len ) {
         char c;
 
-        if( false == file__read_char(file, &c) ) {
+        if( 1 != read(fd, &c, 1) ) {
             return false;
         }
 

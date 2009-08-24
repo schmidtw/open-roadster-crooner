@@ -36,8 +36,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <ctype.h>
-
-#include <fatfs/ff.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "metadata.h"
 
@@ -225,43 +227,10 @@ static int unsynchronize_frame(char* tag, int len)
     return unsynchronize(tag, len, &ff_found);
 }
 
-static ssize_t read( FIL *file, void *buf, size_t count )
-{
-    UINT rc;
-    if( FR_OK != f_read(file, buf, count, &rc) ) {
-        return -1;
-    }
-
-    return rc;
-}
-
-static off_t lseek( FIL *file, off_t offset, int whence )
-{
-    DWORD goal;
-    if( SEEK_CUR == whence ) {
-        goal = file->fptr + offset;
-    } else if( SEEK_SET == whence ) {
-        goal = offset;
-    } else if( SEEK_END == whence ) {
-        goal = file->fsize - offset;
-    } else {
-        /* Set errno to EINVAL */
-        return -1;
-    }
-
-    if( 0 <= goal ) {
-        if( FR_OK == f_lseek(file, goal) ) {
-            return goal;
-        }
-    }
-
-    return -1;
-}
-
-static int read_unsynched( FIL *file, void *buf, int len)
+static int read_unsynched( int fd, void *buf, int len)
 {
     int i;
-    UINT rc;
+    ssize_t rc;
     int remaining = len;
     char *wp;
     char *rp;
@@ -270,7 +239,7 @@ static int read_unsynched( FIL *file, void *buf, int len)
 
     while(remaining) {
         rp = wp;
-        rc = read(file, rp, remaining);
+        rc = read(fd, rp, remaining);
         if(rc <= 0)
             return rc;
 
@@ -282,16 +251,16 @@ static int read_unsynched( FIL *file, void *buf, int len)
     return len;
 }
 
-static int skip_unsynched(FIL *file, int len)
+static int skip_unsynched(int fd, int len)
 {
-    UINT rc;
+    ssize_t rc;
     int remaining = len;
     int rlen;
     char buf[32];
 
     while(remaining) {
         rlen = MIN(sizeof(buf), (unsigned int)remaining);
-        rc = read(file, buf, rlen);
+        rc = read(fd, buf, rlen);
         if(rc <= 0)
             return rc;
 
@@ -568,22 +537,22 @@ static int unicode_munge(char* string, char* utf8buf, int *len)
 /*
  * Sets the title of an MP3 entry based on its ID3v1 tag.
  *
- * Arguments: file - the MP3 file to scen for a ID3v1 tag
+ * Arguments: fd - the MP3 file to scen for a ID3v1 tag
  *            entry - the entry to set the title in
  *
  * Returns: true if a title was found and created, else false
  */
-static bool setid3v1title(FIL *file, struct mp3entry *entry)
+static bool setid3v1title(int fd, struct mp3entry *entry)
 {
     unsigned char buffer[128];
     static const char offsets[] = {3, 33, 63, 97, 93, 125, 127};
     int i, j;
     unsigned char* utf8;
 
-    if (-1 == lseek(file, -128, SEEK_END))
+    if (-1 == lseek(fd, -128, SEEK_END))
         return false;
 
-    if (read(file, buffer, sizeof buffer) != sizeof buffer)
+    if (read(fd, buffer, sizeof buffer) != sizeof buffer)
         return false;
 
     if (strncmp((char *)buffer, "TAG", 3))
@@ -651,12 +620,12 @@ static bool setid3v1title(FIL *file, struct mp3entry *entry)
 /*
  * Sets the title of an MP3 entry based on its ID3v2 tag.
  *
- * Arguments: file - the MP3 file to scan for a ID3v2 tag
+ * Arguments: fd - the MP3 file to scan for a ID3v2 tag
  *            entry - the entry to set the title in
  *
  * Returns: true if a title was found and created, else false
  */
-static void setid3v2title(FIL *file, struct mp3entry *entry)
+static void setid3v2title(int fd, struct mp3entry *entry)
 {
     int minframesize;
     int size;
@@ -682,8 +651,8 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
         return;
 
     /* Read the ID3 tag version from the header */
-    lseek(file, 0, SEEK_SET);
-    if(10 != read(file, header, 10))
+    lseek(fd, 0, SEEK_SET);
+    if(10 != read(fd, header, 10))
         return;
 
     /* Get the total ID3 tag size */
@@ -719,7 +688,7 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
     /* Skip the extended header if it is present */
     if(global_flags & 0x40) {
         if(version == ID3_VER_2_3) {
-            if(10 != read(file, header, 10))
+            if(10 != read(fd, header, 10))
                 return;
             /* The 2.3 extended header size doesn't include the header size
                field itself. Also, it is not unsynched. */
@@ -727,11 +696,11 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
                 bytes2int(header[0], header[1], header[2], header[3]) + 4;
 
             /* Skip the rest of the header */
-            lseek(file, framelen - 10, SEEK_CUR);
+            lseek(fd, framelen - 10, SEEK_CUR);
         }
 
         if(version >= ID3_VER_2_4) {
-            if(4 != read(file, header, 4))
+            if(4 != read(fd, header, 4))
                 return;
 
             /* The 2.4 extended header size does include the entire header,
@@ -739,7 +708,7 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
             framelen = unsync(header[0], header[1],
                               header[2], header[3]);
 
-            lseek(file, framelen - 4, SEEK_CUR);
+            lseek(fd, framelen - 4, SEEK_CUR);
         }
     }
 
@@ -758,9 +727,9 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
         /* Read frame header and check length */
         if(version >= ID3_VER_2_3) {
             if(global_unsynch && version <= ID3_VER_2_3)
-                rc = read_unsynched(file, header, 10);
+                rc = read_unsynched(fd, header, 10);
             else
-                rc = read(file, header, 10);
+                rc = read(fd, header, 10);
             if(rc != 10)
                 return;
             /* Adjust for the 10 bytes we read */
@@ -778,7 +747,7 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
                                      header[6], header[7]);
             }
         } else {
-            if(6 != read(file, header, 6))
+            if(6 != read(fd, header, 6))
                 return;
             /* Adjust for the 6 bytes we read */
             size -= 6;
@@ -802,12 +771,12 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
 
             if (version >= ID3_VER_2_4) {
                 if(flags & 0x0040) { /* Grouping identity */
-                    lseek(file, 1, SEEK_CUR); /* Skip 1 byte */
+                    lseek(fd, 1, SEEK_CUR); /* Skip 1 byte */
                     framelen--;
                 }
             } else {
                 if(flags & 0x0020) { /* Grouping identity */
-                    lseek(file, 1, SEEK_CUR); /* Skip 1 byte */
+                    lseek(fd, 1, SEEK_CUR); /* Skip 1 byte */
                     framelen--;
                 }
             }
@@ -816,7 +785,7 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
             {
                 /* Skip it */
                 size -= framelen;
-                lseek(file, framelen, SEEK_CUR);
+                lseek(fd, framelen, SEEK_CUR);
                 continue;
             }
 
@@ -825,7 +794,7 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
 
             if (version >= ID3_VER_2_4) {
                 if(flags & 0x0001) { /* Data length indicator */
-                    if(4 != read(file, tmp, 4))
+                    if(4 != read(fd, tmp, 4))
                         return;
 
                     /* We don't need the data length */
@@ -893,9 +862,9 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
                 tag = buffer + bufferpos;
 
                 if(global_unsynch && version <= ID3_VER_2_3)
-                    bytesread = read_unsynched(file, tag, framelen);
+                    bytesread = read_unsynched(fd, tag, framelen);
                 else
-                    bytesread = read(file, tag, framelen);
+                    bytesread = read(fd, tag, framelen);
 
                 if( bytesread != framelen )
                     return;
@@ -953,7 +922,7 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
 
                 /* Seek to the next frame */
                 if(framelen < totframelen)
-                    lseek(file, totframelen - framelen, SEEK_CUR);
+                    lseek(fd, totframelen - framelen, SEEK_CUR);
                 break;
             }
         }
@@ -963,10 +932,10 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
                skip it using the total size */
 
             if(global_unsynch && version <= ID3_VER_2_3) {
-                size -= skip_unsynched(file, totframelen);
+                size -= skip_unsynched(fd, totframelen);
             } else {
                 size -= totframelen;
-                if( lseek(file, totframelen, SEEK_CUR) == -1 )
+                if( lseek(fd, totframelen, SEEK_CUR) == -1 )
                     return;
             }
         }
@@ -976,24 +945,24 @@ static void setid3v2title(FIL *file, struct mp3entry *entry)
 /*
  * Calculates the size of the ID3v2 tag.
  *
- * Arguments: file - the file to search for a tag.
+ * Arguments: fd - the file to search for a tag.
  *
  * Returns: the size of the tag or 0 if none was found
  */
-int getid3v2len(FIL *file)
+int getid3v2len(int fd)
 {
     char buf[6];
     int offset;
 
     /* Make sure file has a ID3 tag */
-    if((-1 == lseek(file, 0, SEEK_SET)) ||
-       (read(file, buf, 6) != 6) ||
+    if((-1 == lseek(fd, 0, SEEK_SET)) ||
+       (read(fd, buf, 6) != 6) ||
        (strncmp(buf, "ID3", strlen("ID3")) != 0))
         offset = 0;
 
     /* Now check what the ID3v2 size field says */
     else
-        if(read(file, buf, 4) != 4)
+        if(read(fd, buf, 4) != 4)
             offset = 0;
         else
             offset = unsync(buf[0], buf[1], buf[2], buf[3]) + 10;
@@ -1005,20 +974,20 @@ int getid3v2len(FIL *file)
 /*
  * Checks all relevant information (such as ID3v1 tag, ID3v2 tag, length etc)
  * about an MP3 file and updates it's entry accordingly. */
-void get_mp3_metadata(FIL *file, struct mp3entry *entry)
+void get_mp3_metadata(int fd, struct mp3entry *entry)
 {
     memset(entry, 0, sizeof(struct mp3entry));
 
     entry->title = NULL;
-    entry->id3v2len = getid3v2len(file);
+    entry->id3v2len = getid3v2len(fd);
     entry->tracknum = 0;
     entry->discnum = 0;
 
     if (entry->id3v2len)
-        setid3v2title(file, entry);
+        setid3v2title(fd, entry);
 
     /* only seek to end of file if no id3v2 tags were found */
     if (!entry->id3v2len) {
-        setid3v1title(file, entry);
+        setid3v1title(fd, entry);
     }
 }

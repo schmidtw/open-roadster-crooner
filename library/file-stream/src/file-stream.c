@@ -19,17 +19,20 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <freertos/queue.h>
-#include <fatfs/ff.h>
 
 #include "file-stream.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define FSTREAM_TASK_STACK_SIZE         (configMINIMAL_STACK_SIZE)
+#define FSTREAM_TASK_STACK_SIZE         (configMINIMAL_STACK_SIZE+100)
 #define FSTREAM_BIG_BUFFER_SIZE         (32*1024)
 #define FSTREAM_TOTAL_BUFFER_SIZE       (128*1024)
 #define FSTREAM_SMALL_BUFFER_SIZE       512
@@ -63,21 +66,32 @@ typedef enum {
     FSTS__STREAMING
 } fs_task_state_t;
 
+typedef struct {
+    fs_task_state_t cmd;
+    char *name;
+} fstream_command_t;
+
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static FIL __file;
+static volatile int __filesize;
 
 static volatile fs_task_state_t __state;
-static volatile fs_task_state_t __goal;
 
 static fstream_buffer_t __big_buffer;
 
-static xQueueHandle __active;
-static xQueueHandle __idle;
-static xSemaphoreHandle __wakeup;
+/* Data queues */
+static xQueueHandle __data_active;
+static xQueueHandle __data_idle;
 
-fstream_free_fct __free_fn;
+/* Control queues */
+static xQueueHandle __command_active;
+static xQueueHandle __command_idle;
+
+static fstream_command_t __command;
+
+static fstream_free_fct __free_fn;
+static fstream_malloc_fct __malloc_fn;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -97,23 +111,28 @@ bool fstream_init( const uint32_t priority,
 
     _D1( "%s( %lu, %p, %p )\n", __func__, priority, malloc_fn, free_fn );
 
-    /* Free is optional. */
-    if( NULL == malloc_fn ) {
+    if( (NULL == malloc_fn) || (NULL == free_fn) ) {
         return false;
     }
 
     __state = FSTS__IDLE;
-    __goal = FSTS__IDLE;
 
     __free_fn = free_fn;
-
-    vSemaphoreCreateBinary( __wakeup );
-    xSemaphoreTake( __wakeup, 0 );
+    __malloc_fn = malloc_fn;
 
     queue_size = FSTREAM_TOTAL_BUFFER_SIZE / FSTREAM_SMALL_BUFFER_SIZE;
 
-    __idle = xQueueCreate( queue_size, sizeof(fstream_buffer_t*) );
-    __active = xQueueCreate( queue_size, sizeof(fstream_buffer_t*) );
+    __data_idle = xQueueCreate( queue_size, sizeof(fstream_buffer_t*) );
+    __data_active = xQueueCreate( queue_size, sizeof(fstream_buffer_t*) );
+
+    __command_idle = xQueueCreate( 1, sizeof(fstream_buffer_t*) );
+    __command_active = xQueueCreate( 1, sizeof(fstream_buffer_t*) );
+
+    {
+        fstream_command_t *cmd;
+        cmd = &__command;
+        xQueueSendToBack( __command_idle, &cmd, 0 );
+    }
 
     __big_buffer.valid_bytes = 0;
 
@@ -126,7 +145,7 @@ bool fstream_init( const uint32_t priority,
         n->buffer = (uint8_t *) (*malloc_fn)( FSTREAM_SMALL_BUFFER_SIZE );
         n->valid_bytes = 0;
 
-        xQueueSendToBack( __idle, &n, 0 );
+        xQueueSendToBack( __data_idle, &n, 0 );
     }
 
     xTaskCreate( __task, (signed portCHAR *) "FileStrm",
@@ -139,6 +158,8 @@ bool fstream_init( const uint32_t priority,
 /** Details in file-stream.h */
 bool fstream_open( const char *filename )
 {
+    fstream_command_t *cmd;
+
     _D1( "%s( %p )\n", __func__, filename );
     if( NULL == filename ) {
         _D1( "%s( %p ) -> failure\n", __func__, filename );
@@ -147,18 +168,29 @@ bool fstream_open( const char *filename )
 
     fstream_close();
 
-    if( FR_OK != f_open(&__file, filename, FA_READ|FA_OPEN_EXISTING) ) {
+    xQueueReceive( __command_idle, &cmd, portMAX_DELAY );
+
+    cmd->name = (char *) (*__malloc_fn)( strlen(filename) + 1 );
+    if( NULL == cmd->name ) {
+        xQueueSendToBack( __command_idle, &cmd, 0 );
         _D1( "%s( %p ) -> failure\n", __func__, filename );
         return false;
     }
+    strcpy( cmd->name, filename );
+    cmd->cmd = FSTS__STREAMING;
 
-    __big_buffer.valid_bytes = 0;
+    xQueueSendToBack( __command_active, &cmd, 0 );
 
-    __goal = FSTS__STREAMING;
-    xSemaphoreGive( __wakeup );
+    /* Wait for the command to be processed. */
+    xQueuePeek( __command_idle, &cmd, portMAX_DELAY );
 
-    _D2( "%s( %p ) -> success\n", __func__, filename );
-    return true;
+    if( FSTS__STREAMING == cmd->cmd ) {
+        _D2( "%s( %p ) -> success\n", __func__, filename );
+        return true;
+    }
+
+    _D1( "%s( %p ) -> failure\n", __func__, filename );
+    return false;
 }
 
 /** Details in file-stream.h */
@@ -178,9 +210,9 @@ void* fstream_get_buffer( const size_t wanted, size_t *got )
         fstream_buffer_t *node;
 
         if( FSTS__IDLE == __state ) {
-            rv = xQueueReceive( __active, &node, 0 );
+            rv = xQueueReceive( __data_active, &node, 0 );
         } else {
-            rv = xQueueReceive( __active, &node, portMAX_DELAY );
+            rv = xQueueReceive( __data_active, &node, portMAX_DELAY );
         }
 
         if( pdFALSE == rv ) {
@@ -192,7 +224,7 @@ void* fstream_get_buffer( const size_t wanted, size_t *got )
             __big_buffer.valid_bytes += node->valid_bytes;
 
             eof = node->last;
-            xQueueSendToBack( __idle, &node, 0 );
+            xQueueSendToBack( __data_idle, &node, 0 );
         }
     }
 
@@ -247,28 +279,28 @@ void fstream_skip( const size_t skip )
 /** Details in file-stream.h */
 void fstream_close( void )
 {
+    fstream_command_t *cmd;
     fstream_buffer_t *node;
 
     _D1( "%s()\n", __func__ );
-    __goal = FSTS__IDLE;
+    xQueueReceive( __command_idle, &cmd, portMAX_DELAY );
+    cmd->cmd = FSTS__IDLE;
+    cmd->name = NULL;
+    xQueueSendToBack( __command_active, &cmd, 0 );
 
     /* Clear out any active data so we unblock the thread. */
-    while( pdTRUE == xQueueReceive(__active, &node, 0) ) {
-        xQueueSendToBack( __idle, &node, 0 );
+    while( pdTRUE == xQueueReceive(__data_active, &node, 0) ) {
+        xQueueSendToBack( __data_idle, &node, 0 );
     }
 
     /* Wait for it to shut down. */
-    while( FSTS__STREAMING == __state ) {
-        vTaskDelay( TASK_DELAY_MS(10) );
-    }
+    xQueuePeek( __command_idle, &cmd, portMAX_DELAY );
 
     /* Clear out any active data. */
-    while( pdTRUE == xQueueReceive(__active, &node, 0) ) {
-        xQueueSendToBack( __idle, &node, 0 );
+    while( pdTRUE == xQueueReceive(__data_active, &node, 0) ) {
+        xQueueSendToBack( __data_idle, &node, 0 );
     }
 
-    f_close( &__file );
-    __file.fsize = 0;
     __big_buffer.valid_bytes = 0;
     _D2( "%s()\n", __func__ );
 }
@@ -281,7 +313,11 @@ void fstream_destroy( void )
 /** Details in file-stream.h */
 uint32_t fstream_get_filesize( void )
 {
-    return (uint32_t) __file.fsize;
+    if( FSTS__STREAMING == __state ) {
+        return __filesize;
+    }
+
+    return 0;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -291,45 +327,102 @@ uint32_t fstream_get_filesize( void )
 void __task( void *params )
 {
     while( 1 ) {
-        _D2( "%s:__task: FSTS__IDLE\n", __FILE__ );
-        __state = FSTS__IDLE;
-        xSemaphoreTake( __wakeup, portMAX_DELAY );
+        fstream_command_t *cmd;
 
-        if( FSTS__STREAMING == __goal ) {
-            uint32_t bytes_left;
+        _D2( "Waiting on command\n" );
+        xQueueReceive( __command_active, &cmd, portMAX_DELAY );
 
-            __state = FSTS__STREAMING;
-            bytes_left = __file.fsize;
+        if( FSTS__STREAMING == cmd->cmd ) {
+            char *filename;
+            int fd;
 
-            /* read the file */
-            while( 0 < bytes_left ) {
-                uint32_t requested, read;
-                fstream_buffer_t *node;
+            filename = cmd->name;
+            cmd->name = NULL;
 
-                xQueueReceive( __idle, &node, portMAX_DELAY );
+            _D2( "Told to stream: '%s'\n", filename );
+            fd = open( filename, O_RDONLY );
+            if( -1 == fd ) {
+                _D2( "Failed to open file\n" );
+                /* Send the failure ack back. */
+                cmd->cmd = FSTS__IDLE;
+                xQueueSendToBack( __command_idle, &cmd, 0 );
+            } else {
+                struct stat st;
 
-                requested = MIN( FSTREAM_SMALL_BUFFER_SIZE, bytes_left );
-                if( FR_OK != f_read(&__file, node->buffer, requested, (UINT*)&read) ) {
-                    bytes_left = 0;
+                _D2( "Opened file\n" );
+                if( 0 != fstat(fd, &st) ) {
+                    _D2( "Failed to fstat file\n" );
+                    /* Send the failure ack back. */
+                    cmd->cmd = FSTS__IDLE;
+                    xQueueSendToBack( __command_idle, &cmd, 0 );
                 } else {
-                    if( read == requested ) {
-                        node->valid_bytes = read;
-                        bytes_left -= read;
-                        node->last = (0 == bytes_left) ? true : false;
-                        xQueueSendToBack( __active, &node, 0 );
+                    uint32_t bytes_left;
+
+                    bytes_left = (uint32_t) st.st_size;
+
+                    _D2( "Got filesize: %ld\n", bytes_left );
+
+                    __big_buffer.valid_bytes = 0;
+                    __state = FSTS__STREAMING;
+
+                    /* Send the success ack back. */
+                    cmd->cmd = FSTS__STREAMING;
+                    xQueueSendToBack( __command_idle, &cmd, 0 );
+                    cmd = NULL;
+
+                    _D2( "Streaming\n" );
+                    /* read the file */
+                    while( 0 < bytes_left ) {
+                        if( pdTRUE == xQueueReceive(__command_active, &cmd, 0) ) {
+                            /* we're done with this file, stop reading */
+                            bytes_left = 0;
+                            _D2( "Told to Stop\n" );
+                        } else {
+                            size_t requested;
+                            ssize_t bytes_read;
+                            fstream_buffer_t *node;
+
+                            xQueueReceive( __data_idle, &node, portMAX_DELAY );
+
+                            requested = MIN( FSTREAM_SMALL_BUFFER_SIZE, bytes_left );
+                            bytes_read = read( fd, node->buffer, requested );
+                            if( -1 == bytes_read ) {
+                                bytes_left = 0;
+                            } else {
+                                if( bytes_read == requested ) {
+                                    node->valid_bytes = bytes_read;
+                                    bytes_left -= bytes_read;
+                                    node->last = (0 == bytes_left) ? true : false;
+                                    xQueueSendToBack( __data_active, &node, 0 );
+                                } else {
+                                    bytes_left = 0;
+                                }
+                            }
+                        }
+                    }
+
+                    __state = FSTS__IDLE;
+                    close( fd );
+                    fd = -1;
+
+                    if( NULL == cmd ) {
+                        _D2( "End of the song\n" );
                     } else {
-                        bytes_left = 0;
+                        /* We were told to stop, ack. */
+                        cmd->cmd = FSTS__IDLE;
+                        xQueueSendToBack( __command_idle, &cmd, 0 );
+                        _D2( "Stopping on command\n" );
                     }
                 }
-
-                if( FSTS__IDLE == __goal ) {
-                    bytes_left = 0;
-                }
-
-                _D2( "%s:__task: bytes_left: %lu\n", __FILE__, bytes_left );
             }
 
-            _D2( "%s:__task: done\n", __FILE__ );
+            (*__free_fn)( filename );
+            filename = NULL;
+        } else {
+            /* We are idle. */
+            _D2( "Idle Ack\n" );
+            cmd->cmd = FSTS__IDLE;
+            xQueueSendToBack( __command_idle, &cmd, 0 );
         }
     }
 }
