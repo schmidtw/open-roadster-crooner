@@ -3,8 +3,8 @@
  */
 
 #include <stddef.h>
-#include <memcard/memcard.h>
 
+#include "../memcard.h"
 #include "diskio.h"
 
 /*----------------------------------------------------------------------------*/
