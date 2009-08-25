@@ -5,6 +5,7 @@
 
 #include <bsp/boards/boards.h>
 #include <bsp/wdt.h>
+#include <bsp/cpu.h>
 #include <freertos/task.h>
 #include <file-stream/file-stream.h>
 #include <display/display.h>
@@ -113,6 +114,8 @@ static void __idle_task( void *params )
 int main( void )
 {
     media_interface_t *mi_list = NULL;
+
+    cpu_disable_orphans();
 
     printf( "--------------------------------------------------------------------------------\n" );
     wdt_start( WDT__36s );

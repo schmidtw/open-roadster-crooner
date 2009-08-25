@@ -149,4 +149,13 @@
 #define SDRAM_tREFRESH  7812    /* ns */
 #define SDRAM_tRFC      66      /* ns */
 #define SDRAM_tMRD      2       /* tCK */
+
+/*----------------------------------------------------------------------------*/
+/*                       Device Orphans Shutdown Masks                        */
+/*----------------------------------------------------------------------------*/
+#define DOSM_CPU_MASK   0x00010002
+#define DOSM_HSB_MASK   0x00000067
+#define DOSM_PBA_MASK   0x0000c62f
+#define DOSM_PBB_MASK   0x00000035
+
 #endif

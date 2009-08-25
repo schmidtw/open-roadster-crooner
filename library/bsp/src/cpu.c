@@ -18,6 +18,7 @@
 
 #include <avr32/io.h>
 
+#include "boards/boards.h"
 #include "cpu.h"
 #include "wdt.h"
 
@@ -63,6 +64,23 @@ void cpu_reboot( void )
     wdt_start( WDT__17us );
 
     while( 1 ) { ; }
+}
+
+/* See cpu.h for details. */
+void cpu_disable_orphans( void )
+{
+#ifdef DOSM_CPU_MASK
+    AVR32_PM.cpumask = DOSM_CPU_MASK;
+#endif
+#ifdef DOSM_HSB_MASK
+    AVR32_PM.hsbmask = DOSM_HSB_MASK;
+#endif
+#ifdef DOSM_PBA_MASK
+    AVR32_PM.pbamask = DOSM_PBA_MASK;
+#endif
+#ifdef DOSM_PBB_MASK
+    AVR32_PM.pbbmask = DOSM_PBB_MASK;
+#endif
 }
 
 /*----------------------------------------------------------------------------*/

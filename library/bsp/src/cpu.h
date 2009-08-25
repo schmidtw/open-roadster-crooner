@@ -41,4 +41,9 @@ cpu_execution_mode_t cpu_get_mode( void );
  *  Used to reboot the chip.
  */
 void cpu_reboot( void );
+
+/**
+ *  Used to disable orphaned devices.
+ */
+void cpu_disable_orphans( void );
 #endif
