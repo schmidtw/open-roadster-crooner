@@ -103,5 +103,10 @@ _handle_exception:
         mfsr    r12, AVR32_ECR
         lsl     r12, 2
         lddsp   r11, sp[4]
+
+        // Get the original stack pointer
+        mov     r10, sp
+        sub     r10, 4
+
         call    __bsp_exception_handler
         rjmp    $

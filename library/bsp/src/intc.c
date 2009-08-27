@@ -310,11 +310,11 @@ intc_handler_t __bsp_interrupt_handler( uint32_t index )
  *
  *  @param type the different exceptions defined in exceptions.S
  */
-void __bsp_exception_handler( uint32_t exception_cause, uint32_t return_address )
+void __bsp_exception_handler( uint32_t exception_cause, uint32_t return_address, uint32_t *sp )
 {
     uint32_t bear = __builtin_mfsr( AVR32_BEAR );
 
-    struct _reent reent;
+    static struct _reent reent;
 
     _REENT_INIT_PTR( (&(reent)) );
     _impure_ptr = &reent;
@@ -355,6 +355,15 @@ void __bsp_exception_handler( uint32_t exception_cause, uint32_t return_address 
         default:
             fprintf( stderr, "Offending instruction: 0x%08lx\n", return_address );
     }
+
+    /* Walk the stack and print out any addresses that are in code space. */
+    while( 0xdeadbeef != *sp ) {
+        if( 0x80000000 == (0xF0000000 & *sp) ) {
+            fprintf( stderr, "0x%08lx\n", *sp );
+        }
+        sp++;
+    }
+
     fflush( stderr );
     fflush( stdout );
 
