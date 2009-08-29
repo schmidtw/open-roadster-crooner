@@ -16,9 +16,9 @@
 #include <media-interface/media-interface.h>
 #include <media-flac/media-flac.h>
 #include <media-mp3/media-mp3.h>
+#include <playback/playback.h>
 
 #include "radio-interface.h"
-#include "playback.h"
 
 #define ENABLE_STATUS_TASK  0
 #define REPORT_ALL_MALLOC   0
@@ -141,7 +141,7 @@ int main( void )
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();
-    playback_init();
+    playback_init( (tskIDLE_PRIORITY+1) );
 //    display_init( ibus_print , 5000, 15000, 10000, 1, true);
     init_database( mi_list );
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );

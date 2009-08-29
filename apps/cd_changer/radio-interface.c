@@ -24,24 +24,30 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 
+#include <database/database.h>
 #include <memcard/memcard.h>
 #include <bsp/led.h>
+#include <bsp/cpu.h>
+#include <playback/playback.h>
 
 #include "radio-interface.h"
-#include "playback.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define RI_DEBUG 0
+#define RI_DEBUG 2
 
 #define DEBUG_STACK_BUFFER  0
 #if (defined(RI_DEBUG) && (0 < RI_DEBUG))
+#undef DEBUG_STACK_BUFFER
 #define DEBUG_STACK_BUFFER  100
 #endif
 
 #define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
-#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
+#define RI_IBUS_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
+#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+400+DEBUG_STACK_BUFFER)
+#define RI_DBASE_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE+1000)
+
 #define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define RI_POLL_TIMEOUT     (TASK_DELAY_S(15))  /* 15 seconds */
 
@@ -58,6 +64,9 @@
 #define _D2(...) printf( __VA_ARGS__ )
 #endif
 
+#define DIR_MAP_SIZE    6
+#define RI_MSG_MAX      20
+
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
@@ -69,19 +78,83 @@ typedef struct {
     uint8_t current_track;
 } ri_state_t;
 
+typedef enum {
+    DBASE__POPULATE,
+    DBASE__PURGE
+} dbase_cmd_t;
+
+typedef struct {
+    dbase_cmd_t cmd;
+    bool success;
+} dbase_msg_t;
+
+typedef struct {
+    pb_status_t status;
+    int32_t tx_id;
+} ri_playback_msg_t;
+
+typedef enum {
+    RI_MSG_TYPE__CARD_STATUS,
+    RI_MSG_TYPE__DBASE_STATUS,
+    RI_MSG_TYPE__PLAYBACK_STATUS,
+    RI_MSG_TYPE__IBUS_CMD
+} ri_msg_type_t;
+
+typedef struct {
+    ri_msg_type_t type;
+    union {
+        dbase_msg_t         dbase;
+        irp_rx_msg_t        ibus;
+        mc_card_status_t    card;
+        ri_playback_msg_t   song;
+    } d;
+} ri_msg_t;
+
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
 static xSemaphoreHandle __poll_cmd;
-static volatile ri_state_t __state;
+
+static dbase_msg_t __dbase_msg;
+static xQueueHandle __dbase_idle;
+static xQueueHandle __dbase_active;
+
+static ri_msg_t __ri_msg[RI_MSG_MAX];
+static xQueueHandle __ri_idle;
+static xQueueHandle __ri_active;
+static const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static void __poll_task( void *params );
-static void __msg_task( void *params );
-static void __send_state( void );
+static void __blu_task( void *params );
+static void __ibus_task( void *params );
+static void __dbase_task( void *params );
 static void __card_status( const mc_card_status_t status );
+static void __database_populate( void );
+static void __database_purge( void );
+static void __send_state( ri_state_t *state );
+static void __checking_complete( ri_state_t *state,
+                                 const uint8_t found_map,
+                                 const uint8_t starting_disc,
+                                 const uint8_t starting_track );
+static void __playback_cb( const pb_status_t status, const int32_t tx_id );
+static void __transition_db( ri_state_t *state );
+static void __no_discs_loop( ri_state_t *state );
+static void __command_loop( ri_state_t *state );
+static uint8_t __find_lowest_disc( const uint8_t map );
+
+static uint8_t __determine_map( void );
+static uint8_t __determine_starting_disc( void );
+static uint8_t __determine_starting_track( void );
+static void* __init_user_data( void );
+static void __destroy_user_data( void *user_data );
+static void __process_command( ri_state_t *state,
+                               const ri_msg_t *msg,
+                               song_node_t **song,
+                               void *user_data );
+static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -89,78 +162,57 @@ static void __card_status( const mc_card_status_t status );
 /* See radio-interface.h for details */
 bool ri_init( void )
 {
+    int i;
     irp_init();
 
     vSemaphoreCreateBinary( __poll_cmd );
     xSemaphoreTake( __poll_cmd, 0 );
 
-    __state.device_status = IRP_STATE__STOPPED;
-    __state.magazine_present = false;
-    __state.discs_present = 0;
-    __state.current_disc = 0;
-    __state.current_track = 0;
+    __dbase_idle = xQueueCreate( 1, sizeof(void*) );
+    __dbase_active = xQueueCreate( 1, sizeof(void*) );
+    __ri_idle = xQueueCreate( RI_MSG_MAX, sizeof(void*) );
+    __ri_active = xQueueCreate( RI_MSG_MAX, sizeof(void*) );
+
+    if( (NULL == __dbase_idle) || (NULL == __dbase_active) ||
+        (NULL == __ri_idle) || (NULL == __ri_active) ||
+        (NULL == __poll_cmd) )
+    {
+        goto failure;
+    }
+
+    {
+        dbase_msg_t *cmd;
+        cmd = &__dbase_msg;
+        xQueueSendToBack( __dbase_idle, &cmd, 0 );
+    }
+
+    for( i = 0; i < RI_MSG_MAX; i++ ) {
+        ri_msg_t *m;
+
+        m = &__ri_msg[i];
+        xQueueSendToBack( __ri_idle, &m, 0 );
+    }
 
     xTaskCreate( __poll_task, (signed portCHAR *) "iBusPoll",
                  RI_POLL_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
-    xTaskCreate( __msg_task, (signed portCHAR *) "iBusMsg",
+    xTaskCreate( __blu_task, (signed portCHAR *) "BLU",
                  RI_MSG_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
+    xTaskCreate( __ibus_task, (signed portCHAR *) "iBusMsg",
+                 RI_IBUS_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
+    xTaskCreate( __dbase_task, (signed portCHAR *) "dbase",
+                 RI_DBASE_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
     return true;
-}
 
-void ri_checking_for_discs( void )
-{
-    irp_going_to_check_disc( 1, 0 );
-}
-
-void ri_checking_complete( const uint8_t found_map )
-{
-    int32_t i;
-    int32_t lowest_disc;
-
-    lowest_disc = 7;
-    for( i = 1; i <= 6; i++ ) {
-        bool disc_present;
-        uint8_t active_map;
-
-        disc_present = ((1 << (i - 1)) == (found_map & ((1 << (i - 1)))));
-        active_map = (found_map & (0x3f >> (6 - i)));
-
-        _D1( "%ld - preset: %s active_map: 0x%02x\n", i,
-             ((true == disc_present) ? "true" : "false"),
-             active_map );
-
-        if( (true == disc_present) && (i < lowest_disc) ) {
-            lowest_disc = i;
-        }
-
-        irp_completed_disc_check( i, disc_present, active_map );
-        if( i < 6 ) {
-            irp_going_to_check_disc( (i+1), active_map );
-        }
-    }
-
-    __state.discs_present = found_map;
-    if( 0x00 == found_map ) {
-        __state.device_status = IRP_STATE__STOPPED;
-        __state.current_disc = 0;
-        __state.current_track = 0;
-    } else {
-        __state.current_disc = (uint8_t) lowest_disc;
-        __state.current_track = 1;
-    }
-
-    __send_state();
-}
-
-void ri_song_ended_playing_next( void )
-{
-    __state.current_track++;
-    __send_state();
+failure:
+    return false;
 }
 
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
+/**
+ *  The poll response task.
+ */
 static void __poll_task( void *params )
 {
     irp_send_announce();
@@ -176,8 +228,19 @@ static void __poll_task( void *params )
     }
 }
 
-static void __msg_task( void *params )
+/**
+ *  The business logic unit task.
+ */
+static void __blu_task( void *params )
 {
+    ri_state_t state;
+
+    state.device_status = IRP_STATE__STOPPED;
+    state.magazine_present = false;
+    state.discs_present = 0;
+    state.current_disc = 0;
+    state.current_track = 0;
+
     led_init();
 
     led_off( led_all );
@@ -187,146 +250,676 @@ static void __msg_task( void *params )
     mc_register( &__card_status );
 
     while( 1 ) {
-        irp_rx_msg_t msg;
+        ri_msg_t *msg;
 
-        if( IRP_RETURN_OK == irp_get_message(&msg) ) {
-            switch( msg.command ) {
-                case IRP_CMD__GET_STATUS:
-                case IRP_CMD__SCAN_DISC__ENABLE:
-                case IRP_CMD__SCAN_DISC__DISABLE:
-                case IRP_CMD__RANDOMIZE__ENABLE:
-                case IRP_CMD__RANDOMIZE__DISABLE:
-                    _D2( "MISC Ignored: 0x%04x\n", msg.command );
+        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+
+        if( RI_MSG_TYPE__CARD_STATUS == msg->type ) {
+            mc_card_status_t card;
+
+            card = msg->d.card;
+            xQueueSendToBack( __ri_idle, &msg, 0 );
+            msg = NULL;
+
+            switch( card ) {
+                case MC_CARD__INSERTED:
+                    state.magazine_present = true;
+                    state.discs_present = 0;
+                    state.current_disc = 0;
+                    state.current_track = 0;
+                    __send_state( &state );
                     break;
 
-                case IRP_CMD__STOP:
-                    _D2( "IRP_CMD__STOP\n" );
-                    playback_command( PB_CMD__pause, 0 );
-                    __state.device_status = IRP_STATE__STOPPED;
+                case MC_CARD__MOUNTED:
+                    __transition_db( &state );
+
+                    /* Once we exit, the card has been removed. */
+                case MC_CARD__REMOVED:
+                    state.discs_present = 0;
+                    state.current_disc = 0;
+                    state.current_track = 0;
+                    state.magazine_present = false;
+                    __send_state( &state );
                     break;
 
-                case IRP_CMD__PAUSE:
-                    _D2( "IRP_CMD__PAUSE\n" );
-                    playback_command( PB_CMD__pause, 0 );
-                    __state.device_status = IRP_STATE__PAUSED;
+                case MC_CARD__UNUSABLE:
+                    state.discs_present = 0;
+                    state.current_disc = 0;
+                    state.current_track = 0;
+                    __send_state( &state );
                     break;
 
-                case IRP_CMD__PLAY:
-                    _D2( "IRP_CMD__PLAY\n" );
-                    playback_command( PB_CMD__play, 0 );
-                    __state.device_status = IRP_STATE__PLAYING;
-                    break;
-
-                case IRP_CMD__FAST_PLAY__FORWARD:
-                    _D2( "IRP_CMD__FAST_PLAY__FORWARD\n" );
-
-                    if( IRP_STATE__FAST_PLAYING__FORWARD != __state.device_status ) {
-                        __state.device_status = IRP_STATE__FAST_PLAYING__FORWARD;
-                        playback_command( PB_CMD__album_next, 0 );
-                    }
-                    break;
-
-                case IRP_CMD__FAST_PLAY__REVERSE:
-                    _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
-                    if( IRP_STATE__FAST_PLAYING__REVERSE != __state.device_status ) {
-                        __state.device_status = IRP_STATE__FAST_PLAYING__REVERSE;
-                        playback_command( PB_CMD__album_prev, 0 );
-                    }
-                    break;
-
-                case IRP_CMD__SEEK__NEXT:
-                    _D2( "IRP_CMD__SEEK__NEXT\n" );
-                    __state.device_status = IRP_STATE__SEEKING__NEXT;
-                    __send_state();
-                    __state.current_track++;
-                    if( 99 < __state.current_track ) {
-                        __state.current_track = 1;
-                    }
-                    playback_command( PB_CMD__song_next, 0 );
-                    __state.device_status = IRP_STATE__PLAYING;
-                    break;
-
-                case IRP_CMD__SEEK__PREV:
-                    _D2( "IRP_CMD__SEEK__PREV\n" );
-                    __state.device_status = IRP_STATE__SEEKING__PREV;
-                    __send_state();
-                    playback_command( PB_CMD__song_prev, 0 );
-                    __state.current_track--;
-                    if( __state.current_track < 1) {
-                        __state.current_track = 99;
-                    }
-                    __state.device_status = IRP_STATE__PLAYING;
-                    break;
-
-                case IRP_CMD__CHANGE_DISC:
-                    _D2( "IRP_CMD__CHANGE_DISC\n" );
-                    __state.device_status = IRP_STATE__LOADING_DISC;
-                    __send_state();
-                    playback_command( PB_CMD__change_disc, msg.disc );
-                    __state.current_disc = msg.disc;
-                    __state.current_track = 1;
-                    __state.device_status = IRP_STATE__PLAYING;
-                    break;
-
-                case IRP_CMD__POLL:
-                    _D2( "IRP_CMD__POLL\n" );
-                    xSemaphoreGive( __poll_cmd );
+                default:
                     break;
             }
-
-            if( IRP_CMD__POLL != msg.command ) {
-                __send_state();
-            }
+        } else {
+            xQueueSendToBack( __ri_idle, &msg, 0 );
+            __send_state( &state );
         }
     }
 }
 
-static void __send_state( void )
+/**
+ *  The ibus message response task.
+ */
+static void __ibus_task( void *params )
 {
-    irp_send_normal_status( __state.device_status,
-                            __state.magazine_present,
-                            __state.discs_present,
-                            __state.current_disc,
-                            __state.current_track );
+    while( 1 ) {
+        ri_msg_t *msg;
+
+        xQueueReceive( __ri_idle, &msg, portMAX_DELAY );
+
+        msg->type = RI_MSG_TYPE__IBUS_CMD;
+
+        do {
+            irp_get_message( &msg->d.ibus );
+
+            if( IRP_CMD__POLL == msg->d.ibus.command ) {
+                xSemaphoreGive( __poll_cmd );
+            }
+        } while( IRP_CMD__POLL == msg->d.ibus.command );
+
+        xQueueSendToBack( __ri_active, &msg, portMAX_DELAY );
+        msg = NULL;
+    }
 }
 
+/**
+ *  The database mounting / unmounting task.
+ */
+static void __dbase_task( void *params )
+{
+    
+    while( 1 ) {
+        dbase_msg_t *dbase_msg;
+        ri_msg_t *ri_msg;
+
+        xQueueReceive( __dbase_active, &dbase_msg, portMAX_DELAY );
+        xQueueReceive( __ri_idle, &ri_msg, portMAX_DELAY );
+
+        if( DBASE__POPULATE == dbase_msg->cmd ) {
+            ri_msg->d.dbase.success = populate_database( dir_map, DIR_MAP_SIZE, "/" );
+        } else {
+            database_purge();
+            ri_msg->d.dbase.success = true;
+        }
+
+        ri_msg->type = RI_MSG_TYPE__DBASE_STATUS;
+        ri_msg->d.dbase.cmd = dbase_msg->cmd;
+
+        xQueueSendToBack( __dbase_idle, &dbase_msg, portMAX_DELAY );
+        xQueueSendToBack( __ri_active, &ri_msg, portMAX_DELAY );
+    }
+}
+
+/**
+ *  The card status callback function.
+ *
+ *  @param status the new status of the card.
+ */
 static void __card_status( const mc_card_status_t status )
 {
-    switch( status ) {
-        case MC_CARD__INSERTED:
-            _D2( "New card status: MC_CARD__INSERTED\n" );
-            led_off( led_all );
-            led_on( led_blue );
+    ri_msg_t *msg;
+
+    xQueueReceive( __ri_idle, &msg, portMAX_DELAY );
+    msg->type = RI_MSG_TYPE__CARD_STATUS;
+    msg->d.card = status;
+    xQueueSendToBack( __ri_active, &msg, portMAX_DELAY );
+}
+
+/**
+ *  The database populate request helper function.
+ */
+static void __database_populate( void )
+{
+    dbase_msg_t *dbase_msg;
+    xQueueReceive( __dbase_idle, &dbase_msg, portMAX_DELAY );
+    dbase_msg->cmd = DBASE__POPULATE;
+    xQueueSendToBack( __dbase_active, &dbase_msg, portMAX_DELAY );
+}
+
+/**
+ *  The database purge request helper function.
+ */
+static void __database_purge( void )
+{
+    dbase_msg_t *dbase_msg;
+    xQueueReceive( __dbase_idle, &dbase_msg, portMAX_DELAY );
+    dbase_msg->cmd = DBASE__PURGE;
+    xQueueSendToBack( __dbase_active, &dbase_msg, portMAX_DELAY );
+}
+
+/**
+ *  The send ibus system state helper function.
+ *
+ *  @param state the state of the device to send.
+ */
+static void __send_state( ri_state_t *state )
+{
+    irp_send_normal_status( state->device_status,
+                            state->magazine_present,
+                            state->discs_present,
+                            state->current_disc,
+                            state->current_track );
+}
+
+/**
+ *  The function that completes the disc checking routine and
+ *  lets the radio know the new state.
+ *
+ *  @param state the system state to adjust
+ *  @param found_map the bitmask map of the available discs
+ *  @param starting_disc the disc to report the playback is start with
+ *  @param starting_track the track to report the playback is start with
+ */
+static void __checking_complete( ri_state_t *state,
+                                 const uint8_t found_map,
+                                 const uint8_t starting_disc,
+                                 const uint8_t starting_track )
+{
+    int32_t i;
+
+    for( i = 1; i <= 6; i++ ) {
+        bool disc_present;
+        uint8_t active_map;
+
+        disc_present = ((1 << (i - 1)) == (found_map & ((1 << (i - 1)))));
+        active_map = (found_map & (0x3f >> (6 - i)));
+
+        _D1( "%ld - preset: %s active_map: 0x%02x\n", i,
+             ((true == disc_present) ? "true" : "false"),
+             active_map );
+
+        irp_completed_disc_check( i, disc_present, active_map );
+        if( i < 6 ) {
+            irp_going_to_check_disc( (i+1), active_map );
+        }
+    }
+
+    state->discs_present = found_map;
+    if( 0x00 == found_map ) {
+        state->device_status = IRP_STATE__STOPPED;
+        state->current_disc = 0;
+        state->current_track = 0;
+    } else {
+        state->current_disc = starting_disc;
+        state->current_track = starting_track;
+    }
+
+    __send_state( state );
+}
+
+/**
+ *  Function that takes the playback status and creates the message to 
+ *  send to the blu task.
+ *
+ *  @param status the new playback status
+ *  @param tx_id the id this callback is associated with
+ */
+static void __playback_cb( const pb_status_t status, const int32_t tx_id )
+{
+    ri_msg_t *msg;
+
+    xQueueReceive( __ri_idle, &msg, portMAX_DELAY );
+    msg->type = RI_MSG_TYPE__PLAYBACK_STATUS;
+    msg->d.song.status = status;
+    msg->d.song.tx_id = tx_id;
+    xQueueSendToBack( __ri_active, &msg, portMAX_DELAY );
+}
+
+/**
+ *  Used to transition the database into the populated state and then
+ *  continue supporting the state machine.  When this functions returns,
+ *  the database has been purged.
+ *
+ *  @param state the system state
+ */
+static void __transition_db( ri_state_t *state )
+{
+    bool keep_going;
+
+    irp_going_to_check_disc( 1, 0 );
+
+    __database_populate();
+
+    keep_going = true;
+    while( true == keep_going ) {
+        ri_msg_t *msg;
+
+        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+
+        if( (RI_MSG_TYPE__DBASE_STATUS == msg->type) &&
+            (DBASE__POPULATE == msg->d.dbase.cmd) )
+        {
+            if( true == msg->d.dbase.success ) {
+                uint8_t map;
+                uint8_t starting_disc;
+                uint8_t starting_track;
+
+                keep_going = false;
+                xQueueSendToBack( __ri_idle, &msg, 0 );
+
+                map = __determine_map();
+
+                starting_disc = __determine_starting_disc();
+                if( 6 < starting_disc ) {
+                    starting_disc = __find_lowest_disc( map );
+                }
+                starting_track = __determine_starting_track();
+
+                __checking_complete( state, map, starting_disc, starting_track );
+
+                __send_state( state );
+
+                __command_loop( state );
+            } else {
+                __checking_complete( state, 0, 0, 0 );
+                __send_state( state );
+                __no_discs_loop( state );
+            }
+        } else {
+            xQueueSendToBack( __ri_idle, &msg, 0 );
+            __send_state( state );
+        }
+    }
+
+    __database_purge();
+
+    keep_going = true;
+    while( true == keep_going ) {
+        ri_msg_t *msg;
+
+        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+
+        if( (RI_MSG_TYPE__DBASE_STATUS == msg->type) &&
+            (DBASE__PURGE == msg->d.dbase.cmd) )
+        {
+            keep_going = false;
+        }
+
+        xQueueSendToBack( __ri_idle, &msg, 0 );
+        __send_state( state );
+    }
+}
+
+/**
+ *  The function that supports the case where no discs are present
+ *  after walking the database.  This function only returns when the
+ *  current disc is removed.
+ *
+ *  @param state the system state
+ */
+static void __no_discs_loop( ri_state_t *state )
+{
+    bool keep_going;
+
+    keep_going = true;
+    while( true == keep_going ) {
+        ri_msg_t *msg;
+
+        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+
+        if( (RI_MSG_TYPE__PLAYBACK_STATUS != msg->type) &&
+            (RI_MSG_TYPE__IBUS_CMD != msg->type) )
+        {
+            keep_going = false;
+            __send_state( state );
+        }
+
+        xQueueSendToBack( __ri_idle, &msg, 0 );
+        __send_state( state );
+    }
+}
+
+/**
+ *  Provides the basic key handling functionality after the 
+ *  card has been inserted, and the database has been populated.
+ *  Only returns when the card has been removed.
+ *
+ *  @param state the system state
+ */
+static void __command_loop( ri_state_t *state )
+{
+    bool keep_going;
+    song_node_t *song;
+    void *user_data;
+
+    song = NULL;
+    user_data = __init_user_data();
+
+    keep_going = true;
+    while( true == keep_going ) {
+        ri_msg_t *msg;
+
+        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+
+        if( (RI_MSG_TYPE__PLAYBACK_STATUS == msg->type) ||
+            (RI_MSG_TYPE__IBUS_CMD == msg->type) )
+        {
+            if( (RI_MSG_TYPE__IBUS_CMD == msg->type) &&
+                (IRP_CMD__GET_STATUS == msg->d.ibus.command) )
+            {
+                __send_state( state );
+            } else {
+                __process_command( state, msg, &song, user_data );
+            }
+        } else {
+            keep_going = false;
+            __send_state( state );
+        }
+        xQueueSendToBack( __ri_idle, &msg, 0 );
+    }
+    __destroy_user_data( user_data );
+}
+
+/**
+ *  Helper function that finds the lowest numbered disc.
+ *
+ *  @param map the map to analize
+ *
+ *  @return the lowest disc number, or 7 on error.
+ */
+static uint8_t __find_lowest_disc( const uint8_t map )
+{
+    int32_t i;
+    int32_t lowest_disc;
+
+    lowest_disc = 7;
+    for( i = 1; i <= 6; i++ ) {
+        bool disc_present;
+        uint8_t active_map;
+
+        disc_present = ((1 << (i - 1)) == (map & ((1 << (i - 1)))));
+        active_map = (map & (0x3f >> (6 - i)));
+
+        if( (true == disc_present) && (i < lowest_disc) ) {
+            lowest_disc = i;
+        }
+    }
+
+    return lowest_disc;
+}
+
+/*----------------------------------------------------------------------------*/
+/*                          To be made library-itized                         */
+/*----------------------------------------------------------------------------*/
+
+/**
+ *  Called to get the active map for the current disc.
+ *
+ *  @return the active map for the disc
+ */
+static uint8_t __determine_map( void )
+{
+    db_status_t status;
+    song_node_t *song;
+    uint8_t map;
+
+    song = NULL;
+    map = 0x00;
+
+    status = DS_SUCCESS;
+    while( DS_SUCCESS == status ) {
+        status = next_song( &song, DT_NEXT, DL_GROUP );
+
+        if( DS_FAILURE == status ) {
+            map = 0x00;
+            goto done;
+        } else if( DS_END_OF_LIST == status ) {
+            goto done;
+        } else if( DS_SUCCESS == status ) {
+            int32_t i;
+
+            for( i = 0; i < DIR_MAP_SIZE; i++ ) {
+                if( 0 == strcmp(dir_map[i], song->album->artist->group->name) ) {
+                    map |= 1 << i;
+                    break;
+                }
+            }
+        }
+    }
+
+done:
+
+    return map;
+}
+
+/**
+ *  Called to get the starting disc for playback.
+ *
+ *  @return the starting disc, or 0xff for "auto detect" of the lowest
+ *          numbered disc
+ */
+static uint8_t __determine_starting_disc( void )
+{
+    return 0xff;
+}
+
+/**
+ *  Called to get the starting track for playback.
+ *
+ *  @return the starting track for playback (1-99)
+ */
+static uint8_t __determine_starting_track( void )
+{
+    return 1;
+}
+
+/**
+ *  Called to allow for user data to be initialized and
+ *  returned when the disc is first inserted.
+ *
+ *  @return the user_data to pass in other function calls, or NULL
+ */
+static void* __init_user_data( void )
+{
+    return NULL;
+}
+
+/**
+ *  Called after the disc has been removed to allow for cleaning
+ *  up the user data.
+ *
+ *  @param the user_data provided by __init_user_data()
+ */
+static void __destroy_user_data( void *user_data )
+{
+}
+
+/**
+ *  Called for each ibus command or playback status update to allow
+ *  for multiple implementations.
+ *
+ *  @param state the system state
+ *  @param msg the current message - must not be re-used or freed
+ *  @param song the current song
+ *  @param user_data any user data provided by __init_user_data()
+ */
+static void __process_command( ri_state_t *state,
+                               const ri_msg_t *msg,
+                               song_node_t **song,
+                               void *user_data )
+{
+    static irp_state_t goal = IRP_STATE__STOPPED;
+
+    if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
+        switch( msg->d.ibus.command ) {
+            case IRP_CMD__SCAN_DISC__ENABLE:
+            case IRP_CMD__SCAN_DISC__DISABLE:
+            case IRP_CMD__RANDOMIZE__ENABLE:
+            case IRP_CMD__RANDOMIZE__DISABLE:
+                _D2( "MISC Ignored: 0x%04x\n", msg->d.ibus.command );
+                break;
+
+            case IRP_CMD__STOP:
+                _D2( "IRP_CMD__STOP\n" );
+                goal = IRP_STATE__STOPPED;
+                playback_command( PB_CMD__STOP, __playback_cb );
+                break;
+
+            case IRP_CMD__PAUSE:
+                _D2( "IRP_CMD__PAUSE\n" );
+                goal = IRP_STATE__PAUSED;
+                playback_command( PB_CMD__PAUSE, __playback_cb );
+                break;
+
+            case IRP_CMD__PLAY:
+                _D2( "IRP_CMD__PLAY\n" );
+                if( IRP_STATE__PLAYING != goal ) {
+                    goal = IRP_STATE__PLAYING;
+                    playback_command( PB_CMD__RESUME, __playback_cb );
+                }
+                break;
+
+            case IRP_CMD__FAST_PLAY__FORWARD:
+                _D2( "IRP_CMD__FAST_PLAY__FORWARD\n" );
+
+                if( IRP_STATE__FAST_PLAYING__FORWARD != state->device_status ) {
+                    state->device_status = IRP_STATE__FAST_PLAYING__FORWARD;
+                    __find_song( song, msg->d.ibus.command, 0 );
+                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                                   (*song)->play_fn, __playback_cb );
+                }
+                break;
+
+            case IRP_CMD__FAST_PLAY__REVERSE:
+                _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
+                if( IRP_STATE__FAST_PLAYING__REVERSE != state->device_status ) {
+                    state->device_status = IRP_STATE__FAST_PLAYING__REVERSE;
+                    __find_song( song, msg->d.ibus.command, 0 );
+                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                                   (*song)->play_fn, __playback_cb );
+                }
+                break;
+
+            case IRP_CMD__SEEK__NEXT:
+                _D2( "IRP_CMD__SEEK__NEXT\n" );
+                state->device_status = IRP_STATE__SEEKING__NEXT;
+                __send_state( state );
+                __find_song( song, msg->d.ibus.command, 0 );
+                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                               (*song)->play_fn, __playback_cb );
+                break;
+
+            case IRP_CMD__SEEK__PREV:
+                _D2( "IRP_CMD__SEEK__PREV\n" );
+                state->device_status = IRP_STATE__SEEKING__PREV;
+                __send_state( state );
+                __find_song( song, msg->d.ibus.command, 0 );
+                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                               (*song)->play_fn, __playback_cb );
+                break;
+
+            case IRP_CMD__CHANGE_DISC:
+                _D2( "IRP_CMD__CHANGE_DISC\n" );
+                state->device_status = IRP_STATE__LOADING_DISC;
+                __send_state( state );
+                __find_song( song, msg->d.ibus.command, msg->d.ibus.disc );
+                state->current_disc = msg->d.ibus.disc;
+                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                               (*song)->play_fn, __playback_cb );
+                break;
+
+            case IRP_CMD__GET_STATUS:   /* Never sent. */
+            case IRP_CMD__POLL:         /* Never sent. */
+                break;
+        }
+    } else {
+            _D2( "RI_MSG_TYPE__PLAYBACK_STATUS\n" );
+            switch( msg->d.song.status ) {
+                case PB_STATUS__PLAYING:
+                    _D2( "PB_STATUS__PLAYING\n" );
+                    state->current_track = (*song)->track_number;
+                    state->device_status = IRP_STATE__PLAYING;
+                    break;
+                case PB_STATUS__PAUSED:
+                    _D2( "PB_STATUS__PAUSED\n" );
+                    state->device_status = IRP_STATE__PAUSED;
+                    break;
+                case PB_STATUS__STOPPED:
+                    _D2( "PB_STATUS__STOPPED\n" );
+                    state->device_status = IRP_STATE__STOPPED;
+                    break;
+                case PB_STATUS__END_OF_SONG:
+                    _D2( "PB_STATUS__END_OF_SONG\n" );
+                    state->device_status = IRP_STATE__SEEKING__NEXT;
+                    __send_state( state );
+                    __find_song( song, msg->d.ibus.command, 0 );
+                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                                   (*song)->play_fn, __playback_cb );
+                    break;
+
+                case PB_STATUS__ERROR:
+                    _D2( "PB_STATUS__ERROR\n" );
+                    break;
+            }
+            __send_state( state );
+
+    }
+}
+
+/**
+ *  Helper function used to find the next song to play.
+ *
+ *  @param song the current song to base the next song from
+ *  @param cmd the command to apply
+ *  @param disc the new disc to play if the command needs the information
+ */
+static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
+{
+    db_status_t rv;
+    
+    switch( cmd ) {
+        case IRP_CMD__FAST_PLAY__FORWARD:
+            rv = next_song( song, DT_NEXT, DL_ALBUM );
+            if( DS_END_OF_LIST == rv ) {
+                next_song( song, DT_NEXT, DL_ARTIST );
+            }
             break;
-        case MC_CARD__MOUNTING:
-            _D2( "New card status: MC_CARD__MOUNTING\n" );
+
+        case IRP_CMD__FAST_PLAY__REVERSE:
+            rv = next_song( song, DT_PREVIOUS, DL_ALBUM );
+            if( DS_END_OF_LIST == rv ) {
+                next_song( song, DT_PREVIOUS, DL_ARTIST );
+            }
             break;
-        case MC_CARD__MOUNTED:
-            __state.magazine_present = true;
-            __send_state();
-            _D2( "New card status: MC_CARD__MOUNTED\n" );
-            led_off( led_all );
-            led_on( led_green );
+
+        case IRP_CMD__SEEK__NEXT:
+            rv = next_song( song, DT_NEXT, DL_SONG );
+            if( DS_END_OF_LIST == rv ) {
+                rv = next_song( song, DT_NEXT, DL_ALBUM );
+            }
+            if( DS_END_OF_LIST == rv ) {
+                next_song( song, DT_NEXT, DL_ARTIST );
+            }
             break;
-        case MC_CARD__UNUSABLE:
-            _D2( "New card status: MC_CARD__UNUSABLE\n" );
-            led_off( led_all );
-            led_on( led_red );
+
+        case IRP_CMD__SEEK__PREV:
+            rv = next_song( song, DT_PREVIOUS, DL_SONG );
+            if( DS_END_OF_LIST == rv ) {
+                rv = next_song( song, DT_PREVIOUS, DL_ALBUM );
+            }
+            if( DS_END_OF_LIST == rv ) {
+                next_song( song, DT_PREVIOUS, DL_ARTIST );
+            }
             break;
-        case MC_CARD__REMOVED:
-            __state.magazine_present = false;
-            __state.discs_present = 0;
-            __state.current_disc = 0;
-            __state.current_track = 0;
-            __send_state();
-            /* This is a temporary solution - we still get the:
-             * "da-da-da-da-da-da" sound sometimes when the disc
-             * is just removed. */
-            playback_command( PB_CMD__stop, 0 );
-            _D2( "New card status: MC_CARD__REMOVED\n" );
-            led_off( led_all );
-            led_on( led_red );
-            led_on( led_blue );
+
+        case IRP_CMD__CHANGE_DISC:
+            *song = NULL;
+            rv = DS_SUCCESS;
+            while( DS_SUCCESS == rv ) {
+                rv = next_song( song, DT_NEXT, DL_GROUP );
+                if( DS_FAILURE != rv ) {
+                    if( 0 == strcasecmp(dir_map[disc - 1],
+                                        (*song)->album->artist->group->name) )
+                    {
+                        rv = DS_END_OF_LIST;
+                    }
+                }
+            }
+            break;
+
+        default:
             break;
     }
 }

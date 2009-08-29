@@ -11,6 +11,7 @@ LIBRARIES = \
             media-interface \
             media-flac \
             media-mp3 \
+            playback \
             ibus-physical \
             ibus-radio-protocol \
             display \

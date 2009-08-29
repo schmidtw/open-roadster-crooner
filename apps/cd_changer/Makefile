@@ -4,7 +4,6 @@ BASE       = ../..
 
 SOURCES = \
           radio-interface.c \
-          playback.c \
           main.c
 
 LIBRARIES = \
@@ -12,6 +11,7 @@ LIBRARIES = \
             media-interface \
             media-flac \
             media-mp3 \
+            playback \
             file-stream \
             ibus-radio-protocol \
             ibus-physical \
