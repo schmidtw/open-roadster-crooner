@@ -21,16 +21,19 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "dsp.h"
+#include "bsp_errors.h"
 
 /**
  *  Used to initialize the DAC hardware.
  *
  *  @param complete_isr the isr function to call when a buffer is completed
  *  @param swap_channels if true, the L & R audio channels are swapped
+ *
+ *  @return Status
+ *      @retval BSP_RETURN_OK               Success
+ *      @retval BSP_ERROR_PARAMETER         Invalid parameter
  */
-void dac_init( void (*complete_isr)(void),
-               const bool swap_channels );
+bsp_status_t dac_init( void (*complete_isr)(void), const bool swap_channels );
 
 /**
  *  Used to start/resume the DAC hardware playing & unmute the output.
@@ -54,10 +57,10 @@ void dac_stop( void );
  *  @param rate the sample rate desired
  *
  *  @return Status
- *      @retval DSP_RETURN_OK               Success
- *      @retval DSP_UNSUPPORTED_BITRATE     Bitrate not supported
+ *      @retval BSP_RETURN_OK               Success
+ *      @retval BSP_ERROR_UNSUPPORTED       Bitrate not supported
  */
-dsp_status_t dac_set_sample_rate( const uint32_t rate );
+bsp_status_t dac_set_sample_rate( const uint32_t rate );
 
 /**
  *  Used to determine if the bitrate is supported without setting

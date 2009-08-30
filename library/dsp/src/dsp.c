@@ -27,9 +27,9 @@
 
 #include <bsp/intc.h>
 #include <bsp/pdca.h>
+#include <bsp/dac.h>
 
 #include "dsp.h"
-#include "dac.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */

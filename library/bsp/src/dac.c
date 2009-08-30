@@ -22,12 +22,11 @@
 
 #include <avr32/io.h>
 
-#include <bsp/boards/boards.h>
-#include <bsp/gpio.h>
-#include <bsp/intc.h>
-#include <bsp/pm.h>
-#include <bsp/pdca.h>
-
+#include "boards/boards.h"
+#include "gpio.h"
+#include "intc.h"
+#include "pm.h"
+#include "pdca.h"
 #include "dac.h"
 
 /*----------------------------------------------------------------------------*/
@@ -75,9 +74,12 @@ static const bitrate_map_t bitrate_map[] = {
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
 /* See dac.h for details. */
-void dac_init( void (*complete_isr)(void),
-               const bool swap_channels )
+bsp_status_t dac_init( void (*complete_isr)(void), const bool swap_channels )
 {
+    if( NULL == complete_isr ) {
+        return BSP_ERROR_PARAMETER;
+    }
+
     /* Reset all settings. */
     AVR32_ABDAC.cr = 0;
     AVR32_ABDAC.idr = AVR32_ABDAC_IDR_TX_READY_MASK |
@@ -102,6 +104,8 @@ void dac_init( void (*complete_isr)(void),
     if( true == swap_channels ) {
         AVR32_ABDAC.CR.swap = 1;
     }
+
+    return BSP_RETURN_OK;
 }
 
 /* See dac.h for details. */
@@ -136,7 +140,7 @@ void dac_stop( void )
 }
 
 /* See dac.h for details. */
-dsp_status_t dac_set_sample_rate( const uint32_t rate )
+bsp_status_t dac_set_sample_rate( const uint32_t rate )
 {
     int i;
 
@@ -151,11 +155,11 @@ dsp_status_t dac_set_sample_rate( const uint32_t rate )
             AVR32_PM.GCCTRL[5].oscsel = 1;
             AVR32_PM.GCCTRL[5].cen = 1;
 
-            return DSP_RETURN_OK;
+            return BSP_RETURN_OK;
         }
     }
 
-    return DSP_UNSUPPORTED_BITRATE;
+    return BSP_ERROR_UNSUPPORTED;
 }
 
 /* See dac.h for details. */

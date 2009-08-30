@@ -8,8 +8,7 @@ HEADERS = \
     dsp.h
 
 SOURCES = \
-    dsp.c \
-    dac.c
+    dsp.c
 
 OPTIMIZATIONS = -O3
 
