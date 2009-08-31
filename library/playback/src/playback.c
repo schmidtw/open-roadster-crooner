@@ -289,7 +289,6 @@ static bool __continue_decoding( void )
             }
         }
 
-        printf( "cmd: 0x%08x\n", cmd->cmd );
         return false;
     }
 
