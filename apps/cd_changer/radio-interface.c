@@ -45,8 +45,8 @@
 
 #define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
 #define RI_IBUS_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
-#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+400+DEBUG_STACK_BUFFER)
-#define RI_DBASE_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE+1000)
+#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+150+DEBUG_STACK_BUFFER)
+#define RI_DBASE_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE+1200)
 
 #define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
 #define RI_POLL_TIMEOUT     (TASK_DELAY_S(15))  /* 15 seconds */
@@ -189,14 +189,14 @@ bool ri_init( void )
     {
         dbase_msg_t *cmd;
         cmd = &__dbase_msg;
-        xQueueSendToBack( __dbase_idle, &cmd, 0 );
+        xQueueSendToBack( __dbase_idle, &cmd, portMAX_DELAY );
     }
 
     for( i = 0; i < RI_MSG_MAX; i++ ) {
         ri_msg_t *m;
 
         m = &__ri_msg[i];
-        xQueueSendToBack( __ri_idle, &m, 0 );
+        xQueueSendToBack( __ri_idle, &m, portMAX_DELAY );
     }
 
     xTaskCreate( __poll_task, (signed portCHAR *) "iBusPoll",
@@ -265,7 +265,7 @@ static void __blu_task( void *params )
             mc_card_status_t card;
 
             card = msg->d.card;
-            xQueueSendToBack( __ri_idle, &msg, 0 );
+            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
             msg = NULL;
 
             switch( card ) {
@@ -304,7 +304,7 @@ static void __blu_task( void *params )
                     break;
             }
         } else {
-            xQueueSendToBack( __ri_idle, &msg, 0 );
+            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
             __send_state( &state );
         }
     }
@@ -520,7 +520,7 @@ static void __transition_db( ri_state_t *state )
                 uint8_t starting_track;
 
                 keep_going = false;
-                xQueueSendToBack( __ri_idle, &msg, 0 );
+                xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
 
                 map = __determine_map();
 
@@ -541,7 +541,7 @@ static void __transition_db( ri_state_t *state )
                 __no_discs_loop( state );
             }
         } else {
-            xQueueSendToBack( __ri_idle, &msg, 0 );
+            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         }
     }
 
@@ -559,7 +559,7 @@ static void __transition_db( ri_state_t *state )
             keep_going = false;
         }
 
-        xQueueSendToBack( __ri_idle, &msg, 0 );
+        xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         __send_state( state );
     }
 }
@@ -588,7 +588,7 @@ static void __no_discs_loop( ri_state_t *state )
             __send_state( state );
         }
 
-        xQueueSendToBack( __ri_idle, &msg, 0 );
+        xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         __send_state( state );
     }
 }
@@ -629,7 +629,7 @@ static void __command_loop( ri_state_t *state )
             keep_going = false;
             __send_state( state );
         }
-        xQueueSendToBack( __ri_idle, &msg, 0 );
+        xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
     }
     __destroy_user_data( user_data );
 }
@@ -762,7 +762,7 @@ static void __process_command( ri_state_t *state,
                                song_node_t **song,
                                void *user_data )
 {
-    static irp_state_t goal = IRP_STATE__STOPPED;
+    _D2( "state->device_status: 0x%04x\n", state->device_status );
 
     if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
         switch( msg->d.ibus.command ) {
@@ -775,20 +775,29 @@ static void __process_command( ri_state_t *state,
 
             case IRP_CMD__STOP:
                 _D2( "IRP_CMD__STOP\n" );
-                goal = IRP_STATE__STOPPED;
-                playback_command( PB_CMD__STOP, __playback_cb );
+                if( (IRP_STATE__PLAYING == state->device_status) ||
+                    (IRP_STATE__PAUSED == state->device_status) )
+                {
+                    playback_command( PB_CMD__STOP, __playback_cb );
+                }
                 break;
 
             case IRP_CMD__PAUSE:
                 _D2( "IRP_CMD__PAUSE\n" );
-                goal = IRP_STATE__PAUSED;
-                playback_command( PB_CMD__PAUSE, __playback_cb );
+                if( IRP_STATE__PLAYING == state->device_status ) {
+                    playback_command( PB_CMD__PAUSE, __playback_cb );
+                }
                 break;
 
             case IRP_CMD__PLAY:
                 _D2( "IRP_CMD__PLAY\n" );
-                if( IRP_STATE__PLAYING != goal ) {
-                    goal = IRP_STATE__PLAYING;
+                if( IRP_STATE__STOPPED == state->device_status ) {
+                    if( NULL == *song ) {
+                        __find_song( song, IRP_CMD__CHANGE_DISC, state->current_disc );
+                    }
+                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                                   (*song)->play_fn, __playback_cb );
+                } else if( IRP_STATE__PAUSED == state->device_status ) {
                     playback_command( PB_CMD__RESUME, __playback_cb );
                 }
                 break;
@@ -847,36 +856,38 @@ static void __process_command( ri_state_t *state,
                 break;
         }
     } else {
-            _D2( "RI_MSG_TYPE__PLAYBACK_STATUS\n" );
-            switch( msg->d.song.status ) {
-                case PB_STATUS__PLAYING:
-                    _D2( "PB_STATUS__PLAYING\n" );
-                    state->current_track = (*song)->track_number;
-                    state->device_status = IRP_STATE__PLAYING;
-                    break;
-                case PB_STATUS__PAUSED:
-                    _D2( "PB_STATUS__PAUSED\n" );
-                    state->device_status = IRP_STATE__PAUSED;
-                    break;
-                case PB_STATUS__STOPPED:
-                    _D2( "PB_STATUS__STOPPED\n" );
-                    state->device_status = IRP_STATE__STOPPED;
-                    break;
-                case PB_STATUS__END_OF_SONG:
-                    _D2( "PB_STATUS__END_OF_SONG\n" );
-                    state->device_status = IRP_STATE__SEEKING__NEXT;
-                    __send_state( state );
-                    __find_song( song, msg->d.ibus.command, 0 );
-                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                                   (*song)->play_fn, __playback_cb );
-                    break;
+        _D2( "RI_MSG_TYPE__PLAYBACK_STATUS\n" );
+        switch( msg->d.song.status ) {
+            case PB_STATUS__PLAYING:
+                _D2( "PB_STATUS__PLAYING\n" );
+                state->current_track = (*song)->track_number;
+                state->device_status = IRP_STATE__PLAYING;
+                break;
+            case PB_STATUS__PAUSED:
+                _D2( "PB_STATUS__PAUSED\n" );
+                state->device_status = IRP_STATE__PAUSED;
+                break;
+            case PB_STATUS__STOPPED:
+                _D2( "PB_STATUS__STOPPED\n" );
+                state->device_status = IRP_STATE__STOPPED;
+                break;
 
-                case PB_STATUS__ERROR:
-                    _D2( "PB_STATUS__ERROR\n" );
-                    break;
-            }
-            __send_state( state );
+            case PB_STATUS__ERROR:
+                _D2( "PB_STATUS__ERROR\n" );
+                /* Without this we seem to deadlock on "full error" testing. */
+                /* The real error seems to be due to the physical ibus driver. */
+                vTaskDelay( 100 );
 
+            case PB_STATUS__END_OF_SONG:
+                _D2( "PB_STATUS__END_OF_SONG\n" );
+                state->device_status = IRP_STATE__SEEKING__NEXT;
+                __send_state( state );
+                __find_song( song, IRP_CMD__SEEK__NEXT, 0 );
+                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
+                               (*song)->play_fn, __playback_cb );
+                break;
+        }
+        __send_state( state );
     }
 }
 
