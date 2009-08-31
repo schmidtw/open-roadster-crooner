@@ -270,13 +270,13 @@ static void __tx_task( void *data )
                 xSemaphoreTake( __tx_done, portMAX_DELAY );
 
                 if( true == __tx_successfully_sent ) {
-                    xQueueSendToFront( __tx_idle, &msg, 0 );
+                    xQueueSendToFront( __tx_idle, &msg, portMAX_DELAY );
 
                     /* Wait between messages so the radio can have a break. */
                     vTaskDelay( TX_DELAY );
                 } else {
                     /* CTS changed state - re-queue & try again. */
-                    xQueueSendToFront( __tx_pending, &msg, 0 );
+                    xQueueSendToFront( __tx_pending, &msg, portMAX_DELAY );
                 }
             } else {
                 xSemaphoreTake( __wake_up_tx_task, portMAX_DELAY );
@@ -325,8 +325,6 @@ static void __get_char_isr( const int c )
 static void __cts_change_isr( const bool cts )
 {
     portBASE_TYPE ignore;
-
-    _D2( "%s()\n", __func__ );
 
     if( true == cts ) {
         /* Enable starting a new transfer */
