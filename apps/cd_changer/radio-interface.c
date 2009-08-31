@@ -45,7 +45,7 @@
 
 #define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
 #define RI_IBUS_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
-#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+150+DEBUG_STACK_BUFFER)
+#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+250+DEBUG_STACK_BUFFER)
 #define RI_DBASE_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE+1200)
 
 #define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
@@ -285,6 +285,7 @@ static void __blu_task( void *params )
                     /* Once we exit, the card has been removed. */
                 case MC_CARD__REMOVED:
                     _D2( "MC_CARD__REMOVED\n" );
+                    state.device_status = IRP_STATE__STOPPED;
                     state.discs_present = 0;
                     state.current_disc = 0;
                     state.current_track = 0;
@@ -294,6 +295,7 @@ static void __blu_task( void *params )
 
                 case MC_CARD__UNUSABLE:
                     _D2( "MC_CARD__UNUSABLE\n" );
+                    state.device_status = IRP_STATE__STOPPED;
                     state.discs_present = 0;
                     state.current_disc = 0;
                     state.current_track = 0;
