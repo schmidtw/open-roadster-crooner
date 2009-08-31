@@ -547,6 +547,8 @@ static void __transition_db( ri_state_t *state )
         }
     }
 
+    playback_command( PB_CMD__STOP, NULL );
+
     __database_purge();
 
     keep_going = true;
