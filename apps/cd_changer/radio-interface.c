@@ -53,6 +53,7 @@
 
 #define _D1(...)
 #define _D2(...)
+#define _D3(...)
 
 #if (defined(RI_DEBUG) && (0 < RI_DEBUG))
 #undef  _D1
@@ -62,6 +63,11 @@
 #if (defined(RI_DEBUG) && (1 < RI_DEBUG))
 #undef  _D2
 #define _D2(...) printf( __VA_ARGS__ )
+#endif
+
+#if (defined(RI_DEBUG) && (2 < RI_DEBUG))
+#undef  _D3
+#define _D3(...) printf( __VA_ARGS__ )
 #endif
 
 #define DIR_MAP_SIZE    6
@@ -222,10 +228,10 @@ static void __poll_task( void *params )
 
     while( 1 ) {
         if( pdTRUE == xSemaphoreTake(__poll_cmd, RI_POLL_TIMEOUT) ) {
-            _D2( "Poll Request\n" );
+            _D3( "Poll Request\n" );
             irp_send_poll_response();
         } else {
-            _D2( "ibus timed out\n" );
+            _D3( "ibus timed out\n" );
             irp_send_announce();
         }
     }
@@ -264,7 +270,7 @@ static void __blu_task( void *params )
 
             switch( card ) {
                 case MC_CARD__INSERTED:
-                    _D1( "MC_CARD__INSERTED\n" );
+                    _D2( "MC_CARD__INSERTED\n" );
                     state.magazine_present = true;
                     state.discs_present = 0;
                     state.current_disc = 0;
@@ -273,12 +279,12 @@ static void __blu_task( void *params )
                     break;
 
                 case MC_CARD__MOUNTED:
-                    _D1( "MC_CARD__MOUNTED\n" );
+                    _D2( "MC_CARD__MOUNTED\n" );
                     __transition_db( &state );
 
                     /* Once we exit, the card has been removed. */
                 case MC_CARD__REMOVED:
-                    _D1( "MC_CARD__REMOVED\n" );
+                    _D2( "MC_CARD__REMOVED\n" );
                     state.discs_present = 0;
                     state.current_disc = 0;
                     state.current_track = 0;
@@ -287,7 +293,7 @@ static void __blu_task( void *params )
                     break;
 
                 case MC_CARD__UNUSABLE:
-                    _D1( "MC_CARD__UNUSABLE\n" );
+                    _D2( "MC_CARD__UNUSABLE\n" );
                     state.discs_present = 0;
                     state.current_disc = 0;
                     state.current_track = 0;
@@ -401,7 +407,7 @@ static void __database_purge( void )
  */
 static void __send_state( ri_state_t *state )
 {
-    _D2( "Sending:\n"
+    _D3( "Sending:\n"
          "       Status: 0x%04x\n"
          "     Magazine: %s\n"
          "        Discs: 0x%08x\n"
