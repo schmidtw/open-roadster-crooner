@@ -18,6 +18,7 @@ HEADERS = \
     spi.h \
     led.h \
     wdt.h \
+    flash.h \
     dac.h \
     boards/boards.h \
     boards/evk1100.h \
@@ -36,6 +37,7 @@ SOURCES = \
     spi.c \
     led.c \
     dac.c \
+    flash.c \
     wdt.c
 
 include ../../make/Makefile.common
