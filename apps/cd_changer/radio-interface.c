@@ -35,7 +35,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define RI_DEBUG 2
+#define RI_DEBUG 0
 
 #define DEBUG_STACK_BUFFER  0
 #if (defined(RI_DEBUG) && (0 < RI_DEBUG))
@@ -201,6 +201,9 @@ bool ri_init( void )
                  RI_IBUS_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
     xTaskCreate( __dbase_task, (signed portCHAR *) "dbase",
                  RI_DBASE_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
+
+    mc_register( &__card_status );
+
     return true;
 
 failure:
@@ -247,8 +250,6 @@ static void __blu_task( void *params )
     led_on( led_red );
     led_on( led_blue );
 
-    mc_register( &__card_status );
-
     while( 1 ) {
         ri_msg_t *msg;
 
@@ -263,6 +264,7 @@ static void __blu_task( void *params )
 
             switch( card ) {
                 case MC_CARD__INSERTED:
+                    _D1( "MC_CARD__INSERTED\n" );
                     state.magazine_present = true;
                     state.discs_present = 0;
                     state.current_disc = 0;
@@ -271,10 +273,12 @@ static void __blu_task( void *params )
                     break;
 
                 case MC_CARD__MOUNTED:
+                    _D1( "MC_CARD__MOUNTED\n" );
                     __transition_db( &state );
 
                     /* Once we exit, the card has been removed. */
                 case MC_CARD__REMOVED:
+                    _D1( "MC_CARD__REMOVED\n" );
                     state.discs_present = 0;
                     state.current_disc = 0;
                     state.current_track = 0;
@@ -283,6 +287,7 @@ static void __blu_task( void *params )
                     break;
 
                 case MC_CARD__UNUSABLE:
+                    _D1( "MC_CARD__UNUSABLE\n" );
                     state.discs_present = 0;
                     state.current_disc = 0;
                     state.current_track = 0;
@@ -396,6 +401,18 @@ static void __database_purge( void )
  */
 static void __send_state( ri_state_t *state )
 {
+    _D2( "Sending:\n"
+         "       Status: 0x%04x\n"
+         "     Magazine: %s\n"
+         "        Discs: 0x%08x\n"
+         " Current Disc: %d\n"
+         "Current Track: %d\n",
+         state->device_status,
+         (true == state->magazine_present) ? "present" : "not present",
+         state->discs_present,
+         state->current_disc,
+         state->current_track );
+
     irp_send_normal_status( state->device_status,
                             state->magazine_present,
                             state->discs_present,
@@ -519,7 +536,6 @@ static void __transition_db( ri_state_t *state )
             }
         } else {
             xQueueSendToBack( __ri_idle, &msg, 0 );
-            __send_state( state );
         }
     }
 
