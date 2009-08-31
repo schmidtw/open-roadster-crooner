@@ -27,23 +27,30 @@ void* pvPortMalloc( size_t size )
 {
     extern void __sram_heap_start__;
     extern void __sram_heap_end__;
-    static size_t offset = 0;
-    static size_t total = 0;
+    static int32_t offset = 0;
+    static int32_t have = -1;
     void *ret;
 
     vTaskSuspendAll();
 
     ret = NULL;
 
-    if( (&__sram_heap_start__ + offset + size) < &__sram_heap_end__ ) {
-        ret = (void *) (&__sram_heap_start__ + offset);
-        offset += (0xfffffff8 & (size + 7));
+    if( -1 == have ) {
+        have = (&__sram_heap_end__ - (&__sram_heap_start__));
+    }
 
-        total += size;
+    if( size < have ) {
+        size_t aligned_size;
+
+        ret = (void *) (&__sram_heap_start__ + offset);
+
+        aligned_size = (0xfffffff8 & (size + 7));
+
+        offset += aligned_size;
+        have -= aligned_size;
     } else {
-        fprintf( stderr, "%s( %lu ) Failure - Needed: %lu Have: %lu\n",
-                 __func__, size, size,
-                 (&__sram_heap_end__ - (&__sram_heap_start__ + offset)) );
+        fprintf( stderr, "%s( %lu ) Failure - Needed: %lu Have: %ld\n",
+                 __func__, size, size, have );
 
         fflush( stderr );
 
@@ -51,7 +58,7 @@ void* pvPortMalloc( size_t size )
     }
 
 #if (1 == REPORT_ALL_MALLOC)
-    printf( "%s( %lu ) ->: %p (total: %lu)\n", __func__, size, ret, total );
+    printf( "%s( %lu ) ->: %p (total: %lu left: %ld)\n", __func__, size, ret, offset, have );
 #endif
 
     xTaskResumeAll();
@@ -128,7 +135,7 @@ int main( void )
 
 #if (1 == ENABLE_STATUS_TASK)
     xTaskCreate( __idle_task, ( signed portCHAR *) "Status",
-                 (configMINIMAL_STACK_SIZE + 100), NULL, tskIDLE_PRIORITY+2, NULL );
+                 (configMINIMAL_STACK_SIZE + 200), NULL, tskIDLE_PRIORITY+2, NULL );
 #endif
 
     mi_list = media_new();
