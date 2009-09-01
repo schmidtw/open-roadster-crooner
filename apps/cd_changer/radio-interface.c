@@ -541,6 +541,7 @@ static void __transition_db( ri_state_t *state )
                 __checking_complete( state, 0, 0, 0 );
                 __send_state( state );
                 __no_discs_loop( state );
+                return;
             }
         } else {
             xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
@@ -590,9 +591,10 @@ static void __no_discs_loop( ri_state_t *state )
         {
             keep_going = false;
             __send_state( state );
+            xQueueSendToFront( __ri_active, &msg, portMAX_DELAY );
+        } else {
+            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         }
-
-        xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         __send_state( state );
     }
 }
