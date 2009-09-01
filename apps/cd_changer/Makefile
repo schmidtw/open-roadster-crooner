@@ -24,5 +24,5 @@ LIBRARIES = \
             util
 
 OPTIMIZATIONS = -O0
-SRAM_CODEC_SIZE=512
+
 include $(BASE)/apps/make/Makefile.common
