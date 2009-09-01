@@ -389,6 +389,9 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
                     return false;
                 }
             }
+        } else {
+            /* We ran into some sort of error, bail. */
+            return false;
         }
     }
 }
