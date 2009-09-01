@@ -651,9 +651,13 @@ static void setid3v2title(int fd, struct mp3entry *entry)
         return;
 
     /* Read the ID3 tag version from the header */
-    lseek(fd, 0, SEEK_SET);
-    if(10 != read(fd, header, 10))
+    if( -1 == lseek(fd, 0, SEEK_SET) ) {
         return;
+    }
+
+    if( 10 != read(fd, header, 10) ) {
+        return;
+    }
 
     /* Get the total ID3 tag size */
     size = entry->id3v2len - 10;
@@ -696,7 +700,9 @@ static void setid3v2title(int fd, struct mp3entry *entry)
                 bytes2int(header[0], header[1], header[2], header[3]) + 4;
 
             /* Skip the rest of the header */
-            lseek(fd, framelen - 10, SEEK_CUR);
+            if( -1 == lseek(fd, framelen - 10, SEEK_CUR) ) {
+                return;
+            }
         }
 
         if(version >= ID3_VER_2_4) {
@@ -708,7 +714,9 @@ static void setid3v2title(int fd, struct mp3entry *entry)
             framelen = unsync(header[0], header[1],
                               header[2], header[3]);
 
-            lseek(fd, framelen - 4, SEEK_CUR);
+            if( -1 == lseek(fd, framelen - 4, SEEK_CUR) ) {
+                return;
+            }
         }
     }
 
@@ -771,12 +779,16 @@ static void setid3v2title(int fd, struct mp3entry *entry)
 
             if (version >= ID3_VER_2_4) {
                 if(flags & 0x0040) { /* Grouping identity */
-                    lseek(fd, 1, SEEK_CUR); /* Skip 1 byte */
+                    if( -1 == lseek(fd, 1, SEEK_CUR) ) {    /* Skip 1 byte */
+                        return;
+                    }
                     framelen--;
                 }
             } else {
                 if(flags & 0x0020) { /* Grouping identity */
-                    lseek(fd, 1, SEEK_CUR); /* Skip 1 byte */
+                    if( -1 == lseek(fd, 1, SEEK_CUR) ) {    /* Skip 1 byte */
+                        return;
+                    }
                     framelen--;
                 }
             }
@@ -785,7 +797,9 @@ static void setid3v2title(int fd, struct mp3entry *entry)
             {
                 /* Skip it */
                 size -= framelen;
-                lseek(fd, framelen, SEEK_CUR);
+                if( -1 == lseek(fd, framelen, SEEK_CUR) ) {
+                    return;
+                }
                 continue;
             }
 
@@ -921,8 +935,11 @@ static void setid3v2title(int fd, struct mp3entry *entry)
                     bufferpos = tr->ppFunc(entry, tag, bufferpos);
 
                 /* Seek to the next frame */
-                if(framelen < totframelen)
-                    lseek(fd, totframelen - framelen, SEEK_CUR);
+                if(framelen < totframelen) {
+                    if( -1 == lseek(fd, totframelen - framelen, SEEK_CUR) ) {
+                        return;
+                    }
+                }
                 break;
             }
         }
