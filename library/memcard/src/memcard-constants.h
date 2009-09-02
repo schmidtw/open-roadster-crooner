@@ -15,11 +15,19 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
-#ifndef __CONFIG_H__
-#define __CONFIG_H__
+#ifndef __MEMCARD_CONSTANTS_H__
+#define __MEMCARD_CONSTANTS_H__
 
-#define MC_BAUDRATE_INITIALIZATION  200000
+#include <stdint.h>
 
-#define MC_VOLTAGE  3300
+#include "timing-parameters.h"
+
+#define MC_BLOCK_START          0xFE
+
+#define MC_READ_SINGLE_BLOCK    17
+#define MC_COMMAND_BUFFER_SIZE  (MC_Ncs + 6 + MC_Ncr)
+#define MC_BLOCK_BUFFER_SIZE    (512 + 10)
+
+extern const uint8_t memory_block_dummy_data[MC_BLOCK_BUFFER_SIZE];
 
 #endif

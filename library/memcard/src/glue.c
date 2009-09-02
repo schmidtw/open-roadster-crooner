@@ -25,6 +25,7 @@
 #include <freertos/semphr.h>
 
 #include "fatfs/ff.h"
+#include "memcard-private.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -40,7 +41,6 @@
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
 static xSemaphoreHandle __ff_mutex;
-extern volatile uint32_t __magic_insert_number;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -69,7 +69,7 @@ void glue_init( void )
  */
 BOOL ff_cre_syncobj( BYTE vol, _SYNC_t *sobj )
 {
-    *sobj = __magic_insert_number;
+    *sobj = mc_get_magic_insert_number();
     return TRUE;
 }
 
@@ -96,7 +96,7 @@ BOOL ff_del_syncobj( _SYNC_t sobj )
 BOOL ff_req_grant( _SYNC_t sobj )
 {
     xSemaphoreTake( __ff_mutex, portMAX_DELAY );
-    if( sobj != __magic_insert_number ) {
+    if( sobj != mc_get_magic_insert_number() ) {
         xSemaphoreGive( __ff_mutex );
         return FALSE;
     }

@@ -103,41 +103,6 @@ mc_status_t mc_cancel( card_status_fct card_status_fn );
 mc_card_status_t mc_get_status( void );
 
 /**
- *  Used to read a 512 byte block of memory from the card.
- *
- *  @param slot The hardware slot of the card to read from.
- *  @param lba The logical block address of the block to read.
- *  @param buffer A buffer to store the data read in.
- *
- *  @return Status
- *      @retval MC_RETURN_OK        Success.
- *      @retval MC_ERROR_PARAMETER  Invalid argument(s) passed.
- *      @retval MC_ERROR_TIMEOUT    The card timed out during IO.
- *      @retval MC_ERROR_MODE       The card is in a generic error state.
- *      @retval MC_CRC_FAILURE      The data retrieved from the card failed the CRC
- *                                      check - the card may not be present anymore.
- *      @retval MC_NOT_MOUNTED The card in the slot is not mounted.
- */
-mc_status_t mc_read_block( const uint32_t lba, uint8_t *buffer );
-
-/**
- *  Used to write a 512 byte block of memory to a card.
- *
- *  @param slot The hardware slot of the card to read from.
- *  @param lba The logical block address of the block to read.
- *  @param buffer A buffer to store the data read in.
- *
- *  @return Status
- *      @retval MC_RETURN_OK        Success.
- *      @retval MC_ERROR_PARAMETER  Invalid argument(s) passed.
- *      @retval MC_ERROR_TIMEOUT    The card timed out during IO.
- *      @retval MC_ERROR_MODE       The card is in a generic error state.
- *      @retval MC_NOT_SUPPORTED    The card does not support this operation.
- *      @retval MC_NOT_MOUNTED      The card in the slot is not mounted.
- */
-mc_status_t mc_write_block( const uint32_t lba, const uint8_t *buffer );
-
-/**
  *  Used to get the block count for the current memory card.
  *
  *  @param blocks the output value to store the response
@@ -147,15 +112,5 @@ mc_status_t mc_write_block( const uint32_t lba, const uint8_t *buffer );
  *      @retval MC_NOT_MOUNTED      The card in the slot is not mounted.
  */
 mc_status_t mc_get_block_count( uint32_t *blocks );
-
-#include <sys/reent.h>
-#include <sys/stat.h>
-
-int _file_fstat_r( struct _reent *reent, int fd, struct stat *st );
-int _file_write_r( struct _reent *reent, int fd, void *buf, size_t len );
-int _file_read_r( struct _reent *reent, int fd, void *buf, size_t len );
-off_t _file_lseek_r( struct _reent *reent, int fd, off_t offset, int whence );
-int _file_close_r( struct _reent *reent, int fd );
-int _open_r( struct _reent *reent, const char *name, int flags, int mode );
 
 #endif

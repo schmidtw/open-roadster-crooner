@@ -15,6 +15,8 @@ SOURCES = \
     commands.c \
     command.c \
     memcard.c \
+    memory-block.c \
+    block.c \
     glue.c \
     dirent.c \
     fatfs/ff.c \

@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "../memcard.h"
+#include "../block.h"
 #include "diskio.h"
 
 /*----------------------------------------------------------------------------*/
@@ -59,7 +60,7 @@ DRESULT disk_read( BYTE drv, BYTE *buf, DWORD lba, BYTE sector_count )
     }
 
     while( 0 < sector_count ) {
-        if( MC_RETURN_OK != mc_read_block(lba, buf) ) {
+        if( MC_RETURN_OK != block_read(lba, buf) ) {
             return RES_ERROR;
         }
         sector_count--;
