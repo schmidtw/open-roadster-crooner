@@ -1,12 +1,9 @@
 QUIET = @
 
-all :: unit-test
+TESTS = factor_test
 
-clean ::
+factor_test__INCLUDES = ../src
 
-cleanall ::
+factor_test__SOURCES  = ../src/factor.c
 
-install :: all
-
-unit-test ::
-	@echo "No unit tests for the board support package."
+include ../../make/Makefile.unit-test

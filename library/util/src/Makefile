@@ -4,9 +4,11 @@ BASE    = ../../..
 INCLUDE = -I/usr/avr32/include
 
 HEADERS = \
-    xxd.h
+    xxd.h \
+    factor.h
 
 SOURCES = \
-    xxd.c
+    xxd.c \
+    factor.c
 
 include ../../make/Makefile.common
