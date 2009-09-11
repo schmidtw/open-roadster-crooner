@@ -137,7 +137,24 @@ int main( void )
         { .red = 0,   .green = 0,   .blue = 128, .duration = 50 },
         { .red = 0,   .green = 0,   .blue = 96,  .duration = 50 },
         { .red = 0,   .green = 0,   .blue = 64,  .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 32,  .duration = 50 } };
+        { .red = 0,   .green = 0,   .blue = 32,  .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 0,   .duration = 400 },
+        { .red = 0,   .blue = 0,   .green = 32,  .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 64,  .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 96,  .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 128, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 160, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 192, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 224, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 255, .duration = 400 },
+        { .red = 0,   .blue = 0,   .green = 224, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 192, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 160, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 128, .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 96,  .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 64,  .duration = 50 },
+        { .red = 0,   .blue = 0,   .green = 32,  .duration = 50 } };
+
 
     media_interface_t *mi_list = NULL;
 
@@ -165,7 +182,7 @@ int main( void )
                           media_mp3_get_type, media_mp3_get_metadata );
 
     led_init( (tskIDLE_PRIORITY+1) );
-    led_set_state( blink, sizeof(blink)/sizeof(led_state_t), true );
+    led_set_state( blink, sizeof(blink)/sizeof(led_state_t), true, NULL );
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();

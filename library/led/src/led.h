@@ -29,10 +29,10 @@ typedef enum {
 } led_status_t;
 
 typedef struct {
-    uint32_t red    :8;
-    uint32_t green  :8;
-    uint32_t blue   :8;
-    uint32_t        :8;
+    unsigned int red    :8;
+    unsigned int green  :8;
+    unsigned int blue   :8;
+    unsigned int        :8;
 
     uint32_t duration;  /* in ms, 0 for forever */
 } led_state_t;
@@ -51,16 +51,18 @@ led_status_t led_init( const uint32_t priority );
 /**
  *  Used to set the colors and any transitions that take place.
  *
- *  @param states the states to output
+ *  @param states the states to output - memory is owned by the subsystem
  *  @param count the number of states
  *  @param repeat repeat the states until told to do something else
+ *  @param free_fn the function to call to free this memory when we're
+ *                 done with it (NULL to not free the memory)
  *
  *  @return Status
  *      @retval LED_RETURN_OK       Success
  *      @retval LED_PARAMETER_ERROR Invalid parameter
- *      @retval LED_RESOURCE_ERROR  The count is too large
  */
-led_status_t led_set_state( const led_state_t *states,
+led_status_t led_set_state( led_state_t *states,
                             const size_t count,
-                            const bool repeat );
+                            const bool repeat,
+                            void (*free_fn)(void*) );
 #endif

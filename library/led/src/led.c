@@ -33,16 +33,16 @@
 /*----------------------------------------------------------------------------*/
 #define LED_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE)
 #define LED_MSG_MAX         2
-#define LED_MAX_STATES      40
 #define LED_CLOCK_FREQUENCY 103125
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
 typedef struct {
-    led_state_t state[LED_MAX_STATES];
+    led_state_t *state;
     size_t count;
     bool repeat;
+    void (*free_fn)(void*);
 } led_msg_t;
 
 /*----------------------------------------------------------------------------*/
@@ -133,9 +133,10 @@ failure:
 }
 
 /* See led.h for details. */
-led_status_t led_set_state( const led_state_t *states,
+led_status_t led_set_state( led_state_t *states,
                             const size_t count,
-                            const bool repeat )
+                            const bool repeat,
+                            void (*free_fn)(void*) )
 {
     led_msg_t *msg;
 
@@ -143,14 +144,11 @@ led_status_t led_set_state( const led_state_t *states,
         return LED_PARAMETER_ERROR;
     }
 
-    if( LED_MAX_STATES < count ) {
-        return LED_RESOURCE_ERROR;
-    }
-
     xQueueReceive( __idle, &msg, portMAX_DELAY );
-    memcpy( msg->state, states, sizeof(led_state_t) * count );
+    msg->state = states;
     msg->count = count;
     msg->repeat = repeat;
+    msg->free_fn = free_fn;
 
     xQueueSendToBack( __active, &msg, portMAX_DELAY );
 
@@ -176,6 +174,10 @@ static void __led_task( void *params )
         if( pdTRUE == xQueueReceive(__active, &in, delay) ) {
             /* We got a new command! */
             if( NULL != current ) {
+                if( NULL != current->free_fn ) {
+                    (*current->free_fn)( current->state );
+                }
+                current->state = NULL;
                 xQueueSendToBack( __idle, &current, portMAX_DELAY );
             }
             current = in;
