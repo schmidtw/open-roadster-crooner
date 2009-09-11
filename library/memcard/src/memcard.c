@@ -47,12 +47,11 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE+200 + 100)
+#define MEMCARD_DEBUG 0
+
+#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE+200 + 400)
 #define AUTOMOUNT_PRIORITY      (tskIDLE_PRIORITY+1)
 #define AUTOMOUNT_CALLBACK_MAX  3
-
-#define __MC_CSR( index )   MC_SPI->CSR##index
-#define MC_CSR( index )     __MC_CSR( index )
 
 #define _D1(...)
 #define _D2(...)
@@ -136,6 +135,8 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
     }
 
     block_init( fast_malloc_fn );
+
+    io_disable();
 
     xTaskCreate( __automount_task, (signed portCHAR *) "Auto Mnt",
                  AUTOMOUNT_STACK_SIZE, NULL, AUTOMOUNT_PRIORITY, NULL );
@@ -306,10 +307,7 @@ static void __card_change( void )
     if( false == __isr_card_present() ) {
         /* Force clean up now so we're ready for a new card insertion. */
         __mc_type = MCT_UNKNOWN;
-        gpio_reset_pin( MC_SCK_PIN );
-        gpio_reset_pin( MC_MISO_PIN );
-        gpio_reset_pin( MC_MOSI_PIN );
-        gpio_reset_pin( MC_CS_PIN );
+        io_disable();
         io_unselect();
     
         block_isr_cancel();
@@ -355,12 +353,15 @@ static void __automount_task( void *data )
 
             status = __mc_mount();
             if( MC_RETURN_OK == status ) {
+                _D1( "Mounting filesystem\n" );
                 __card_status = MC_CARD__MOUNTING;
                 __call_all( __card_status );
                 if( FR_OK == f_mount(0, &fs) ) {
                     __card_status = MC_CARD__MOUNTED;
+                    _D1( "Filesystem mounted\n" );
                 } else {
                     __card_status = MC_CARD__UNUSABLE;
+                    _D1( "MC_CARD__UNUSABLE\n" );
                 }
                 __call_all( __card_status );
 
@@ -395,45 +396,12 @@ static mc_status_t __mc_mount( void )
 {
     mc_mount_state_t mount_state;
     int retries;
-    static const gpio_map_t map[] = { { MC_SCK_PIN,  MC_SCK_FUNCTION  },
-                                      { MC_MISO_PIN, MC_MISO_FUNCTION },
-                                      { MC_MOSI_PIN, MC_MOSI_FUNCTION },
-                                      { MC_CS_PIN,   MC_CS_FUNCTION   } };
 
     retries = 10;
 
-    /* Initialize the hardware. */
-    gpio_enable_module( map, sizeof(map)/sizeof(gpio_map_t) );
-
-    spi_reset( MC_SPI );
-
-    MC_SPI->MR.mstr = 1;    /* master mode */
-    MC_SPI->MR.modfdis = 1; /* ignore faults */
-    MC_SPI->MR.dlybcs = 8;  /* make sure there is a delay between CSs */
-
-    if( MC_RETURN_OK !=
-            spi_set_baudrate(MC_SPI, MC_CS, MC_BAUDRATE_INITIALIZATION) )
-    {
-        return MC_INIT_ERROR;
-    }
-
-    /* Allow 8 clock cycles of up time for the chip select
-     * prior to enabling/disabling it */
-    (MC_CSR(MC_CS)).dlybs  = 8;
-
-    /* We need a small delay between bytes, otherwise we seem to
-     * get data corruption unless we are going really slow. */
-    (MC_CSR(MC_CS)).dlybct = 1;
-
-    /* scbr is set by spi_set_baudrate() */
-
-    (MC_CSR(MC_CS)).bits   = 0;
-    (MC_CSR(MC_CS)).csaat  = 1;
-    (MC_CSR(MC_CS)).csnaat = 0;
-    (MC_CSR(MC_CS)).ncpha  = 1;
-    (MC_CSR(MC_CS)).cpol   = 0;
 
     mount_state = MCS_NO_CARD;
+
 
     while( 1 ) {
         switch( mount_state ) {
@@ -458,20 +426,17 @@ static mc_status_t __mc_mount( void )
                 break;
 
             case MCS_POWERED_ON:
-            {
-                int i;
                 _D2( "MCS_POWERED_ON:\n" );
-                spi_enable( MC_SPI );
 
-                /* Send 74+ clock cycles. */
-                for( i = 0; i < 10; i++ ) {
-                    io_send_dummy();
+                if( BSP_RETURN_OK != io_enable() ) {
+                    return MC_INIT_ERROR;
                 }
+
+                io_wakeup_card();
 
                 _D2( "MCS_POWERED_ON -> MCS_ASSERT_SPI_MODE\n" );
                 mount_state = MCS_ASSERT_SPI_MODE;
                 break;
-            }
 
             case MCS_ASSERT_SPI_MODE:
                 _D2( "MCS_ASSERT_SPI_MODE:\n" );
@@ -629,11 +594,11 @@ static mc_status_t __mc_mount( void )
 
                 _D1( "Mounted Card type: " );
                 switch( __mc_type ) {
-                    case MCT_UNKNOWN:   _D1( "Unknown" ); break;
-                    case MCT_MMC:       _D1( "MMC"     ); break;
-                    case MCT_SD:        _D1( "SD"      ); break;
-                    case MCT_SD_20:     _D1( "SD 2.0"  ); break;
-                    case MCT_SDHC:      _D1( "SDHC"    ); break;
+                    case MCT_UNKNOWN:   _D1( "Unknown\n" ); break;
+                    case MCT_MMC:       _D1( "MMC\n"     ); break;
+                    case MCT_SD:        _D1( "SD\n"      ); break;
+                    case MCT_SD_20:     _D1( "SD 2.0\n"  ); break;
+                    case MCT_SDHC:      _D1( "SDHC\n"    ); break;
                 }
 
                 _D1( " Size: %llu\n", __mc_size );

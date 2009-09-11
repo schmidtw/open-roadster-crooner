@@ -96,10 +96,13 @@
 #define MC_WP_ACTIVE_LOW            0
 #define MC_CD_ACTIVE_LOW            1
 #define MC_CS                       0
+#define MC_FAKE_CS                  1
 #define MC_SPI                      (&AVR32_SPI0)
 #define MC_SPI_ISR                  ISR__SPI0
 #define MC_CS_PIN                   AVR32_SPI0_NPCS_0_0_PIN
 #define MC_CS_FUNCTION              AVR32_SPI0_NPCS_0_0_FUNCTION
+#define MC_FAKE_CS_PIN              AVR32_SPI0_NPCS_1_0_PIN
+#define MC_FAKE_CS_FUNCTION         AVR32_SPI0_NPCS_1_0_FUNCTION
 #define MC_MOSI_PIN                 AVR32_SPI0_MOSI_0_0_PIN
 #define MC_MOSI_FUNCTION            AVR32_SPI0_MOSI_0_0_FUNCTION
 #define MC_MISO_PIN                 AVR32_SPI0_MISO_0_0_PIN

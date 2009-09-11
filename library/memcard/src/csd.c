@@ -629,12 +629,12 @@ csd_start:
         goto error;
     }
 
-
+#if (1 == MC_CHECK_CRCS)
     crc >>= 1;
     if( crc != crc7(buffer, MC_CSD_BUFFER_SIZE) ) {
         goto error;
     }
-
+#endif
     status = MC_RETURN_OK;
 
 error:

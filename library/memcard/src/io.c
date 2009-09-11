@@ -24,11 +24,13 @@
 
 #include <bsp/boards/boards.h>
 #include <bsp/spi.h>
+#include <bsp/gpio.h>
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-/* none */
+#define __MC_CSR( index )   MC_SPI->CSR##index
+#define MC_CSR( index )     __MC_CSR( index )
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -128,6 +130,95 @@ inline bsp_status_t io_send_read( const uint8_t out, uint8_t *in )
     *in = tmp;
 
     return BSP_RETURN_OK;
+}
+
+/* See io.h for details. */
+void io_disable( void )
+{
+    gpio_set_options( MC_SCK_PIN, GPIO_DIRECTION__INPUT, GPIO_PULL_UP__ENABLE,
+                      GPIO_GLITCH_FILTER__DISABLE, GPIO_INTERRUPT__NONE, 1 );
+
+    gpio_set_options( MC_MISO_PIN, GPIO_DIRECTION__INPUT, GPIO_PULL_UP__ENABLE,
+                      GPIO_GLITCH_FILTER__DISABLE, GPIO_INTERRUPT__NONE, 1 );
+
+    gpio_set_options( MC_MOSI_PIN, GPIO_DIRECTION__INPUT, GPIO_PULL_UP__ENABLE,
+                      GPIO_GLITCH_FILTER__DISABLE, GPIO_INTERRUPT__NONE, 1 );
+
+    gpio_set_options( MC_CS_PIN, GPIO_DIRECTION__INPUT, GPIO_PULL_UP__ENABLE,
+                      GPIO_GLITCH_FILTER__DISABLE, GPIO_INTERRUPT__NONE, 1 );
+}
+
+/* See io.h for details. */
+bsp_status_t io_enable( void )
+{
+    bsp_status_t status;
+
+    static const gpio_map_t map[] = { { MC_SCK_PIN,     MC_SCK_FUNCTION     },
+                                      { MC_MISO_PIN,    MC_MISO_FUNCTION    },
+                                      { MC_MOSI_PIN,    MC_MOSI_FUNCTION    },
+                                      { MC_CS_PIN,      MC_CS_FUNCTION      },
+                                      { MC_FAKE_CS_PIN, MC_FAKE_CS_FUNCTION } };
+
+    /* Initialize the hardware. */
+    gpio_enable_module( map, sizeof(map)/sizeof(gpio_map_t) );
+
+    spi_reset( MC_SPI );
+
+    MC_SPI->MR.mstr = 1;    /* master mode */
+    MC_SPI->MR.modfdis = 1; /* ignore faults */
+    MC_SPI->MR.dlybcs = 8;  /* make sure there is a delay between CSs */
+
+    status = spi_set_baudrate( MC_SPI, MC_CS, MC_BAUDRATE_INITIALIZATION );
+    if( BSP_RETURN_OK != status ) {
+        return status;
+    }
+
+    status = spi_set_baudrate( MC_SPI, MC_FAKE_CS, MC_BAUDRATE_INITIALIZATION );
+    if( BSP_RETURN_OK != status ) {
+        return status;
+    }
+
+    /* Allow 8 clock cycles of up time for the chip select
+     * prior to enabling/disabling it */
+    (MC_CSR(MC_CS)).dlybs  = 8;
+
+    /* We need a small delay between bytes, otherwise we seem to
+     * get data corruption unless we are going really slow. */
+    (MC_CSR(MC_CS)).dlybct = 1;
+
+    /* scbr is set by spi_set_baudrate() */
+
+    (MC_CSR(MC_CS)).bits   = 0;
+    (MC_CSR(MC_CS)).csaat  = 1;
+    (MC_CSR(MC_CS)).csnaat = 0;
+    (MC_CSR(MC_CS)).ncpha  = 1;
+    (MC_CSR(MC_CS)).cpol   = 0;
+
+    /* Do the same thing for the fake interface. */
+    (MC_CSR(MC_FAKE_CS)).dlybs  = 8;
+    (MC_CSR(MC_FAKE_CS)).dlybct = 1;
+    (MC_CSR(MC_FAKE_CS)).bits   = 0;
+    (MC_CSR(MC_FAKE_CS)).csaat  = 1;
+    (MC_CSR(MC_FAKE_CS)).csnaat = 0;
+    (MC_CSR(MC_FAKE_CS)).ncpha  = 1;
+    (MC_CSR(MC_FAKE_CS)).cpol   = 0;
+
+    spi_enable( MC_SPI );
+
+    return BSP_RETURN_OK;
+}
+
+/* See io.h for details. */
+void io_wakeup_card( void )
+{
+    int i;
+
+    /* Send 74+ clock cycles. */
+    spi_select( MC_SPI, MC_FAKE_CS );
+    for( i = 0; i < 10; i++ ) {
+        io_send_dummy();
+    }
+    io_unselect();
 }
 
 /*----------------------------------------------------------------------------*/

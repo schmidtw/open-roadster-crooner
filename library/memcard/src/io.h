@@ -97,4 +97,23 @@ inline void io_clean_unselect( void );
  *      @retval BSP_ERROR_TIMEOUT
  */
 inline bsp_status_t io_send_read( const uint8_t out, uint8_t *in );
+
+/**
+ *  Used to disable or reset the port to a "ready to receive a card" state.
+ */
+void io_disable( void );
+
+/**
+ *  Used to enable the SPI port for the io code.
+ *
+ *  @return Status
+ *      @retval BSP_RETURN_OK
+ *      @retval BSP_ERROR_PARAMETER
+ */
+bsp_status_t io_enable( void );
+
+/**
+ *  Used to wake the card up by sending clock cycles.
+ */
+void io_wakeup_card( void );
 #endif
