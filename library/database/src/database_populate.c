@@ -28,6 +28,7 @@
 #include "file_os_wrapper.h"
 #include "mi_interface.h"
 
+#define DEBUG_DUMP_LIST 0
 
 bool setup_group_name( const char * name );
 group_node_t * find_group_node( const char * dir_name );
@@ -110,7 +111,9 @@ bool populate_database( const char ** directory,
         goto failure;
     }
     ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_group, NULL);
+#if (0 != DEBUG_DUMP_LIST)
     database_print();
+#endif
     return true;
 failure:
     database_purge();
