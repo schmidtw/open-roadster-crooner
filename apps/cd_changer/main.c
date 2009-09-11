@@ -13,6 +13,7 @@
 #include <memcard/memcard.h>
 #include <display/display.h>
 #include <dsp/dsp.h>
+#include <led/led.h>
 #include <media-interface/media-interface.h>
 #include <media-flac/media-flac.h>
 #include <media-mp3/media-mp3.h>
@@ -120,6 +121,24 @@ static void __idle_task( void *params )
 
 int main( void )
 {
+    static const led_state_t blink[] = {
+        { .red = 0,   .green = 0,   .blue = 0,   .duration = 400 },
+        { .red = 0,   .green = 0,   .blue = 32,  .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 64,  .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 96,  .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 128, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 160, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 192, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 224, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 255, .duration = 400 },
+        { .red = 0,   .green = 0,   .blue = 224, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 192, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 160, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 128, .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 96,  .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 64,  .duration = 50 },
+        { .red = 0,   .green = 0,   .blue = 32,  .duration = 50 } };
+
     media_interface_t *mi_list = NULL;
 
     cpu_disable_orphans();
@@ -145,6 +164,8 @@ int main( void )
     media_register_codec( mi_list, "mp3", media_mp3_play,
                           media_mp3_get_type, media_mp3_get_metadata );
 
+    led_init( (tskIDLE_PRIORITY+1) );
+    led_set_state( blink, sizeof(blink)/sizeof(led_state_t), true );
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();

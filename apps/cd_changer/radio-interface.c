@@ -26,7 +26,6 @@
 
 #include <database/database.h>
 #include <memcard/memcard.h>
-#include <bsp/led.h>
 #include <bsp/cpu.h>
 #include <playback/playback.h>
 
@@ -249,12 +248,6 @@ static void __blu_task( void *params )
     state.discs_present = 0;
     state.current_disc = 0;
     state.current_track = 0;
-
-    led_init();
-
-    led_off( led_all );
-    led_on( led_red );
-    led_on( led_blue );
 
     while( 1 ) {
         ri_msg_t *msg;

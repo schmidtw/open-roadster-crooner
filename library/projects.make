@@ -8,6 +8,7 @@ LIBRARIES = \
             memcard \
             file-stream \
             dsp \
+            led \
             media-interface \
             media-flac \
             media-mp3 \

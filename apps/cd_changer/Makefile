@@ -20,6 +20,7 @@ LIBRARIES = \
             display \
             memcard \
             dsp \
+            led \
             bsp \
             util
 

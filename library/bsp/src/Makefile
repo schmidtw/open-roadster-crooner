@@ -16,9 +16,9 @@ HEADERS = \
     intc.h \
     pdca.h \
     spi.h \
-    led.h \
     wdt.h \
     flash.h \
+    pwm.h \
     dac.h \
     boards/boards.h \
     boards/evk1100.h \
@@ -35,9 +35,9 @@ SOURCES = \
     intc.c \
     pdca.c \
     spi.c \
-    led.c \
     dac.c \
     flash.c \
+    pwm.c \
     wdt.c
 
 include ../../make/Makefile.common

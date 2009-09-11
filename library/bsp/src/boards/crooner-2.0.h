@@ -54,9 +54,19 @@
 /*----------------------------------------------------------------------------*/
 /* Attached LEDs                                                              */
 /*----------------------------------------------------------------------------*/
-#define LED_BLUE    AVR32_PIN_PB19
-#define LED_GREEN   AVR32_PIN_PB20
-#define LED_RED     AVR32_PIN_PB21
+#define LED_GPIO_BLUE_PIN       AVR32_PIN_PB19
+#define LED_GPIO_GREEN_PIN      AVR32_PIN_PB20
+#define LED_GPIO_RED_PIN        AVR32_PIN_PB21
+
+#define LED_PWM_BLUE_PIN        AVR32_PWM_0_PIN
+#define LED_PWM_BLUE_FUNCTION   AVR32_PWM_0_FUNCTION
+#define LED_PWM_BLUE_CHANNEL    0
+#define LED_PWM_GREEN_PIN       AVR32_PWM_1_PIN
+#define LED_PWM_GREEN_FUNCTION  AVR32_PWM_1_FUNCTION
+#define LED_PWM_GREEN_CHANNEL   1
+#define LED_PWM_RED_PIN         AVR32_PWM_2_PIN
+#define LED_PWM_RED_FUNCTION    AVR32_PWM_2_FUNCTION
+#define LED_PWM_RED_CHANNEL     2
 
 /*----------------------------------------------------------------------------*/
 /* iBus Interface                                                             */
@@ -158,7 +168,7 @@
 /*----------------------------------------------------------------------------*/
 #define DOSM_CPU_MASK   0x00010002
 #define DOSM_HSB_MASK   0x00000067
-#define DOSM_PBA_MASK   0x0000c62f
+#define DOSM_PBA_MASK   0x0000d62f
 #define DOSM_PBB_MASK   0x00000035
 
 #endif
