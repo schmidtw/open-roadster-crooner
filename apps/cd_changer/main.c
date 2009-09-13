@@ -20,6 +20,7 @@
 #include <ibus-phone-protocol/ibus-phone-protocol.h>
 
 #include "radio-interface.h"
+#include "device-status.h"
 
 #define ENABLE_STATUS_TASK      0
 #define REPORT_ALL_MALLOC       0
@@ -127,41 +128,6 @@ static void __idle_task( void *params )
 
 int main( void )
 {
-    static const led_state_t blink[] = {
-        { .red = 0,   .green = 0,   .blue = 0,   .duration = 400 },
-        { .red = 0,   .green = 0,   .blue = 32,  .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 64,  .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 96,  .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 128, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 160, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 192, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 224, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 255, .duration = 400 },
-        { .red = 0,   .green = 0,   .blue = 224, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 192, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 160, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 128, .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 96,  .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 64,  .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 32,  .duration = 50 },
-        { .red = 0,   .green = 0,   .blue = 0,   .duration = 400 },
-        { .red = 0,   .blue = 0,   .green = 32,  .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 64,  .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 96,  .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 128, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 160, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 192, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 224, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 255, .duration = 400 },
-        { .red = 0,   .blue = 0,   .green = 224, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 192, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 160, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 128, .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 96,  .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 64,  .duration = 50 },
-        { .red = 0,   .blue = 0,   .green = 32,  .duration = 50 } };
-
-
     media_interface_t *mi_list = NULL;
 
     cpu_disable_orphans();
@@ -188,7 +154,8 @@ int main( void )
                           media_mp3_get_type, media_mp3_get_metadata );
 
     led_init( (tskIDLE_PRIORITY+1) );
-    led_set_state( (led_state_t *)blink, sizeof(blink)/sizeof(led_state_t), true, NULL );
+    device_status_init();
+    device_status_set( DS__NO_RADIO_CONNECTION );
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();

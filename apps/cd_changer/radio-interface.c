@@ -30,6 +30,7 @@
 #include <playback/playback.h>
 
 #include "radio-interface.h"
+#include "device-status.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -128,6 +129,7 @@ static ri_msg_t __ri_msg[RI_MSG_MAX];
 static xQueueHandle __ri_idle;
 static xQueueHandle __ri_active;
 static const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
+static volatile bool __connected_to_radio;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -169,6 +171,8 @@ bool ri_init( void )
 {
     int i;
     irp_init();
+
+    __connected_to_radio = false;
 
     vSemaphoreCreateBinary( __poll_cmd );
     xSemaphoreTake( __poll_cmd, 0 );
@@ -229,8 +233,16 @@ static void __poll_task( void *params )
         if( pdTRUE == xSemaphoreTake(__poll_cmd, RI_POLL_TIMEOUT) ) {
             _D3( "Poll Request\n" );
             irp_send_poll_response();
+            __connected_to_radio = true;
+            /* If nothing else is going on, set the output to normal,
+             * otherwise the system will figure it out. */
+            if( DS__NO_RADIO_CONNECTION == device_status_get() ) {
+                device_status_set( DS__NORMAL );
+            }
         } else {
             _D3( "ibus timed out\n" );
+            device_status_set( DS__NO_RADIO_CONNECTION );
+            __connected_to_radio = false;
             irp_send_announce();
         }
     }
@@ -414,6 +426,18 @@ static void __send_state( ri_state_t *state )
          state->current_disc,
          state->current_track );
 
+    if( (true == state->magazine_present) && (0 == state->discs_present) ) {
+        /* No discs */
+        device_status_set( DS__CARD_UNUSABLE );
+    } else {
+        /* No magazine / Normal operation */
+        if( true == __connected_to_radio ) {
+            device_status_set( DS__NORMAL );
+        } else {
+            device_status_set( DS__NO_RADIO_CONNECTION );
+        }
+    }
+
     irp_send_normal_status( state->device_status,
                             state->magazine_present,
                             state->discs_present,
@@ -498,6 +522,8 @@ static void __transition_db( ri_state_t *state )
 
     irp_going_to_check_disc( 1, 0 );
 
+    device_status_set( DS__CARD_BEING_SCANNED );
+
     __database_populate();
 
     keep_going = true;
@@ -560,6 +586,7 @@ static void __transition_db( ri_state_t *state )
         xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         __send_state( state );
     }
+    device_status_set( DS__NORMAL );
 }
 
 /**

@@ -4,6 +4,7 @@ BASE       = ../..
 
 SOURCES = \
           radio-interface.c \
+          device-status.c \
           main.c
 
 LIBRARIES = \
