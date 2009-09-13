@@ -15,5 +15,6 @@ LIBRARIES = \
             playback \
             ibus-physical \
             ibus-radio-protocol \
+            ibus-phone-protocol \
             display \
             database

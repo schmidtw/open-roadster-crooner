@@ -27,6 +27,7 @@
 #include <freertos/semphr.h>
 #include <memcard/memcard.h>
 #include <database/database.h>
+#include <display/display.h>
 
 #include "radio-interface.h"
 #include "playback.h"
@@ -183,6 +184,14 @@ static void __pb_task( void *params )
 
                 play_fn = current_song->play_fn;
                 _D2( "Playing song '%s'\n", current_song->title );
+//                {
+//                    char buffer[259];
+//                    sprintf( buffer, "%*.s - %*.s - %*.s",
+//                            80, current_song->album->artist->name,
+//                            90, current_song->album->name,
+//                            90, current_song->title );
+//                    display_start_text(buffer);
+//                }
                 ms = (*play_fn)( (const char*) current_song->file_location,
                                  current_song->track_gain,
                                  current_song->track_peak,

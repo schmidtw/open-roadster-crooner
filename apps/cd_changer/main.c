@@ -8,7 +8,6 @@
 #include <bsp/cpu.h>
 #include <freertos/task.h>
 #include <file-stream/file-stream.h>
-#include <display/display.h>
 #include <database/database.h>
 #include <memcard/memcard.h>
 #include <display/display.h>
@@ -18,6 +17,7 @@
 #include <media-flac/media-flac.h>
 #include <media-mp3/media-mp3.h>
 #include <playback/playback.h>
+#include <ibus-phone-protocol/ibus-phone-protocol.h>
 
 #include "radio-interface.h"
 
@@ -182,12 +182,12 @@ int main( void )
                           media_mp3_get_type, media_mp3_get_metadata );
 
     led_init( (tskIDLE_PRIORITY+1) );
-    led_set_state( blink, sizeof(blink)/sizeof(led_state_t), true, NULL );
+    led_set_state( (led_state_t *)blink, sizeof(blink)/sizeof(led_state_t), true, NULL );
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();
     playback_init( (tskIDLE_PRIORITY+1) );
-//    display_init( ibus_print , 5000, 15000, 10000, 1, true);
+//    display_init( ibus_phone_display , 5000, 15000, 10000, 1, true);
     init_database( mi_list );
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );
 
