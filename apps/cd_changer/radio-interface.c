@@ -280,7 +280,6 @@ static void __blu_task( void *params )
                     state.discs_present = 0;
                     state.current_disc = 0;
                     state.current_track = 0;
-                    __send_state( &state );
                     break;
 
                 case MC_CARD__MOUNTED:
@@ -564,6 +563,7 @@ static void __transition_db( ri_state_t *state )
             }
         } else {
             xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+            return;
         }
     }
 
