@@ -134,7 +134,9 @@ static device_status_t __current;
 void device_status_init( void )
 {
     __mutex = xSemaphoreCreateMutex();
-    __current = DS__NO_RADIO_CONNECTION;
+
+    __current = DS__NORMAL;
+    device_status_set( DS__NO_RADIO_CONNECTION );
 }
 
 /* See device-status.h for details. */

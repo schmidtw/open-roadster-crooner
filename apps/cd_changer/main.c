@@ -155,7 +155,6 @@ int main( void )
 
     led_init( (tskIDLE_PRIORITY+1) );
     device_status_init();
-    device_status_set( DS__NO_RADIO_CONNECTION );
     mc_init( pvPortMalloc );
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();
