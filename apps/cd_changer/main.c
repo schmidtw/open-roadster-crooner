@@ -21,8 +21,10 @@
 
 #include "radio-interface.h"
 
-#define ENABLE_STATUS_TASK  0
-#define REPORT_ALL_MALLOC   0
+#define ENABLE_STATUS_TASK      0
+#define REPORT_ALL_MALLOC       0
+
+#define ALLOW_USING_SLOW_MEMORY 1
 
 void* pvPortMalloc( size_t size )
 {
@@ -50,12 +52,16 @@ void* pvPortMalloc( size_t size )
         offset += aligned_size;
         have -= aligned_size;
     } else {
-        fprintf( stderr, "%s( %lu ) Failure - Needed: %lu Have: %ld\n",
+#if (1 == ALLOW_USING_SLOW_MEMORY)
+        ret = malloc( size );
+#else
+        fprintf( stderr, "%s( %lu ) Failure - Needed: %lu Have: %ld - using malloc()\n",
                  __func__, size, size, have );
 
         fflush( stderr );
 
         while( 1 ) { ; }
+#endif
     }
 
 #if (1 == REPORT_ALL_MALLOC)
@@ -187,9 +193,9 @@ int main( void )
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();
     playback_init( (tskIDLE_PRIORITY+1) );
-//    display_init( ibus_phone_display , 5000, 15000, 10000, 1, true);
     init_database( mi_list );
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );
+    display_init( ibus_phone_display , 5000, 15000, 10000, 1, true);
 
     /* Start the RTOS - never returns. */
     __enable_os = true;
