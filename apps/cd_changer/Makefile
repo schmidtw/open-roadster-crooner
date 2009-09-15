@@ -3,8 +3,10 @@ TARGET     = cd_changer
 BASE       = ../..
 
 SOURCES = \
+          user-interface.c \
           radio-interface.c \
           device-status.c \
+          ui-default.c \
           main.c
 
 LIBRARIES = \

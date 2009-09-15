@@ -31,6 +31,7 @@
 
 #include "radio-interface.h"
 #include "device-status.h"
+#include "user-interface.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -70,7 +71,6 @@
 #define _D3(...) printf( __VA_ARGS__ )
 #endif
 
-#define DIR_MAP_SIZE    6
 #define RI_MSG_MAX      20
 
 /*----------------------------------------------------------------------------*/
@@ -84,37 +84,6 @@ typedef struct {
     uint8_t current_track;
 } ri_state_t;
 
-typedef enum {
-    DBASE__POPULATE,
-    DBASE__PURGE
-} dbase_cmd_t;
-
-typedef struct {
-    dbase_cmd_t cmd;
-    bool success;
-} dbase_msg_t;
-
-typedef struct {
-    pb_status_t status;
-    int32_t tx_id;
-} ri_playback_msg_t;
-
-typedef enum {
-    RI_MSG_TYPE__CARD_STATUS,
-    RI_MSG_TYPE__DBASE_STATUS,
-    RI_MSG_TYPE__PLAYBACK_STATUS,
-    RI_MSG_TYPE__IBUS_CMD
-} ri_msg_type_t;
-
-typedef struct {
-    ri_msg_type_t type;
-    union {
-        dbase_msg_t         dbase;
-        irp_rx_msg_t        ibus;
-        mc_card_status_t    card;
-        ri_playback_msg_t   song;
-    } d;
-} ri_msg_t;
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -128,7 +97,6 @@ static xQueueHandle __dbase_active;
 static ri_msg_t __ri_msg[RI_MSG_MAX];
 static xQueueHandle __ri_idle;
 static xQueueHandle __ri_active;
-static const char *dir_map[DIR_MAP_SIZE] = { "1", "2", "3", "4", "5", "6" };
 static volatile bool __connected_to_radio;
 
 /*----------------------------------------------------------------------------*/
@@ -149,19 +117,7 @@ static void __checking_complete( ri_state_t *state,
 static void __playback_cb( const pb_status_t status, const int32_t tx_id );
 static void __transition_db( ri_state_t *state );
 static void __no_discs_loop( ri_state_t *state );
-static void __command_loop( ri_state_t *state );
-static uint8_t __find_lowest_disc( const uint8_t map );
-
-static uint8_t __determine_map( void );
-static uint8_t __determine_starting_disc( void );
-static uint8_t __determine_starting_track( void );
-static void* __init_user_data( void );
-static void __destroy_user_data( void *user_data );
-static void __process_command( ri_state_t *state,
-                               const ri_msg_t *msg,
-                               song_node_t **song,
-                               void *user_data );
-static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
+static void __command_loop( ri_state_t *state, song_node_t **song, void *user_data );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -217,6 +173,36 @@ bool ri_init( void )
 
 failure:
     return false;
+}
+
+/* See radio-interface.h for details */
+void ri_send_state( irp_state_t device_status,
+                    const uint8_t disc_map,
+                    uint8_t current_disc,
+                    uint8_t current_track )
+{
+    ri_state_t state;
+
+    state.device_status = device_status;
+    state.magazine_present = true;
+    state.discs_present = disc_map;
+    state.current_disc = current_disc;
+    state.current_track = current_track;
+
+    __send_state( &state );
+}
+
+/* See radio-interface.h for details */
+int32_t ri_playback_play( song_node_t *song )
+{
+    return playback_play( song->file_location, song->track_gain,
+                          song->track_peak, song->play_fn, __playback_cb );
+}
+
+/* See radio-interface.h for details */
+int32_t ri_playback_command( const pb_command_t command )
+{
+    return playback_command( command, __playback_cb );
 }
 
 /*----------------------------------------------------------------------------*/
@@ -346,7 +332,6 @@ static void __ibus_task( void *params )
  */
 static void __dbase_task( void *params )
 {
-    
     while( 1 ) {
         dbase_msg_t *dbase_msg;
         ri_msg_t *ri_msg;
@@ -355,7 +340,11 @@ static void __dbase_task( void *params )
         xQueueReceive( __ri_idle, &ri_msg, portMAX_DELAY );
 
         if( DBASE__POPULATE == dbase_msg->cmd ) {
-            ri_msg->d.dbase.success = populate_database( dir_map, DIR_MAP_SIZE, "/" );
+            size_t size;
+            const char **map;
+
+            map = ui_dir_map_get( &size ); 
+            ri_msg->d.dbase.success = populate_database( map, size, "/" );
         } else {
             database_purge();
             ri_msg->d.dbase.success = true;
@@ -538,23 +527,24 @@ static void __transition_db( ri_state_t *state )
                 uint8_t map;
                 uint8_t starting_disc;
                 uint8_t starting_track;
+                song_node_t *song;
+                void *user_data;
 
                 keep_going = false;
                 xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
 
-                map = __determine_map();
+                user_data = ui_user_data_init();
 
-                starting_disc = __determine_starting_disc();
-                if( 6 < starting_disc ) {
-                    starting_disc = __find_lowest_disc( map );
-                }
-                starting_track = __determine_starting_track();
+                ui_get_disc_info( &map, &starting_disc, &starting_track,
+                                  &song, user_data );
 
                 __checking_complete( state, map, starting_disc, starting_track );
 
                 __send_state( state );
 
-                __command_loop( state );
+                __command_loop( state, &song, user_data );
+
+                ui_user_data_destroy( user_data );
             } else {
                 __checking_complete( state, 0, 0, 0 );
                 __send_state( state );
@@ -626,14 +616,9 @@ static void __no_discs_loop( ri_state_t *state )
  *
  *  @param state the system state
  */
-static void __command_loop( ri_state_t *state )
+static void __command_loop( ri_state_t *state, song_node_t **song, void *user_data )
 {
     bool keep_going;
-    song_node_t *song;
-    void *user_data;
-
-    song = NULL;
-    user_data = __init_user_data();
 
     keep_going = true;
     while( true == keep_going ) {
@@ -649,336 +634,16 @@ static void __command_loop( ri_state_t *state )
             {
                 __send_state( state );
             } else {
-                __process_command( state, msg, &song, user_data );
+                ui_process_command( &state->device_status,
+                                    state->discs_present,
+                                    &state->current_disc,
+                                    &state->current_track,
+                                    msg, song, user_data );
             }
         } else {
             keep_going = false;
             __send_state( state );
         }
         xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
-    }
-    __destroy_user_data( user_data );
-}
-
-/**
- *  Helper function that finds the lowest numbered disc.
- *
- *  @param map the map to analize
- *
- *  @return the lowest disc number, or 7 on error.
- */
-static uint8_t __find_lowest_disc( const uint8_t map )
-{
-    int32_t i;
-    int32_t lowest_disc;
-
-    lowest_disc = 7;
-    for( i = 1; i <= 6; i++ ) {
-        bool disc_present;
-        uint8_t active_map;
-
-        disc_present = ((1 << (i - 1)) == (map & ((1 << (i - 1)))));
-        active_map = (map & (0x3f >> (6 - i)));
-
-        if( (true == disc_present) && (i < lowest_disc) ) {
-            lowest_disc = i;
-        }
-    }
-
-    return lowest_disc;
-}
-
-/*----------------------------------------------------------------------------*/
-/*                          To be made library-itized                         */
-/*----------------------------------------------------------------------------*/
-
-/**
- *  Called to get the active map for the current disc.
- *
- *  @return the active map for the disc
- */
-static uint8_t __determine_map( void )
-{
-    db_status_t status;
-    song_node_t *song;
-    uint8_t map;
-
-    song = NULL;
-    map = 0x00;
-
-    status = DS_SUCCESS;
-    while( DS_SUCCESS == status ) {
-        status = next_song( &song, DT_NEXT, DL_GROUP );
-
-        if( DS_FAILURE == status ) {
-            map = 0x00;
-            goto done;
-        } else if( DS_END_OF_LIST == status ) {
-            goto done;
-        } else if( DS_SUCCESS == status ) {
-            int32_t i;
-
-            for( i = 0; i < DIR_MAP_SIZE; i++ ) {
-                if( 0 == strcmp(dir_map[i], song->album->artist->group->name) ) {
-                    map |= 1 << i;
-                    break;
-                }
-            }
-        }
-    }
-
-done:
-
-    return map;
-}
-
-/**
- *  Called to get the starting disc for playback.
- *
- *  @return the starting disc, or 0xff for "auto detect" of the lowest
- *          numbered disc
- */
-static uint8_t __determine_starting_disc( void )
-{
-    return 0xff;
-}
-
-/**
- *  Called to get the starting track for playback.
- *
- *  @return the starting track for playback (1-99)
- */
-static uint8_t __determine_starting_track( void )
-{
-    return 1;
-}
-
-/**
- *  Called to allow for user data to be initialized and
- *  returned when the disc is first inserted.
- *
- *  @return the user_data to pass in other function calls, or NULL
- */
-static void* __init_user_data( void )
-{
-    return NULL;
-}
-
-/**
- *  Called after the disc has been removed to allow for cleaning
- *  up the user data.
- *
- *  @param the user_data provided by __init_user_data()
- */
-static void __destroy_user_data( void *user_data )
-{
-}
-
-/**
- *  Called for each ibus command or playback status update to allow
- *  for multiple implementations.
- *
- *  @param state the system state
- *  @param msg the current message - must not be re-used or freed
- *  @param song the current song
- *  @param user_data any user data provided by __init_user_data()
- */
-static void __process_command( ri_state_t *state,
-                               const ri_msg_t *msg,
-                               song_node_t **song,
-                               void *user_data )
-{
-    _D2( "state->device_status: 0x%04x\n", state->device_status );
-
-    if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
-        switch( msg->d.ibus.command ) {
-            case IRP_CMD__SCAN_DISC__ENABLE:
-            case IRP_CMD__SCAN_DISC__DISABLE:
-            case IRP_CMD__RANDOMIZE__ENABLE:
-            case IRP_CMD__RANDOMIZE__DISABLE:
-                _D2( "MISC Ignored: 0x%04x\n", msg->d.ibus.command );
-                break;
-
-            case IRP_CMD__STOP:
-                _D2( "IRP_CMD__STOP\n" );
-                if( (IRP_STATE__PLAYING == state->device_status) ||
-                    (IRP_STATE__PAUSED == state->device_status) )
-                {
-                    playback_command( PB_CMD__STOP, __playback_cb );
-                }
-                break;
-
-            case IRP_CMD__PAUSE:
-                _D2( "IRP_CMD__PAUSE\n" );
-                if( IRP_STATE__PLAYING == state->device_status ) {
-                    playback_command( PB_CMD__PAUSE, __playback_cb );
-                }
-                break;
-
-            case IRP_CMD__PLAY:
-                _D2( "IRP_CMD__PLAY\n" );
-                if( IRP_STATE__STOPPED == state->device_status ) {
-                    if( NULL == *song ) {
-                        __find_song( song, IRP_CMD__CHANGE_DISC, state->current_disc );
-                    }
-                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                                   (*song)->play_fn, __playback_cb );
-                } else if( IRP_STATE__PAUSED == state->device_status ) {
-                    playback_command( PB_CMD__RESUME, __playback_cb );
-                }
-                break;
-
-            case IRP_CMD__FAST_PLAY__FORWARD:
-                _D2( "IRP_CMD__FAST_PLAY__FORWARD\n" );
-
-                if( IRP_STATE__FAST_PLAYING__FORWARD != state->device_status ) {
-                    state->device_status = IRP_STATE__FAST_PLAYING__FORWARD;
-                    __find_song( song, msg->d.ibus.command, 0 );
-                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                                   (*song)->play_fn, __playback_cb );
-                }
-                break;
-
-            case IRP_CMD__FAST_PLAY__REVERSE:
-                _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
-                if( IRP_STATE__FAST_PLAYING__REVERSE != state->device_status ) {
-                    state->device_status = IRP_STATE__FAST_PLAYING__REVERSE;
-                    __find_song( song, msg->d.ibus.command, 0 );
-                    playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                                   (*song)->play_fn, __playback_cb );
-                }
-                break;
-
-            case IRP_CMD__SEEK__NEXT:
-                _D2( "IRP_CMD__SEEK__NEXT\n" );
-                state->device_status = IRP_STATE__SEEKING__NEXT;
-                __send_state( state );
-                __find_song( song, msg->d.ibus.command, 0 );
-                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                               (*song)->play_fn, __playback_cb );
-                break;
-
-            case IRP_CMD__SEEK__PREV:
-                _D2( "IRP_CMD__SEEK__PREV\n" );
-                state->device_status = IRP_STATE__SEEKING__PREV;
-                __send_state( state );
-                __find_song( song, msg->d.ibus.command, 0 );
-                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                               (*song)->play_fn, __playback_cb );
-                break;
-
-            case IRP_CMD__CHANGE_DISC:
-                _D2( "IRP_CMD__CHANGE_DISC\n" );
-                state->device_status = IRP_STATE__LOADING_DISC;
-                __send_state( state );
-                __find_song( song, msg->d.ibus.command, msg->d.ibus.disc );
-                state->current_disc = msg->d.ibus.disc;
-                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                               (*song)->play_fn, __playback_cb );
-                break;
-
-            case IRP_CMD__GET_STATUS:   /* Never sent. */
-            case IRP_CMD__POLL:         /* Never sent. */
-                break;
-        }
-    } else {
-        _D2( "RI_MSG_TYPE__PLAYBACK_STATUS\n" );
-        switch( msg->d.song.status ) {
-            case PB_STATUS__PLAYING:
-                _D2( "PB_STATUS__PLAYING\n" );
-                state->current_track = (*song)->track_number;
-                state->device_status = IRP_STATE__PLAYING;
-                break;
-            case PB_STATUS__PAUSED:
-                _D2( "PB_STATUS__PAUSED\n" );
-                state->device_status = IRP_STATE__PAUSED;
-                break;
-            case PB_STATUS__STOPPED:
-                _D2( "PB_STATUS__STOPPED\n" );
-                state->device_status = IRP_STATE__STOPPED;
-                break;
-
-            case PB_STATUS__ERROR:
-                _D2( "PB_STATUS__ERROR\n" );
-                /* Without this we seem to deadlock on "full error" testing. */
-                /* The real error seems to be due to the physical ibus driver. */
-                vTaskDelay( 100 );
-
-            case PB_STATUS__END_OF_SONG:
-                _D2( "PB_STATUS__END_OF_SONG\n" );
-                state->device_status = IRP_STATE__SEEKING__NEXT;
-                __send_state( state );
-                __find_song( song, IRP_CMD__SEEK__NEXT, 0 );
-                playback_play( (*song)->file_location, (*song)->track_gain, (*song)->track_peak,
-                               (*song)->play_fn, __playback_cb );
-                break;
-        }
-        __send_state( state );
-    }
-}
-
-/**
- *  Helper function used to find the next song to play.
- *
- *  @param song the current song to base the next song from
- *  @param cmd the command to apply
- *  @param disc the new disc to play if the command needs the information
- */
-static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
-{
-    db_status_t rv;
-    
-    switch( cmd ) {
-        case IRP_CMD__FAST_PLAY__FORWARD:
-            rv = next_song( song, DT_NEXT, DL_ALBUM );
-            if( DS_END_OF_LIST == rv ) {
-                next_song( song, DT_NEXT, DL_ARTIST );
-            }
-            break;
-
-        case IRP_CMD__FAST_PLAY__REVERSE:
-            rv = next_song( song, DT_PREVIOUS, DL_ALBUM );
-            if( DS_END_OF_LIST == rv ) {
-                next_song( song, DT_PREVIOUS, DL_ARTIST );
-            }
-            break;
-
-        case IRP_CMD__SEEK__NEXT:
-            rv = next_song( song, DT_NEXT, DL_SONG );
-            if( DS_END_OF_LIST == rv ) {
-                rv = next_song( song, DT_NEXT, DL_ALBUM );
-            }
-            if( DS_END_OF_LIST == rv ) {
-                next_song( song, DT_NEXT, DL_ARTIST );
-            }
-            break;
-
-        case IRP_CMD__SEEK__PREV:
-            rv = next_song( song, DT_PREVIOUS, DL_SONG );
-            if( DS_END_OF_LIST == rv ) {
-                rv = next_song( song, DT_PREVIOUS, DL_ALBUM );
-            }
-            if( DS_END_OF_LIST == rv ) {
-                next_song( song, DT_PREVIOUS, DL_ARTIST );
-            }
-            break;
-
-        case IRP_CMD__CHANGE_DISC:
-            *song = NULL;
-            rv = DS_SUCCESS;
-            while( DS_SUCCESS == rv ) {
-                rv = next_song( song, DT_NEXT, DL_GROUP );
-                if( DS_FAILURE != rv ) {
-                    if( 0 == strcasecmp(dir_map[disc - 1],
-                                        (*song)->album->artist->group->name) )
-                    {
-                        rv = DS_END_OF_LIST;
-                    }
-                }
-            }
-            break;
-
-        default:
-            break;
     }
 }

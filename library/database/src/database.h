@@ -172,7 +172,7 @@ void database_purge( void );
  *         otherwise.
  */
 bool populate_database( const char ** directory,
-                        const uint8_t num_directories,
+                        const size_t num_directories,
                         const char * RootDirectory );
 
 #endif /* __DATABASE_H__ */

@@ -78,10 +78,10 @@ ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data );
  *         otherwise.
  */
 bool populate_database( const char ** directory,
-                        const uint8_t num_directories,
+                        const size_t num_directories,
                         const char * RootDirectory )
 {
-    uint8_t ii;
+    size_t ii;
     
     database_purge();
     
