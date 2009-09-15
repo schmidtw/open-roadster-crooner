@@ -90,6 +90,7 @@ static const ui_impl_t __impl = {
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
+/* See ui-default.h for details. */
 bool uid_init( void )
 {
     return ui_register( &__impl );
