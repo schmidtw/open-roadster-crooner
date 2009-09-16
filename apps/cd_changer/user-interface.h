@@ -110,7 +110,7 @@ typedef void (*ui_initial_song_set_fct)( song_node_t **song, void *user_data );
  *  @param disc_map the disc bitmap
  *  @param current_disc the current disc (should be changed to reflect
  *                       the new reality after the call)
- *  @param current_track the current disc (should be changed to reflect
+ *  @param current_track the current track (should be changed to reflect
  *                       the new reality after the call)
  *  @param msg the message to process
  *  @param song the current song

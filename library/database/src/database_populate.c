@@ -68,7 +68,7 @@ ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data );
  *              If a root directory matches the string, then all music files
  *              in that folder and sub-folders will be placed in the
  *              corresponding group.  A NULL directory will allow that group
- *              to be assigned UNKOWN root folders.
+ *              to be assigned UNKNOWN root folders.
  * @param num_directories The number of char * pointers in the directory
  *              parameter.
  * @param RootDirectory the identifier which is the location of the root
