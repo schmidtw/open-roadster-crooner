@@ -46,7 +46,7 @@
 
 #define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
 #define RI_IBUS_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
-#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+250+DEBUG_STACK_BUFFER)
+#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+500+DEBUG_STACK_BUFFER)
 #define RI_DBASE_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE+1200)
 
 #define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
@@ -540,14 +540,11 @@ static void __transition_db( ri_state_t *state )
 
                 __checking_complete( state, map, starting_disc, starting_track );
 
-                __send_state( state );
-
                 __command_loop( state, &song, user_data );
 
                 ui_user_data_destroy( user_data );
             } else {
                 __checking_complete( state, 0, 0, 0 );
-                __send_state( state );
                 __no_discs_loop( state );
                 return;
             }
@@ -641,6 +638,8 @@ static void __command_loop( ri_state_t *state, song_node_t **song, void *user_da
                                     msg, song, user_data );
             }
         } else {
+            _D2( "__command_loop[%d] - type 0x%04x\n\tibus.command 0x%04x\n",
+                    __LINE__, msg->type, msg->d.ibus.command );
             keep_going = false;
             __send_state( state );
         }
