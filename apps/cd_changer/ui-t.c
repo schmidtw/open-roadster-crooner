@@ -35,6 +35,7 @@
 #define _D3(...)
 
 #if (defined(UI_T_DEBUG) && (0 < UI_T_DEBUG))
+#include <stdio.h>
 #undef  _D1
 #define _D1(...) printf( __VA_ARGS__ )
 #endif
@@ -71,7 +72,7 @@ static void __process_command( irp_state_t *device_status,
                                const ri_msg_t *msg,
                                song_node_t **song,
                                void *user_data );
-static uint8_t __map_get( song_node_t **song );
+static uint8_t __map_get( void );
 static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
 
 /*----------------------------------------------------------------------------*/
@@ -94,6 +95,7 @@ static const ui_impl_t __impl = {
 /* See ui-default.h for details. */
 bool ui_t_init( void )
 {
+    _D2("ui_t_init() - %d\n", __LINE__);
     return ui_register( &__impl );
 }
 
@@ -103,6 +105,7 @@ bool ui_t_init( void )
 /* See user-interface.h for details. */
 static const char** __dir_map_get( size_t *size )
 {
+    _D2("__dir_map_get() - %d\n", __LINE__);
     *size = DIR_MAP_SIZE;
 
     return NULL;
@@ -112,13 +115,12 @@ static const char** __dir_map_get( size_t *size )
 static void __get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
                              song_node_t **song, void *user_data )
 {
-    song_node_t *first_song;
-    first_song = NULL;
+    _D2("__get_disc_info() - %d\n", __LINE__);
     
-    *map = __map_get(&first_song);
+    *map = __map_get();
     *disc = 1;
     *track = 1;
-    *song = first_song;
+    *song = NULL;
 }
 
 /* See user-interface.h for details. */
@@ -133,6 +135,7 @@ static void __process_command( irp_state_t *device_status,
     _D2( "device_status: 0x%04x\n", *device_status );
 
     if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
+        _D2( "msg->type == RI_MSG_TYPE__IBUS_CMD\n" );
         switch( msg->d.ibus.command ) {
             case IRP_CMD__SCAN_DISC__ENABLE:
             case IRP_CMD__SCAN_DISC__DISABLE:
@@ -161,7 +164,7 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "IRP_CMD__PLAY\n" );
                 if( IRP_STATE__STOPPED == *device_status ) {
                     if( NULL == *song ) {
-                        __find_song( song, IRP_CMD__CHANGE_DISC, *current_disc );
+                        next_song( song, DT_NEXT, DL_SONG );
                     }
                     ri_playback_play( *song );
                 } else if( IRP_STATE__PAUSED == *device_status ) {
@@ -256,18 +259,21 @@ static void __process_command( irp_state_t *device_status,
  *
  *  @return the bitmask of the discs available according to the database
  */
-static uint8_t __map_get( song_node_t **song )
+static uint8_t __map_get( void )
 {
+    song_node_t *song;
     uint8_t map;
+    _D2("__map_get() - %d\n", __LINE__);
 
     map = 0x00;
+    song = NULL;
     
-    if( DS_SUCCESS == next_song( song, DT_NEXT, DL_GROUP ) ) {
-        /* 0x38 == 0011 1000 */
+    if( DS_SUCCESS == next_song( &song, DT_NEXT, DL_GROUP ) ) {
+        /* 0x07 == 0000 0111 */
         _D2("__map_get - found database\n");
-        map = 0x38;
+        map = 0x07;
     }
-
+    _D1("__map_get() - returning 0x%02x\n", map );
     return map;
 }
 
