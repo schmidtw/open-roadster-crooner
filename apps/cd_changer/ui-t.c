@@ -21,6 +21,8 @@
 #include <stdint.h>
 
 #include <freertos/task.h>
+#include <display/display.h>
+#include <database/database.h>
 
 #include "user-interface.h"
 
@@ -73,6 +75,7 @@ static void __process_command( irp_state_t *device_status,
                                song_node_t **song,
                                void *user_data );
 static uint8_t __map_get( void );
+static uint8_t __find_display_number( song_node_t *song, const uint8_t disc );
 static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
 
 /*----------------------------------------------------------------------------*/
@@ -210,7 +213,10 @@ static void __process_command( irp_state_t *device_status,
             case IRP_CMD__CHANGE_DISC:
                 _D2( "IRP_CMD__CHANGE_DISC\n" );
                 *device_status = IRP_STATE__LOADING_DISC;
+                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                 *current_disc = msg->d.ibus.disc;
+                *current_track = __find_display_number(*song, *current_disc);
+                *device_status = IRP_STATE__PLAYING;
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                 break;
 
@@ -223,7 +229,19 @@ static void __process_command( irp_state_t *device_status,
         switch( msg->d.song.status ) {
             case PB_STATUS__PLAYING:
                 _D2( "PB_STATUS__PLAYING\n" );
-//                *current_track = (*song)->track_number;
+                *current_track = __find_display_number( *song, *current_disc );
+//                switch( *current_disc ) {
+//                    case DM_SONG:
+//                        display_start_text((*song)->title);
+//                        break;
+//                    case DM_ALBUM:
+//                        display_start_text( (char*) &(*song)->album->name);
+//                        break;
+//                    case DM_ARTIST:
+//                        display_start_text((char *) &(*song)->album->artist->name);
+//                    default:
+//                        break;
+//                }
                 *device_status = IRP_STATE__PLAYING;
                 break;
             case PB_STATUS__PAUSED:
@@ -275,6 +293,47 @@ static uint8_t __map_get( void )
     }
     _D1("__map_get() - returning 0x%02x\n", map );
     return map;
+}
+
+static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
+{
+    uint8_t tn;
+    switch( disc ) {
+        case DM_SONG:
+            if( 0 == song->track_number ) {
+                return 1;
+            }
+            return song->track_number % 100;
+        case DM_ALBUM:
+        {
+            album_node_t *albums = (album_node_t *)song->album->artist->albums.head->data;
+            tn = 0;
+            while( NULL != albums ) {
+                tn++;
+                if( albums == song->album ) {
+                    return tn % 100;
+                }
+                albums = (album_node_t *)albums->node.next->data;
+            }
+            break;
+        }
+        case DM_ARTIST:
+        {
+            artist_node_t *artists = (artist_node_t *)song->album->artist->group->artists.head->data;
+            tn = 0;
+            while( NULL != artists ) {
+                tn++;
+                if( artists == song->album->artist ) {
+                    return tn % 100;
+                }
+                artists = (artist_node_t *)artists->node.next->data;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    return 1;
 }
 
 /**

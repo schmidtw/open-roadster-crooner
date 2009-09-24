@@ -7,6 +7,7 @@ SOURCES = \
           radio-interface.c \
           device-status.c \
           ui-default.c \
+          ui-t.c\
           main.c
 
 LIBRARIES = \
