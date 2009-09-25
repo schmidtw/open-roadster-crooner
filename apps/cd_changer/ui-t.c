@@ -58,7 +58,8 @@
 typedef enum {
     DM_ARTIST = 1,
     DM_ALBUM = 2,
-    DM_SONG = 3
+    DM_SONG = 3,
+    DM_TEXT_DISPLAY = 5
 } disc_mode_t;
 
 /*----------------------------------------------------------------------------*/
@@ -74,9 +75,17 @@ static void __process_command( irp_state_t *device_status,
                                const ri_msg_t *msg,
                                song_node_t **song,
                                void *user_data );
+static bool __get_next_disc_mode_element(disc_mode_t *val);
 static uint8_t __map_get( void );
 static uint8_t __find_display_number( song_node_t *song, const uint8_t disc );
-static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
+static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
+static void __update_song_display_info( song_node_t *song, const uint8_t disc );
+static void set_display_state( bool new_state );
+static bool is_display_enabled( void );
+static void set_random_state( bool new_state );
+static bool is_random_enabled( void );
+static void set_scan_state( bool new_state );
+static bool is_scan_enabled( void );
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -91,6 +100,10 @@ static const ui_impl_t __impl = {
     .ui_process_command_fn = &__process_command,
     .impl_free = NULL
 };
+
+static bool display_text_state;
+static bool random_state;
+static bool scan_state;
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -141,10 +154,23 @@ static void __process_command( irp_state_t *device_status,
         _D2( "msg->type == RI_MSG_TYPE__IBUS_CMD\n" );
         switch( msg->d.ibus.command ) {
             case IRP_CMD__SCAN_DISC__ENABLE:
+                _D2( "IRP_CMD__SCAN_DISC__ENABLE\n" );
+                set_scan_state(true);
+                break;
+                
             case IRP_CMD__SCAN_DISC__DISABLE:
+                _D2( "IRP_CMD__SCAN_DISC__DISABLE\n" );
+                set_scan_state(false);
+                break;
+                
             case IRP_CMD__RANDOMIZE__ENABLE:
+                _D2( "IRP_CMD__RANDOMIZE__ENABLE\n" );
+                set_random_state(true);
+                break;
+                
             case IRP_CMD__RANDOMIZE__DISABLE:
-                _D2( "MISC Ignored: 0x%04x\n", msg->d.ibus.command );
+                _D2( "IRP_CMD__RANDOMIZE__DISABLE\n" );
+                set_random_state(false);
                 break;
 
             case IRP_CMD__STOP:
@@ -167,7 +193,12 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "IRP_CMD__PLAY\n" );
                 if( IRP_STATE__STOPPED == *device_status ) {
                     if( NULL == *song ) {
-                        next_song( song, DT_NEXT, DL_SONG );
+                        if( is_random_enabled() ) {
+                            next_song( song, DT_RANDOM, DL_GROUP );
+                        } else {
+                            /* Not in the random mode */
+                            next_song( song, DT_NEXT, DL_SONG );
+                        }
                     }
                     ri_playback_play( *song );
                 } else if( IRP_STATE__PAUSED == *device_status ) {
@@ -180,8 +211,9 @@ static void __process_command( irp_state_t *device_status,
 
                 if( IRP_STATE__FAST_PLAYING__FORWARD != *device_status ) {
                     *device_status = IRP_STATE__FAST_PLAYING__FORWARD;
-                    __find_song( song, msg->d.ibus.command, *current_disc );
-                    ri_playback_play( *song );
+                    if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
+                        ri_playback_play( *song );
+                    }
                 }
                 break;
 
@@ -189,8 +221,9 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
                 if( IRP_STATE__FAST_PLAYING__REVERSE != *device_status ) {
                     *device_status = IRP_STATE__FAST_PLAYING__REVERSE;
-                    __find_song( song, msg->d.ibus.command, *current_disc );
-                    ri_playback_play( *song );
+                    if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
+                        ri_playback_play( *song );
+                    }
                 }
                 break;
 
@@ -198,16 +231,18 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "IRP_CMD__SEEK__NEXT\n" );
                 *device_status = IRP_STATE__SEEKING__NEXT;
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-                __find_song( song, msg->d.ibus.command, *current_disc );
-                ri_playback_play( *song );
+                if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
+                    ri_playback_play( *song );
+                }
                 break;
 
             case IRP_CMD__SEEK__PREV:
                 _D2( "IRP_CMD__SEEK__PREV\n" );
                 *device_status = IRP_STATE__SEEKING__PREV;
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-                __find_song( song, msg->d.ibus.command, *current_disc );
-                ri_playback_play( *song );
+                if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
+                    ri_playback_play( *song );
+                }
                 break;
 
             case IRP_CMD__CHANGE_DISC:
@@ -225,24 +260,14 @@ static void __process_command( irp_state_t *device_status,
                 break;
         }
     } else {
+        bool shouldSendText = false;
         _D2( "RI_MSG_TYPE__PLAYBACK_STATUS\n" );
         switch( msg->d.song.status ) {
             case PB_STATUS__PLAYING:
                 _D2( "PB_STATUS__PLAYING\n" );
                 *current_track = __find_display_number( *song, *current_disc );
-//                switch( *current_disc ) {
-//                    case DM_SONG:
-//                        display_start_text((*song)->title);
-//                        break;
-//                    case DM_ALBUM:
-//                        display_start_text( (char*) &(*song)->album->name);
-//                        break;
-//                    case DM_ARTIST:
-//                        display_start_text((char *) &(*song)->album->artist->name);
-//                    default:
-//                        break;
-//                }
                 *device_status = IRP_STATE__PLAYING;
+                shouldSendText = true;
                 break;
             case PB_STATUS__PAUSED:
                 _D2( "PB_STATUS__PAUSED\n" );
@@ -263,12 +288,45 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "PB_STATUS__END_OF_SONG\n" );
                 *device_status = IRP_STATE__SEEKING__NEXT;
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-                __find_song( song, IRP_CMD__SEEK__NEXT, *current_disc );
+                __find_song( song, IRP_CMD__SEEK__NEXT, (uint8_t)DM_SONG );
                 ri_playback_play( *song );
+                shouldSendText = true;
                 break;
         }
         ri_send_state( *device_status, disc_map, *current_disc, *current_track );
+        if( true == shouldSendText ) {
+            __update_song_display_info(*song, *current_disc);
+        }
     }
+}
+
+/**
+ * Used to get the next element in the disc_mode_t enum
+ * 
+ * @param val pointer to current enum constant which will be
+ *        updated to the next element
+ * 
+ * @return true if the the *val param was updated properly
+ *         false if there are no more constants in the enum
+ *         or the passed in value is not part of the enum
+ */
+static bool __get_next_disc_mode_element(disc_mode_t *val)
+{
+    switch( *val ) {
+        case DM_ARTIST:
+            *val = DM_ALBUM;
+            break;
+        case DM_ALBUM:
+            *val = DM_SONG;
+            break;
+        case DM_SONG:
+            *val = DM_TEXT_DISPLAY;
+            break;
+        case DM_TEXT_DISPLAY:
+        default:
+            return false;
+    }
+    return true;
 }
 
 /**
@@ -287,14 +345,27 @@ static uint8_t __map_get( void )
     song = NULL;
     
     if( DS_SUCCESS == next_song( &song, DT_NEXT, DL_GROUP ) ) {
-        /* 0x07 == 0000 0111 */
+        /* Generate the map file from the enum disc_mode_t */
+        disc_mode_t dm = DM_ARTIST;
         _D2("__map_get - found database\n");
-        map = 0x07;
+        do {
+            map |= 1 << (dm-1);
+        } while( __get_next_disc_mode_element(&dm) );
     }
     _D1("__map_get() - returning 0x%02x\n", map );
     return map;
 }
 
+/**
+ * Based on the current song information and the disc (mode), this function
+ * will return the track number which should be associated with this disc and
+ * sent to the radio.
+ * 
+ * @param song pointer to the song node which is currently being used
+ * @param disc will be treated as disc_mode_t
+ * 
+ * @return song number to be sent to radio and ui-t track number to be used
+ */
 static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
 {
     uint8_t tn;
@@ -330,6 +401,12 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
             }
             break;
         }
+        case DM_TEXT_DISPLAY:
+            if( is_display_enabled() ) {
+                return 2;
+            }
+            // The is Display is not enabled...so show disc 1
+            return 1;
         default:
             break;
     }
@@ -342,58 +419,152 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
  *  @param song the current song to base the next song from
  *  @param cmd the command to apply
  *  @param disc the new disc to play if the command needs the information
+ *  
+ *  @return true if a new song has been selected and should be played
+ *          false if the currently playing song should continue to play
  */
-static void __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
+static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
 {
     db_status_t rv;
+    bool isNewSong = true;
+    db_traverse_t direction;
     
     switch( cmd ) {
         case IRP_CMD__FAST_PLAY__FORWARD:
         case IRP_CMD__SEEK__NEXT:
-            switch( disc ) {
-                case DM_SONG:
-                    rv = next_song( song, DT_NEXT, DL_SONG );
-                    if( DS_END_OF_LIST != rv ) {
-                        break;
-                    }
-                case DM_ALBUM:
-                    rv = next_song( song, DT_NEXT, DL_ALBUM );
-                    if( DS_END_OF_LIST != rv ) {
-                        break;
-                    }
-                case DM_ARTIST:
-                    rv = next_song( song, DT_NEXT, DL_ARTIST );
-                    break;
-                default:
-                    break;
-            }
+            direction = DT_NEXT;
             break;
-
         case IRP_CMD__FAST_PLAY__REVERSE:
         case IRP_CMD__SEEK__PREV:
-            switch( disc ) {
-                case DM_SONG:
-                    rv = next_song( song, DT_PREVIOUS, DL_SONG );
-                    if( DS_END_OF_LIST != rv ) {
-                        break;
-                    }
-                case DM_ALBUM:
-                    rv = next_song( song, DT_PREVIOUS, DL_ALBUM );
-                    next_song( song, DT_NEXT, DL_SONG );
-                    if( DS_END_OF_LIST != rv ) {
-                        break;
-                    }
-                case DM_ARTIST:
-                    rv = next_song( song, DT_PREVIOUS, DL_ARTIST );
-                    next_song( song, DT_NEXT, DL_ALBUM );
-                    next_song( song, DT_NEXT, DL_SONG );
-                    break;
-                default:
-                    break;
-            }
+            direction = DT_PREVIOUS;
             break;
-
+        default:
+            return false;
+    }
+    
+    if( is_random_enabled() ) {
+        direction = DT_RANDOM;
+    }
+    
+    switch( disc ) {
+        case DM_SONG:
+            rv = next_song( song, direction, DL_SONG );
+            if( DS_END_OF_LIST != rv ) {
+                break;
+            }
+        case DM_ALBUM:
+            rv = next_song( song, direction, DL_ALBUM );
+            if( DS_END_OF_LIST != rv ) {
+                break;
+            }
+        case DM_ARTIST:
+            next_song( song, direction, DL_ARTIST );
+            break;
+        case DM_TEXT_DISPLAY:
+            set_display_state( !is_display_enabled());
+            isNewSong = false;
+            break;
         default:
             break;
     }
+    return isNewSong;
+}
+
+/**
+ * Helper function which should be how we send enable text for this song to
+ * be sent to the display library.
+ * 
+ * @param song pointer to the currently playing song
+ * @param disc will be treated as disc_mode_t
+ */
+static void __update_song_display_info( song_node_t *song, const uint8_t disc )
+{
+    if( false == is_display_enabled() ) {
+        return;
+    }
+    switch( disc ) {
+        case DM_SONG:
+            display_start_text(song->title);
+            break;
+        case DM_ALBUM:
+            display_start_text( (char*) &song->album->name);
+            break;
+        case DM_ARTIST:
+            display_start_text((char *) &song->album->artist->name);
+            break;
+        case DM_TEXT_DISPLAY:
+            display_start_text( "Text Enabled\0" );
+            break;
+        default:
+            break;
+    }
+}
+
+/**
+ * Helper function which enables or disables the use of the display
+ * to the radio.
+ * 
+ * @param new_state true - enable displaying information on the radio
+ *             false - disable displaying information on the radio
+ */
+static void set_display_state( bool new_state )
+{
+    display_text_state = new_state;
+    if( false == new_state ) {
+        display_stop_text();
+    }
+}
+
+/**
+ * Helper function which queries the state of the display
+ * 
+ * @return true the display is enabled, false otherwise
+ */
+static bool is_display_enabled( void )
+{
+    return display_text_state;
+}
+
+/**
+ * Helper function which enables or disables the random
+ * state
+ * 
+ * @param new_state true - enable the random next song
+ *        false - disable the random next song
+ */
+static void set_random_state( bool new_state )
+{
+    random_state = new_state;
+}
+
+/**
+ * Helper function which queries the state of the random
+ * 
+ * @return true if the random state is enabled, false otherwise
+ */
+static bool is_random_enabled( void )
+{
+    return random_state;
+}
+
+/**
+ * Helper function which enables or disables the scan
+ * state
+ * 
+ * @param new_state true - enable the scan
+ *        false - disable the scan
+ */
+static void set_scan_state( bool new_state )
+{
+    scan_state = new_state;
+}
+
+/**
+ * Helper function which queries the state of the scan
+ * 
+ * @return true if the scan state is enabled, false otherwise
+ */
+static bool is_scan_enabled( void )
+{
+    return scan_state;
 }
