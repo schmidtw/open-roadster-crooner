@@ -80,12 +80,17 @@ static uint8_t __map_get( void );
 static uint8_t __find_display_number( song_node_t *song, const uint8_t disc );
 static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
 static void __update_song_display_info( song_node_t *song, const uint8_t disc );
+static void update_text_display_state( irp_state_t *device_status,
+        const uint8_t disc_map, const uint8_t disc, uint8_t *track );
 static void set_display_state( bool new_state );
 static bool is_display_enabled( void );
+static uint8_t get_dispaly_track( bool disp_state );
 static void set_random_state( bool new_state );
 static bool is_random_enabled( void );
-static void set_scan_state( bool new_state );
+static void enable_scan_state( void );
+static void disable_scan_state( void );
 static bool is_scan_enabled( void );
+static void start_scan_timer( void );
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -154,23 +159,27 @@ static void __process_command( irp_state_t *device_status,
         _D2( "msg->type == RI_MSG_TYPE__IBUS_CMD\n" );
         switch( msg->d.ibus.command ) {
             case IRP_CMD__SCAN_DISC__ENABLE:
-                _D2( "IRP_CMD__SCAN_DISC__ENABLE\n" );
-                set_scan_state(true);
-                break;
-                
             case IRP_CMD__SCAN_DISC__DISABLE:
-                _D2( "IRP_CMD__SCAN_DISC__DISABLE\n" );
-                set_scan_state(false);
-                break;
-                
             case IRP_CMD__RANDOMIZE__ENABLE:
-                _D2( "IRP_CMD__RANDOMIZE__ENABLE\n" );
-                set_random_state(true);
-                break;
-                
             case IRP_CMD__RANDOMIZE__DISABLE:
-                _D2( "IRP_CMD__RANDOMIZE__DISABLE\n" );
-                set_random_state(false);
+                if( IRP_CMD__SCAN_DISC__ENABLE == msg->d.ibus.command ) {
+                    _D2( "IRP_CMD__SCAN_DISC__ENABLE\n" );
+                    *device_status = IRP_CMD__RANDOMIZE__ENABLE;
+                    enable_scan_state();
+                } else if( IRP_CMD__SCAN_DISC__DISABLE == msg->d.ibus.command ) {
+                    _D2( "IRP_CMD__SCAN_DISC__DISABLE\n" );
+                    *device_status = IRP_CMD__RANDOMIZE__DISABLE;
+                    disable_scan_state();
+                } else if( IRP_CMD__RANDOMIZE__ENABLE == msg->d.ibus.command ) {
+                    _D2( "IRP_CMD__RANDOMIZE__ENABLE\n" );
+                    *device_status = IRP_CMD__RANDOMIZE__ENABLE;
+                    set_random_state(true);
+                } else {
+                    _D2( "IRP_CMD__RANDOMIZE__DISABLE\n" );
+                    *device_status = IRP_CMD__RANDOMIZE__DISABLE;
+                    set_random_state(false);
+                }
+                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                 break;
 
             case IRP_CMD__STOP:
@@ -211,8 +220,11 @@ static void __process_command( irp_state_t *device_status,
 
                 if( IRP_STATE__FAST_PLAYING__FORWARD != *device_status ) {
                     *device_status = IRP_STATE__FAST_PLAYING__FORWARD;
+                    ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                     if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
                         ri_playback_play( *song );
+                    } else {
+                        update_text_display_state(device_status, disc_map, *current_disc, current_track);
                     }
                 }
                 break;
@@ -221,20 +233,27 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
                 if( IRP_STATE__FAST_PLAYING__REVERSE != *device_status ) {
                     *device_status = IRP_STATE__FAST_PLAYING__REVERSE;
+                    ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                     if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
                         ri_playback_play( *song );
+                    } else {
+                        update_text_display_state(device_status, disc_map, *current_disc, current_track);
                     }
                 }
                 break;
 
             case IRP_CMD__SEEK__NEXT:
+            {
                 _D2( "IRP_CMD__SEEK__NEXT\n" );
                 *device_status = IRP_STATE__SEEKING__NEXT;
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                 if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
                     ri_playback_play( *song );
+                } else {
+                    update_text_display_state(device_status, disc_map, *current_disc, current_track);
                 }
                 break;
+            }
 
             case IRP_CMD__SEEK__PREV:
                 _D2( "IRP_CMD__SEEK__PREV\n" );
@@ -242,6 +261,8 @@ static void __process_command( irp_state_t *device_status,
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                 if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
                     ri_playback_play( *song );
+                } else {
+                    update_text_display_state(device_status, disc_map, *current_disc, current_track);
                 }
                 break;
 
@@ -288,10 +309,22 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "PB_STATUS__END_OF_SONG\n" );
                 *device_status = IRP_STATE__SEEKING__NEXT;
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-                __find_song( song, IRP_CMD__SEEK__NEXT, (uint8_t)DM_SONG );
+                if( is_random_enabled() ) {
+                    __find_song( song, IRP_CMD__SEEK__NEXT, *current_disc );
+                } else {
+                    __find_song( song, IRP_CMD__SEEK__NEXT, (uint8_t)DM_SONG );
+                }
                 ri_playback_play( *song );
                 shouldSendText = true;
                 break;
+//            case PB_STATUS__SCAN_NEXT_SONG:
+//                _D2( "PB_STATUS__SCAN_NEXT_SONG\n" );
+//                *device_status = IRP_CMD__SEEK__NEXT;
+//                ri_send_state( *device_status, disc_map, *current_disc, *current_track);
+//                __find_song( song, IRP_CMD__SEEK__NEXT, (uint8_t)DM_SONG );
+//                ri_playback_play( *song );
+//                shouldSendText = true;
+//                break;
         }
         ri_send_state( *device_status, disc_map, *current_disc, *current_track );
         if( true == shouldSendText ) {
@@ -402,11 +435,7 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
             break;
         }
         case DM_TEXT_DISPLAY:
-            if( is_display_enabled() ) {
-                return 2;
-            }
-            // The is Display is not enabled...so show disc 1
-            return 1;
+            return get_dispaly_track( is_display_enabled());
         default:
             break;
     }
@@ -500,6 +529,20 @@ static void __update_song_display_info( song_node_t *song, const uint8_t disc )
     }
 }
 
+static void update_text_display_state( irp_state_t *device_status,
+        const uint8_t disc_map, const uint8_t disc, uint8_t *track )
+{
+    if( DM_TEXT_DISPLAY == disc )
+    {
+        *device_status = IRP_STATE__STOPPED;
+        ri_send_state( *device_status, disc_map, disc, *track );
+        
+        *track = get_dispaly_track( is_display_enabled() );
+        *device_status = IRP_STATE__PLAYING;
+        ri_send_state( *device_status, disc_map, disc, *track );
+    }
+}
+
 /**
  * Helper function which enables or disables the use of the display
  * to the radio.
@@ -525,6 +568,27 @@ static bool is_display_enabled( void )
     return display_text_state;
 }
 
+
+#define DISPLAY_TRACK_NOT_ENABLED 1
+#define DISPLAY_TRACK_ENABLED     2
+/**
+ * Helper function which should be called to get the track
+ * number for text display on/off
+ * 
+ * @param disp_state the state of the text display
+ * 
+ * @return track number which is associated with the disp_state
+ *         parameter
+ */
+static uint8_t get_dispaly_track( bool disp_state )
+{
+    if( true == disp_state ) {
+        return DISPLAY_TRACK_ENABLED;
+    }
+    return DISPLAY_TRACK_NOT_ENABLED;
+}
+
+
 /**
  * Helper function which enables or disables the random
  * state
@@ -548,15 +612,19 @@ static bool is_random_enabled( void )
 }
 
 /**
- * Helper function which enables or disables the scan
- * state
- * 
- * @param new_state true - enable the scan
- *        false - disable the scan
+ * Helper function which enables the scan state
  */
-static void set_scan_state( bool new_state )
+static void enable_scan_state( void )
 {
-    scan_state = new_state;
+    scan_state = true;
+}
+
+/**
+ * Helper function which disables the scan state
+ */
+static void disable_scan_state( void )
+{
+    scan_state = false;
 }
 
 /**
@@ -567,4 +635,13 @@ static void set_scan_state( bool new_state )
 static bool is_scan_enabled( void )
 {
     return scan_state;
+}
+
+/**
+ * Helper function which creates a message for handling the time
+ * when to scan to the next song.
+ */
+static void start_scan_timer( void )
+{
+    return;
 }
