@@ -59,6 +59,7 @@ typedef enum {
     DM_ARTIST = 1,
     DM_ALBUM = 2,
     DM_SONG = 3,
+    DM_RANDOM = 4,
     DM_TEXT_DISPLAY = 5
 } disc_mode_t;
 
@@ -85,6 +86,7 @@ static void update_text_display_state( irp_state_t *device_status,
 static void set_display_state( bool new_state );
 static bool is_display_enabled( void );
 static uint8_t get_dispaly_track( bool disp_state );
+static uint8_t get_random_track( bool random_state );
 static void set_random_state( bool new_state );
 static bool is_random_enabled( void );
 static void enable_scan_state( void );
@@ -353,6 +355,9 @@ static bool __get_next_disc_mode_element(disc_mode_t *val)
             *val = DM_SONG;
             break;
         case DM_SONG:
+            *val = DM_RANDOM;
+            break;
+        case DM_RANDOM:
             *val = DM_TEXT_DISPLAY;
             break;
         case DM_TEXT_DISPLAY:
@@ -401,45 +406,36 @@ static uint8_t __map_get( void )
  */
 static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
 {
-    uint8_t tn;
+    uint32_t tn = 1;
+    uint8_t rv;
     switch( disc ) {
         case DM_SONG:
             if( 0 == song->track_number ) {
                 return 1;
             }
-            return song->track_number % 100;
+            tn = song->track_number;
+            break;
         case DM_ALBUM:
         {
-            album_node_t *albums = (album_node_t *)song->album->artist->albums.head->data;
-            tn = 0;
-            while( NULL != albums ) {
-                tn++;
-                if( albums == song->album ) {
-                    return tn % 100;
-                }
-                albums = (album_node_t *)albums->node.next->data;
-            }
+            tn = song->album->index_in_list;
             break;
         }
         case DM_ARTIST:
         {
-            artist_node_t *artists = (artist_node_t *)song->album->artist->group->artists.head->data;
-            tn = 0;
-            while( NULL != artists ) {
-                tn++;
-                if( artists == song->album->artist ) {
-                    return tn % 100;
-                }
-                artists = (artist_node_t *)artists->node.next->data;
-            }
+            tn = song->album->artist->index_in_list;
             break;
         }
         case DM_TEXT_DISPLAY:
-            return get_dispaly_track( is_display_enabled());
+            return get_dispaly_track( is_display_enabled() );
+            
+        case DM_RANDOM:
+            return get_random_track( is_random_enabled() );
         default:
             break;
     }
-    return 1;
+    rv = (uint8_t)(tn % 100);
+    if( rv == 0 ) { rv++; }
+    return rv;
 }
 
 /**
@@ -493,6 +489,10 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
             set_display_state( !is_display_enabled());
             isNewSong = false;
             break;
+        case DM_RANDOM:
+            set_random_state( !is_random_enabled() );
+            isNewSong = false;
+            break;
         default:
             break;
     }
@@ -538,6 +538,12 @@ static void update_text_display_state( irp_state_t *device_status,
         ri_send_state( *device_status, disc_map, disc, *track );
         
         *track = get_dispaly_track( is_display_enabled() );
+        *device_status = IRP_STATE__PLAYING;
+        ri_send_state( *device_status, disc_map, disc, *track );
+    } else if( DM_RANDOM == disc ) {
+        *device_status = IRP_STATE__STOPPED;
+        ri_send_state( *device_status, disc_map, disc, *track );
+        *track = get_random_track( is_random_enabled() );
         *device_status = IRP_STATE__PLAYING;
         ri_send_state( *device_status, disc_map, disc, *track );
     }
@@ -588,6 +594,25 @@ static uint8_t get_dispaly_track( bool disp_state )
     return DISPLAY_TRACK_NOT_ENABLED;
 }
 
+
+#define RANDOM_TRACK_NOT_ENABLED 1
+#define RANDOM_TRACK_ENABLED     2
+/**
+ * Helper function which should be called to get the track
+ * number for the random on/off
+ * 
+ * @param random_state the state of the random
+ * 
+ * @return track number which is associated with the
+ *  random_state parameter
+ */
+static uint8_t get_random_track( bool random_state )
+{
+   if( true == random_state ) {
+       return RANDOM_TRACK_ENABLED;
+   }
+   return RANDOM_TRACK_NOT_ENABLED;
+}
 
 /**
  * Helper function which enables or disables the random
