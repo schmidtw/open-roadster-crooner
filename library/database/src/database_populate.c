@@ -41,6 +41,9 @@ bool normalize_artists_in_unknown_group_to_unused_groups( void );
 ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data );
 ll_ir_t count_unused_nodes( ll_node_t *node, volatile void *user_data );
 ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data );
+ll_ir_t index_groups( ll_node_t *node, volatile void *user_data );
+ll_ir_t index_arist( ll_node_t *node, volatile void *user_data );
+ll_ir_t index_album( ll_node_t *node, volatile void *user_data );
 
 /**
  * The structure of the pools are:
@@ -111,6 +114,11 @@ bool populate_database( const char ** directory,
         goto failure;
     }
     ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_group, NULL);
+    {
+        uint32_t indexer = 1;
+        ll_iterate(&rdn.groups, index_groups, NULL, &indexer);
+    }
+    
 #if (0 != DEBUG_DUMP_LIST)
     database_print();
 #endif
@@ -118,6 +126,47 @@ bool populate_database( const char ** directory,
 failure:
     database_purge();
     return false;
+}
+
+ll_ir_t index_groups( ll_node_t *node, volatile void *user_data )
+{
+    uint32_t *indexer = (uint32_t *)user_data;
+    group_node_t *gn = (group_node_t *)node->data;
+    uint32_t artist_index = 1;
+    if( 0 == *indexer ) {
+        (*indexer)++;
+    }
+    gn->index_in_list = *indexer;
+    (*indexer)++;
+    
+    ll_iterate(&(gn->artists), index_arist, NULL, &artist_index);
+    return LL_IR__CONTINUE;
+}
+
+ll_ir_t index_arist( ll_node_t *node, volatile void *user_data )
+{
+    uint32_t *indexer = (uint32_t *)user_data;
+    artist_node_t *an = (artist_node_t *)node->data;
+    uint32_t album_index = 1;
+    if( 0 == *indexer ) {
+        (*indexer)++;
+    }
+    an->index_in_list = *indexer;
+    (*indexer)++;
+    ll_iterate(&(an->albums), index_album, NULL, &album_index);
+    return LL_IR__CONTINUE;
+}
+
+ll_ir_t index_album( ll_node_t *node, volatile void *user_data )
+{
+    uint32_t *indexer = (uint32_t *)user_data;
+    album_node_t *an = (album_node_t *)node->data;
+    if( 0 == *indexer ) {
+        (*indexer)++;
+    }
+    an->index_in_list = *indexer;
+    (*indexer)++;
+    return LL_IR__CONTINUE;
 }
 
 bool normalize_artists_in_unknown_group_to_unused_groups( void )

@@ -27,6 +27,7 @@ typedef struct {
     ll_node_t node;
     ll_list_t artists;
     uint32_t size_list;
+    uint32_t index_in_list;
 } group_node_t;
 
 typedef struct {
@@ -34,6 +35,7 @@ typedef struct {
     ll_node_t node;
     ll_list_t albums;
     uint32_t size_list;
+    uint32_t index_in_list;
     group_node_t * group;
 } artist_node_t;
 
@@ -42,6 +44,7 @@ typedef struct {
     ll_node_t node;
     ll_list_t songs;
     uint32_t size_list;
+    uint32_t index_in_list;
     artist_node_t * artist;
 } album_node_t;
 
