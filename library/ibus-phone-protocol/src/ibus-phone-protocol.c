@@ -23,6 +23,11 @@
 
 #include "ibus-phone-protocol.h"
 
+#define IBUS_PHONE_PROTOCOL 0
+
+#ifdef IBUS_PHONE_PROTOCOL
+#include <string.h>
+#endif
 
 #define MAX_PHONE_DISPLAY_SIZE   16
 #define MAX_IBUS_PRINT_SIZE      ( MAX_PHONE_DISPLAY_SIZE + 4 )
@@ -86,13 +91,15 @@ size_t ibus_phone_display( char *string )
     out[5] = 0x07;
     
     memcpy( &out[6], string, chars_displayed );
-
+#ifdef IBUS_PHONE_PROTOCOL
+    printf("%s\n", string);
+#endif
     for( i = 0; i < msg_length; i++ ) {
         checksum ^= out[i];
     }
     out[i] = checksum;
     
-    if( false == ibus_physical_send_message( out, msg_length ) ) {
+    if( false == ibus_physical_send_message( out, msg_length+1 ) ) {
         return 0;
     }
 
