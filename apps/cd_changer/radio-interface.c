@@ -82,6 +82,7 @@ typedef struct {
     uint8_t discs_present;
     uint8_t current_disc;
     uint8_t current_track;
+    bool magazine_indexed;
 } ri_state_t;
 
 
@@ -243,6 +244,7 @@ static void __blu_task( void *params )
 
     state.device_status = IRP_STATE__STOPPED;
     state.magazine_present = false;
+    state.magazine_indexed = false;
     state.discs_present = 0;
     state.current_disc = 0;
     state.current_track = 0;
@@ -415,8 +417,10 @@ static void __send_state( ri_state_t *state )
          state->current_track );
 
     if( (true == state->magazine_present) && (0 == state->discs_present) ) {
-        /* No discs */
-        device_status_set( DS__CARD_UNUSABLE );
+        if( true == state->magazine_indexed ) {
+            /* No discs */
+            device_status_set( DS__CARD_UNUSABLE );
+        }
     } else {
         /* No magazine / Normal operation */
         if( true == __connected_to_radio ) {
@@ -530,6 +534,7 @@ static void __transition_db( ri_state_t *state )
                 song_node_t *song;
                 void *user_data;
 
+                state->magazine_indexed = true;
                 keep_going = false;
                 xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
 
@@ -548,6 +553,9 @@ static void __transition_db( ri_state_t *state )
                 __no_discs_loop( state );
                 return;
             }
+        } else if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
+            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+            __send_state( state );
         } else {
             xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
             return;
@@ -573,6 +581,7 @@ static void __transition_db( ri_state_t *state )
         xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         __send_state( state );
     }
+    state->magazine_indexed = false;
     device_status_set( DS__NORMAL );
 }
 
