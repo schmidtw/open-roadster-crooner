@@ -25,15 +25,29 @@
 
 #define IBUS_PHONE_PROTOCOL 0
 
-#ifdef IBUS_PHONE_PROTOCOL
+#if (0 < IBUS_PHONE_PROTOCOL)
 #include <string.h>
+#define _D1(...) printf(__VA_ARGS__)
+#else
+#define _D1(...)
 #endif
-
-#define MAX_PHONE_DISPLAY_SIZE   16
-#define MAX_IBUS_PRINT_SIZE      ( MAX_PHONE_DISPLAY_SIZE + 4 )
 
 #define IBUS_DEVICES__PHONE      0xc8
 #define IBUS_DEVICES__IKE        0x80
+
+const static uint8_t beginning[] = {
+        (uint8_t) IBUS_DEVICES__PHONE,
+        0, // the number of characters in this message
+        (uint8_t) IBUS_DEVICES__IKE,
+        /* special character for displaying text */
+        0x23,
+        0x43,
+        0x07 };
+
+#define BEGINNING_SIZE sizeof(beginning)
+
+#define MAX_PHONE_DISPLAY_SIZE   11
+#define MAX_IBUS_PRINT_SIZE      ( MAX_PHONE_DISPLAY_SIZE + BEGINNING_SIZE + 1 )
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
@@ -74,30 +88,29 @@ size_t ibus_phone_display( char *string )
     if( NULL == string ) {
         return 0;
     }
-    
+    _D1( "%s - string `%s`\n", "ibus-phone-protocol.c", string );
     length = strlen( string );
-    chars_displayed = (length > MAX_IBUS_PRINT_SIZE)?
+    chars_displayed = (length > MAX_PHONE_DISPLAY_SIZE)?
                           MAX_PHONE_DISPLAY_SIZE:
                           length;
+    _D1( "%s - length(%d) chars to display(%d)\n", "ibus-phone-protocol.c", length, chars_displayed );
     
-    msg_length = chars_displayed + 6;
+    msg_length = chars_displayed + BEGINNING_SIZE;
+    _D1( "%s - msg length(%d)\n", "ibus-phone-protocol.c", msg_length );
+    memcpy( out, beginning, BEGINNING_SIZE );
+    out[1] = msg_length - 1;
     
-    out[0] = (uint8_t) IBUS_DEVICES__PHONE;
-    out[1] = chars_displayed + 5;
-    out[2] = (uint8_t) IBUS_DEVICES__IKE;
-    /* Special characters for displaying the message */
-    out[3] = 0x23;
-    out[4] = 0x42;
-    out[5] = 0x07;
-    
-    memcpy( &out[6], string, chars_displayed );
+    memcpy( &out[BEGINNING_SIZE], string, chars_displayed );
 #ifdef IBUS_PHONE_PROTOCOL
-    printf("%s\n", string);
+//    _D1("ibus-phone-protocol: `%*s`\n", chars_displayed-1, &out[BEGINNING_SIZE]);
 #endif
+    _D1("%s: Final Message:\n", "ibus-phone-protocol.c" );
     for( i = 0; i < msg_length; i++ ) {
+        _D1("(%i) 0x%02x [%c] ", i, out[i], out[i]);
         checksum ^= out[i];
     }
     out[i] = checksum;
+    _D1("\nChecksum: out[%d] = 0x%02x\n", i, out[i]);
     
     if( false == ibus_physical_send_message( out, msg_length+1 ) ) {
         return 0;
