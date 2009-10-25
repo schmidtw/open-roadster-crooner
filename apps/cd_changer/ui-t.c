@@ -155,6 +155,7 @@ static void __process_command( irp_state_t *device_status,
                                song_node_t **song,
                                void *user_data )
 {
+    bool shouldSendText = false;
     _D2( "device_status: 0x%04x\n", *device_status );
 
     if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
@@ -276,6 +277,7 @@ static void __process_command( irp_state_t *device_status,
                 *current_track = __find_display_number(*song, *current_disc);
                 *device_status = IRP_STATE__PLAYING;
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
+                shouldSendText = true;
                 break;
 
             case IRP_CMD__GET_STATUS:   /* Never sent. */
@@ -283,7 +285,6 @@ static void __process_command( irp_state_t *device_status,
                 break;
         }
     } else {
-        bool shouldSendText = false;
         _D2( "RI_MSG_TYPE__PLAYBACK_STATUS\n" );
         switch( msg->d.song.status ) {
             case PB_STATUS__PLAYING:
@@ -329,9 +330,9 @@ static void __process_command( irp_state_t *device_status,
 //                break;
         }
         ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-        if( true == shouldSendText ) {
-            __update_song_display_info(*song, *current_disc);
-        }
+    }
+    if( true == shouldSendText ) {
+        __update_song_display_info(*song, *current_disc);
     }
 }
 
@@ -434,7 +435,7 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
             break;
     }
     rv = (uint8_t)(tn % 100);
-    if( rv == 0 ) { rv++; }
+    if( rv == 0 ) { rv = 1; }
     return rv;
 }
 
