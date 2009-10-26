@@ -93,7 +93,7 @@ size_t ibus_phone_display( char *string )
     chars_displayed = (length > MAX_PHONE_DISPLAY_SIZE)?
                           MAX_PHONE_DISPLAY_SIZE:
                           length;
-    _D1( "%s - length(%d) chars to display(%d)\n", "ibus-phone-protocol.c", length, chars_displayed );
+    _D1( "%s - length(%d) chars to display(%d) MAX_SIXE(%d)\n", "ibus-phone-protocol.c", length, chars_displayed, MAX_PHONE_DISPLAY_SIZE );
     
     msg_length = chars_displayed + BEGINNING_SIZE;
     _D1( "%s - msg length(%d)\n", "ibus-phone-protocol.c", msg_length );
@@ -102,11 +102,11 @@ size_t ibus_phone_display( char *string )
     
     memcpy( &out[BEGINNING_SIZE], string, chars_displayed );
 #ifdef IBUS_PHONE_PROTOCOL
-//    _D1("ibus-phone-protocol: `%*s`\n", chars_displayed-1, &out[BEGINNING_SIZE]);
+    _D1("%s: `%.*s`\n", "ibus-phone-protocol.c", chars_displayed, &out[BEGINNING_SIZE]);
 #endif
     _D1("%s: Final Message:\n", "ibus-phone-protocol.c" );
     for( i = 0; i < msg_length; i++ ) {
-        _D1("(%i) 0x%02x [%c] ", i, out[i], out[i]);
+        _D1("[%d]0x%02x '%c' ", i, out[i], (out[i]>31?out[i]:' '));
         checksum ^= out[i];
     }
     out[i] = checksum;
