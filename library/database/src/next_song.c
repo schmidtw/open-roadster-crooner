@@ -23,7 +23,8 @@
 #define NEXT_SONG_DEBUG 0
 
 #define _D1(...)
-#ifdef NEXT_SONG_DEBUG
+
+#if (NEXT_SONG_DEBUG > 0)
 #include <stdio.h>
 #undef  _D1
 #define _D1(...) printf( __VA_ARGS__ )
