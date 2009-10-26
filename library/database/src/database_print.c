@@ -53,9 +53,11 @@ void group_print( group_node_t * group, int spaces )
 {
     artist_node_t *ar_n;
     
-    printf("%*.*s Group: %d-%-*.*s\n",
+    printf("%*.*s Group: %d-(%d-%d) %-*.*s\n",
             spaces, spaces, " ",
             group->index_in_list,
+            group->index_songs_start,
+            group->index_songs_stop,
             MAX_DISPLAY_GROUP_LEN, MAX_DISPLAY_GROUP_LEN, group->name );
     if( NULL == group->artists.head ) {
         printf("%*.*s Why are the artists NULL?\n", spaces, spaces, " ");
@@ -76,9 +78,11 @@ void artist_print( artist_node_t * artist, int spaces )
 {
     album_node_t *al_n;
     
-    printf("%*.*s %d-%-*.*s\n",
+    printf("%*.*s %d-(%d-%d) %-*.*s\n",
             spaces, spaces, " ",
             artist->index_in_list,
+            artist->index_songs_start,
+            artist->index_songs_stop,
             MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name );
     if( NULL == artist->albums.head ) {
         printf("%*.*s Why are the albums NULL?\n", spaces, spaces, " ");
@@ -99,9 +103,11 @@ void album_print( album_node_t * album, int spaces )
 {
     song_node_t *so_n;
     
-    printf("%*.*s %d-%-*.*s\n",
+    printf("%*.*s %d-(%d-%d) %-*.*s\n",
             spaces, spaces, " ",
             album->index_in_list,
+            album->index_songs_start,
+            album->index_songs_stop,
             MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name );
     if( NULL == album->songs.head ) {
         printf("%*.*s Why are the songs NULL?\n", spaces, spaces, " ");
@@ -120,9 +126,10 @@ void album_print( album_node_t * album, int spaces )
 
 void song_print( song_node_t * song, int spaces )
 {
-    printf("%*.*s %*.*d.) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
+    printf("%*.*s %*.*d %d) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
             spaces, spaces, " ",
             MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, song->track_number,
+            song->index_songs_value,
             MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->title,
             song->album_gain, song->album_peak,
             song->track_gain, song->track_peak,

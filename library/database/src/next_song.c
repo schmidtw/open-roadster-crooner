@@ -20,6 +20,19 @@
 #include "database.h"
 #include "internal_database.h"
 
+#define NEXT_SONG_DEBUG 1
+
+#define _D1(...)
+#ifdef NEXT_SONG_DEBUG
+#include <stdio.h>
+#undef  _D1
+#define _D1(...) printf( __VA_ARGS__ )
+#endif
+
+song_node_t * find_random_song_from_artist( artist_node_t * an, uint32_t random_song_index );
+song_node_t * find_random_song_from_album( album_node_t * an, uint32_t random_song_index );
+song_node_t * find_random_song_from_songs( song_node_t * sn, uint32_t random_song_index );
+
 /* See database.h for information */
 db_status_t next_song( song_node_t ** current_song,
                        const db_traverse_t operation,
@@ -180,6 +193,7 @@ db_status_t next_song( song_node_t ** current_song,
                 case DL_GROUP:
                     random_number = rand() % rdn.size_list;
                     group = (group_node_t *) rdn.groups.head->data;
+                    
                     for(ii = 0; ii < random_number; ii++) {
                         if( NULL == group->node.next ) {
                             return DS_FAILURE;
@@ -188,46 +202,125 @@ db_status_t next_song( song_node_t ** current_song,
                     }
                     /* Break left out on purpose */
                 case DL_ARTIST:
-                    random_number = rand() % group->size_list;
+                {
+                    song_node_t * sn;
+                    uint32_t song_index_of_interest;
+                    uint32_t random_song_range = group->index_songs_stop - group->index_songs_start;
+                    if( group->index_songs_start > group->index_songs_stop ) {
+                        random_number = 0;
+                    }
+                    random_number = rand() % random_song_range;
+                    song_index_of_interest = group->index_songs_start + random_number;
+                    
+                    _D1( "Artist Random Number = %d\n", song_index_of_interest );
                     if( NULL == group->artists.head ) {
                         return DS_FAILURE;
                     }
                     artist = (artist_node_t *) group->artists.head->data;
-                    for(ii = 0; ii < random_number; ii++) {
-                        if( NULL == artist->node.next ) {
-                            return DS_FAILURE;
-                        }
-                        artist = (artist_node_t *) artist->node.next->data;
+                    sn = find_random_song_from_artist(artist, song_index_of_interest);
+                    if( NULL == sn ) {
+                        return DS_FAILURE;
                     }
-                    /* Break left out on purpose */
+                    *current_song = sn;
+                    break;
+                }
                 case DL_ALBUM:
-                    random_number = rand() % artist->size_list;
+                {
+                    song_node_t * sn;
+                    uint32_t song_index_of_interest;
+                    uint32_t random_song_range = artist->index_songs_stop - artist->index_songs_start;
+                    if( artist->index_songs_start > artist->index_songs_stop ) {
+                        random_number = 0;
+                    }
+                    random_number = rand() % random_song_range;
+                    song_index_of_interest = artist->index_songs_start + random_number;
+                    
+                    _D1( "Album Random Number = %d\n", song_index_of_interest );
                     if( NULL == artist->albums.head ) {
                         return DS_FAILURE;
                     }
                     album = (album_node_t *)artist->albums.head->data;
-                    for(ii = 0; ii < random_number; ii++) {
-                        if( NULL == album->node.next ) {
-                            return DS_FAILURE;
-                        }
-                        album = (album_node_t *)album->node.next->data;
+                    sn = find_random_song_from_album(album, song_index_of_interest);
+                    if( NULL == sn ) {
+                        return DS_FAILURE;
                     }
-                    /* Break left out on purpose */
+                    *current_song = sn;
+                    break;
+                }
                 default: /* DL_SONG */
-                    random_number = rand() % album->size_list;
+                {
+                    song_node_t * sn;
+                    uint32_t song_index_of_interest;
+                    uint32_t random_song_range = album->index_songs_stop - album->index_songs_start;
+                    if( album->index_songs_start > album->index_songs_stop ) {
+                        random_number = 0;
+                    }
+                    random_number = rand() % random_song_range;
+                    song_index_of_interest = album->index_songs_start + random_number;
+                    
+                    _D1( "Song Random Number = %d\n", song_index_of_interest );
                     if( NULL == album->songs.head ) {
                         return DS_FAILURE;
                     }
-                    *current_song = (song_node_t *)album->songs.head->data;
-                    for(ii = 0; ii < random_number; ii++) {
-                        if( NULL == (*current_song)->node.next ) {
-                            return DS_FAILURE;
-                        }
-                        *current_song = (song_node_t *)(*current_song)->node.next->data;
+                    sn = (song_node_t *)album->songs.head->data;
+                    sn = find_random_song_from_songs(sn, song_index_of_interest);
+                    if( NULL == sn ) {
+                        return DS_FAILURE;
                     }
+                    *current_song = sn;
+                    break;
+                }
             }
     }
-    
-    
     return rv;
+}
+
+song_node_t * find_random_song_from_artist( artist_node_t * an, uint32_t random_song_index )
+{
+    artist_node_t * artist = an;
+    
+    while( 1 ) {
+        if( NULL == artist ) {
+            return NULL;
+        }
+        if(    ( random_song_index >= artist->index_songs_start )
+            && ( random_song_index <= artist->index_songs_stop ) ) {
+            /* We have found the artist of interest */
+            return find_random_song_from_album((album_node_t *)artist->albums.head->data, random_song_index);
+        }
+        artist = (artist_node_t *) artist->node.next->data;
+    }
+}
+
+song_node_t * find_random_song_from_album( album_node_t * an, uint32_t random_song_index )
+{
+    album_node_t * album = an;
+    
+    while( 1 ) {
+        if( NULL == album ) {
+            return NULL;
+        }
+        if(    ( random_song_index >= album->index_songs_start )
+            && ( random_song_index <= album->index_songs_stop ) ) {
+            /* We have found the album of interest */
+            return find_random_song_from_songs((song_node_t *)album->songs.head->data, random_song_index);
+        }
+        album = (album_node_t *) album->node.next->data;
+    }
+}
+
+song_node_t * find_random_song_from_songs( song_node_t * sn, uint32_t random_song_index )
+{
+    song_node_t * song = sn;
+    
+    while( 1 ) {
+        if( NULL == song ) {
+            return NULL;
+        }
+        if( random_song_index == song->index_songs_value ) {
+            /* Found it :) */
+            return song;
+        }
+        song = (song_node_t *) song->node.next->data;
+    }
 }

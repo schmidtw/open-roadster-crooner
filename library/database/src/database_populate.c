@@ -28,7 +28,12 @@
 #include "file_os_wrapper.h"
 #include "mi_interface.h"
 
-#define DEBUG_DUMP_LIST 0
+#define DEBUG_DUMP_LIST 1
+
+typedef struct {
+    uint32_t song_index;
+    uint32_t identifier_in_list;
+} indexer_t;
 
 bool setup_group_name( const char * name );
 group_node_t * find_group_node( const char * dir_name );
@@ -44,6 +49,7 @@ ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data );
 ll_ir_t index_groups( ll_node_t *node, volatile void *user_data );
 ll_ir_t index_arist( ll_node_t *node, volatile void *user_data );
 ll_ir_t index_album( ll_node_t *node, volatile void *user_data );
+ll_ir_t index_songs( ll_node_t *node, volatile void *user_data );
 
 /**
  * The structure of the pools are:
@@ -115,7 +121,9 @@ bool populate_database( const char ** directory,
     }
     ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_group, NULL);
     {
-        uint32_t indexer = 1;
+        indexer_t indexer;
+        indexer.song_index = 0;
+        indexer.identifier_in_list = 1;
         ll_iterate(&rdn.groups, index_groups, NULL, &indexer);
     }
     
@@ -130,42 +138,71 @@ failure:
 
 ll_ir_t index_groups( ll_node_t *node, volatile void *user_data )
 {
-    uint32_t *indexer = (uint32_t *)user_data;
+    indexer_t *indexer = (indexer_t *)user_data;
     group_node_t *gn = (group_node_t *)node->data;
-    uint32_t artist_index = 1;
-    if( 0 == *indexer ) {
-        (*indexer)++;
+    indexer_t artist_index;
+    artist_index.identifier_in_list = 1;
+    artist_index.song_index = indexer->song_index;
+    if( 0 == indexer->identifier_in_list ) {
+        (indexer->identifier_in_list)++;
     }
-    gn->index_in_list = *indexer;
-    (*indexer)++;
+    gn->index_in_list = indexer->identifier_in_list;
+    (indexer->identifier_in_list)++;
     
+    gn->index_songs_start = indexer->song_index;
     ll_iterate(&(gn->artists), index_arist, NULL, &artist_index);
+    indexer->song_index = artist_index.song_index;
+    gn->index_songs_stop = indexer->song_index - 1;
     return LL_IR__CONTINUE;
 }
 
 ll_ir_t index_arist( ll_node_t *node, volatile void *user_data )
 {
-    uint32_t *indexer = (uint32_t *)user_data;
+    indexer_t *indexer = (indexer_t *)user_data;
     artist_node_t *an = (artist_node_t *)node->data;
-    uint32_t album_index = 1;
-    if( 0 == *indexer ) {
-        (*indexer)++;
+    indexer_t album_index;
+    album_index.identifier_in_list = 1;
+    album_index.song_index = indexer->song_index;
+    if( 0 == indexer->identifier_in_list ) {
+        (indexer->identifier_in_list)++;
     }
-    an->index_in_list = *indexer;
-    (*indexer)++;
+    an->index_in_list = indexer->identifier_in_list;
+    (indexer->identifier_in_list)++;
+    
+    an->index_songs_start = indexer->song_index;
     ll_iterate(&(an->albums), index_album, NULL, &album_index);
+    indexer->song_index = album_index.song_index;
+    an->index_songs_stop = indexer->song_index - 1;
     return LL_IR__CONTINUE;
 }
 
 ll_ir_t index_album( ll_node_t *node, volatile void *user_data )
 {
-    uint32_t *indexer = (uint32_t *)user_data;
+    indexer_t *indexer = (indexer_t *)user_data;
     album_node_t *an = (album_node_t *)node->data;
-    if( 0 == *indexer ) {
-        (*indexer)++;
+    indexer_t song_index;
+    song_index.identifier_in_list = 1;
+    song_index.song_index = indexer->song_index;
+    if( 0 == indexer->identifier_in_list ) {
+        (indexer->identifier_in_list)++;
     }
-    an->index_in_list = *indexer;
-    (*indexer)++;
+    an->index_in_list = indexer->identifier_in_list;
+    (indexer->identifier_in_list)++;
+    
+    an->index_songs_start = indexer->song_index;
+    ll_iterate(&(an->songs), index_songs, NULL, &song_index);
+    indexer->song_index = song_index.song_index;
+    an->index_songs_stop = indexer->song_index - 1;
+    return LL_IR__CONTINUE;
+}
+
+ll_ir_t index_songs( ll_node_t *node, volatile void *user_data )
+{
+    indexer_t *indexer = (indexer_t *)user_data;
+    song_node_t *sn = (song_node_t *)node->data;
+    
+    sn->index_songs_value = indexer->song_index;
+    indexer->song_index++;
     return LL_IR__CONTINUE;
 }
 

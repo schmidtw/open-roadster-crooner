@@ -28,6 +28,8 @@ typedef struct {
     ll_list_t artists;
     uint32_t size_list;
     uint32_t index_in_list;
+    uint32_t index_songs_start;
+    uint32_t index_songs_stop;
 } group_node_t;
 
 typedef struct {
@@ -36,6 +38,8 @@ typedef struct {
     ll_list_t albums;
     uint32_t size_list;
     uint32_t index_in_list;
+    uint32_t index_songs_start;
+    uint32_t index_songs_stop;
     group_node_t * group;
 } artist_node_t;
 
@@ -45,6 +49,8 @@ typedef struct {
     ll_list_t songs;
     uint32_t size_list;
     uint32_t index_in_list;
+    uint32_t index_songs_start;
+    uint32_t index_songs_stop;
     artist_node_t * artist;
 } album_node_t;
 
@@ -54,6 +60,7 @@ typedef struct {
     char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
     album_node_t * album;
     uint16_t track_number;
+    uint32_t index_songs_value;
     double album_gain;
     double album_peak;
     double track_gain;
