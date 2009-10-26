@@ -20,7 +20,7 @@
 #include "database.h"
 #include "internal_database.h"
 
-#define NEXT_SONG_DEBUG 1
+#define NEXT_SONG_DEBUG 0
 
 #define _D1(...)
 #ifdef NEXT_SONG_DEBUG

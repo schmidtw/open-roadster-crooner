@@ -28,7 +28,7 @@
 #include "file_os_wrapper.h"
 #include "mi_interface.h"
 
-#define DEBUG_DUMP_LIST 1
+#define DEBUG_DUMP_LIST 0
 
 typedef struct {
     uint32_t song_index;
