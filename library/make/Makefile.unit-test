@@ -1,7 +1,13 @@
+ifndef BASE
+$(error "BASE must be defined.")
+endif
+
 cc   = gcc
 gcov = gcov -c -b
 copy = cp
 rm   = rm -f
+
+QUIET  ?= @
 
 cflags        = -Wall -g -fprofile-arcs -ftest-coverage
 ldflags       = -lcunit
@@ -9,6 +15,13 @@ extension     = ut-o
 inc_suffix    = __INCLUDES
 cflags_suffix = __CFLAGS
 source_suffix = __SOURCES
+mock_suffix   = __MOCKS
+
+mocks_lib     = $(BASE)/bins/mock/lib
+mocks_incs    = $(BASE)/bins/mock/include
+
+bins_incs     = $(BASE)/bins/include
+additional_flags = -DFOSC0=12000000 -DBOARD=4
 
 .DEFAULT_GOAL : unit-test
 .PHONY : unit-test clean cleanall all install
@@ -22,14 +35,14 @@ install ::
 # $(2) = full filename and path
 define FILES2TEST_template
 $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $(2)))) : $(2)
-	$(QUIET)$(cc) $(cflags) $$($(addsuffix $(cflags_suffix),$(1))) $($(addsuffix $(inc_suffix),$(1)):%=-I%) -c -o $$@ $$<
+	$(QUIET)$(cc) $(cflags) $(additional_flags) $$($(addsuffix $(cflags_suffix),$(1))) $($(addsuffix $(inc_suffix),$(1)):%=-I%) $(mocks_incs:%=-I%) $(bins_incs:%=-I%) -c -o $$@ $$<
 	$(QUIET)$(copy) $$< ./$(basename $(notdir $(2)))-$(1)$(suffix $(2))
 endef
 
 # $(1) = test name
 define TESTFILE_template
 $(1) : $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix)))))
-	$(QUIET)$(cc) $(cflags) $$($(addsuffix $(cflags_suffix),$(1))) $$($(addsuffix $(inc_suffix),$(1)):%=-I%) -o $$@ $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix))))) $(ldflags)
+	$(QUIET)$(cc) $(cflags) $(additional_flags) $$($(addsuffix $(cflags_suffix),$(1))) $$($(addsuffix $(inc_suffix),$(1)):%=-I%) $(mocks_incs:%=-I%) $(bins_incs:%=-I%) -o $$@ $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix))))) $(ldflags)
 endef
 
 # $(1) = test name

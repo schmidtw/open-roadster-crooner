@@ -21,6 +21,7 @@
 #define EVK1100         1
 #define CROONER_1_0     2
 #define CROONER_2_0     3
+#define FAKE_BOARD      4
 
 #if BOARD == EVK1100
 #   include "evk1100.h"
@@ -28,6 +29,7 @@
 #   include "crooner-1.0.h"
 #elif BOARD == CROONER_2_0
 #   include "crooner-2.0.h"
+#elif BOARD == FAKE_BOARD
 #else
 #   error No known board defined.
 #endif
