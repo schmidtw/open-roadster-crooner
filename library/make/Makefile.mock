@@ -1,0 +1,124 @@
+ifndef SOURCES
+$(error "SOURCES must be defined.")
+endif
+ifndef TARGET
+$(error "TARGET must be defined.")
+endif
+ifndef BASE
+$(error "BASE must be defined.")
+endif
+
+QUIET  ?= @
+
+ar_mock    = ar
+cc_mock    = gcc
+cp_mock    = cp
+echo_mock  = @echo
+mkdir_mock = mkdir -p
+perl_mock  = perl
+rm_mock    = rm -f
+rmdir_mock = rm -rf
+sed_mock   = sed
+touch_mock = touch
+
+lib_extension_mock= .a
+include_base_mock = $(BASE)/bins/mock/include
+header_target_mock= $(include_base_mock)/$(TARGET)
+std_includes_mock = $(BASE)/bins/include
+ofn_mock          = mock-o
+dpd_mock          = mock-d
+lst_mock          = mock-lst
+headers_mock      = $(addprefix $(header_target_mock)/, $(HEADERS))
+csources_mock     = $(filter %.c,$(SOURCES))
+objs_mock         = $(addprefix $(workspace_mock)/,$(csources_mock:.c=.$(ofn_mock)))
+lsts_mock         = $(addprefix $(workspace_mock)/,$(csources_mock:.c=.$(lst_mock)))
+deps_mock         = $(objs_mock:%.$(ofn_mock)=%.$(dpd_mock))
+target_name_mock  = $(TARGET)$(lib_extension_mock)
+target_mock       = $(BASE)/bins/mock/lib/$(target_name_mock)
+sys_includes_mock = $(addprefix -I,$(SYSTEM_INCLUDES) $(std_includes_mock) $(include_base_mock))
+includes_mock     = $(addprefix -I,. $(INCLUDES) ../src)
+dummy_file_mock   = $(workspace_mock)/dummy.txt
+base_objs_dir_mock= objs
+workspace_mock    = $(base_objs_dir_mock)
+makefiles_used_mock = $(filter %Makefile.mock %Makefile,$(MAKEFILE_LIST))
+# This is to be placed on all the target dependency lines.  It will force
+# object files to be remade if the main makefile changes,
+# or this makefile is changed.
+generic_depends_mock = $(dummy_file_mock) $(makefiles_used_mock)
+finish_depends_mock = $(BASE)/tools/make_empty_dependencies.pl
+
+cflags_mock   = -g
+
+all_flags_mock = $(cflags_mock) $(CFLAGS_MOCK) -DFOSC0=12000000 -DBOARD=4
+
+libflags_mock = -rs
+
+# Don't include dependency files when cleaning
+ifneq "$(MAKECMDGOALS)" "clean"
+    -include $(deps_mock)
+endif
+
+.PHONY   : all superclean listings mock all-mock clean-mock superclean-mock listings-mock
+
+define MOCK_HEADERS_template
+$(header_target_mock)/$(1) :: $(1)
+	$(QUIET)$(mkdir_mock) $$(dir $$@)
+	$(QUIET)$(cp_mock) $(1) $$@
+	$(QUIET)$(sed_mock) -i -e's/#include\s\+\"\(.*\)\.h\"/#include <$(TARGET)\/\1.h>/' $$@
+endef
+
+$(foreach file,$(HEADERS),$(eval $(call MOCK_HEADERS_template,$(file))))
+
+# $(call make-depend-mock,source-file,object-file-prefix,object-file-suffix,listing-file-suffix,depend-file-suffix,options)
+define make-depend-mock
+  $(QUIET)$(cc_mock) $6 -w -M -MT "$2$(1:%.c=%.$3) $2$(1:%.c=%.$4)" -o $2$(1:%.c=%.$5) $1
+  $(QUIET)$(perl_mock) $(finish_depends_mock) $2$(1:%.c=%.$5)
+endef
+
+.DEFAULT_GOAL = all
+
+all :: all-mock
+all-mock :: mock
+mock-headers :: $(headers_mock)
+mock :: mock-headers $(target_mock)
+listings :: listings-mock
+listings-mock :: mock $(lsts_mock)
+
+$(dummy_file_mock) :
+	$(QUIET)$(mkdir_mock) $(dir $@)
+	$(QUIET)$(touch_mock) $@
+
+$(workspace_mock)/%.$(ofn_mock) : %.c $(generic_depends_mock)
+	$(echo_mock) "    Creating Mock Object - $<"
+	$(call make-depend-mock,$<,$(workspace_mock)/,$(ofn_mock),$(lst_mock),$(dpd_mock),$(sys_includes_mock) $(includes_mock) $(all_flags_mock))
+	$(QUIET)$(cc_mock) $(sys_includes_mock) $(includes_mock) $(all_flags_mock) -o $@ -c $<
+
+$(workspace_mock)/%.$(ofn_mock) : %.cpp $(generic_depends_mock)
+	$(echo_mock) "    Creating Mock Object - $<"
+	$(call make-depend-mock,$<,$(workspace_mock)/,$(ofn_mock),$(lst_mock),$(dpd_mock),$(sys_includes_mock) $(includes_mock) $(all_flags_mock))
+	$(QUIET)$(cc_mock) $(sys_includes_mock) $(includes_mock) $(all_flags_mock) -o $@ -c $<
+
+$(workspace_mock)/%.$(lst_mock) : %.c $(generic_depends_mock)
+	$(echo_mock) "    Creating Mock Listing - $<"
+	$(QUIET)$(cc_mock) $(sys_includes_mock) $(includes_mock) $(all_flags_mock) -o $@ -S $<
+
+$(workspace_mock)/%.$(lst_mock) : %.cpp $(generic_depends_mock)
+	$(echo_mock) "    Creating Mock Listing - $<"
+	$(QUIET)$(cc_mock) $(sys_includes_mock) $(includes_mock) $(all_flags_mock) -o $@ -S $<
+
+$(target_mock) : $(objs_mock)
+	$(echo_mock) "MOCK - Creating: $(target_name_mock)"
+	$(QUIET)$(mkdir_mock) $(dir $@)
+	$(QUIET)$(rm_mock) $(target_mock)
+	$(QUIET)$(ar_mock) $(libflags_mock) $@ $(objs_mock)
+
+clean :: clean-mock
+clean-mock ::
+	$(QUIET)$(rm_mock) $(objs_mock)
+	$(QUIET)$(rmdir_mock) $(base_objs_dir_mock)
+	$(QUIET)$(rm_mock) $(target_mock)
+	$(QUIET)$(rmdir_mock) $(header_target_mock)
+
+superclean :: clean superclean-mock
+	$(QUIET)$(rmdir_mock) $(base_objs_dir_mock)
+superclean-mock ::
