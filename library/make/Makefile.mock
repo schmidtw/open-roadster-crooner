@@ -58,7 +58,7 @@ ifneq "$(MAKECMDGOALS)" "clean"
     -include $(deps_mock)
 endif
 
-.PHONY   : all superclean listings mock all-mock clean-mock superclean-mock listings-mock
+.PHONY   : all install superclean listings mock all-mock clean-mock superclean-mock listings-mock
 
 define MOCK_HEADERS_template
 $(header_target_mock)/$(1) :: $(1)
@@ -77,6 +77,7 @@ endef
 
 .DEFAULT_GOAL = all
 
+install :: all
 all :: all-mock
 all-mock :: mock
 mock-headers :: $(headers_mock)

@@ -1,5 +1,6 @@
 # Add new projects to the list - everything else is automatically generated
 LIBRARIES = \
+            mock \
             linked-list \
             util \
             bsp \

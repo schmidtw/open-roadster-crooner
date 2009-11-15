@@ -6,7 +6,7 @@ endif
 
 QUIET   = @
 targets = all clean cleanall unit-test install docs listings
-paths   = src unit-tests
+paths   = src mock unit-tests
 
 target_deps = $(foreach path,$(paths),$(addprefix $(1)-,$(addsuffix /$(path),$(LIBRARIES))))
 all_deps = $(foreach target,$(targets),$(call target_deps,$(target)))
