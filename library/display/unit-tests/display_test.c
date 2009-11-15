@@ -4,10 +4,11 @@
 #include <string.h>
 #include <CUnit/Basic.h>
 
+#include <freertos/queue.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+
 #include "display.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
-#include "freertos/task.h"
 
 #define NUM_CHARS_ON_LCD 13
 
