@@ -1,5 +1,6 @@
 ifndef BASE
-$(error "BASE must be defined.")
+$(warning "BASE should be defined.  Defaulting to `../../..`")
+BASE = ../../..
 endif
 
 cc   = gcc
