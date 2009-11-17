@@ -6,7 +6,11 @@ endif
 cc   = gcc
 gcov = gcov -c -b
 copy = cp
+mkdir = mkdir -p
+mv   = mv
 rm   = rm -f
+rmdir= rm -rf
+touch = touch
 
 QUIET  ?= @
 
@@ -24,6 +28,11 @@ mocks_incs    = $(BASE)/bins/mock/include
 bins_incs     = $(BASE)/bins/include
 additional_flags = -DFOSC0=12000000 -DBOARD=4
 
+work_dir      = objs/$(1)
+work_dummy    = $(call work_dir,$(1))/dummy.txt
+
+all_cflags = $(cflags) $(additional_flags) $$($(addsuffix $(cflags_suffix),$(1))) $($(addsuffix $(inc_suffix),$(1)):%=-I%) $(mocks_incs:%=-I%) $(bins_incs:%=-I%)
+
 .DEFAULT_GOAL : unit-test
 .PHONY : unit-test clean cleanall all install
 unit-test :: $(addsuffix _run,$(TESTS))
@@ -36,22 +45,28 @@ install ::
 # $(2) = full filename and path
 define FILES2TEST_template
 $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $(2)))) : $(2)
-	$(QUIET)$(cc) $(cflags) $(additional_flags) $$($(addsuffix $(cflags_suffix),$(1))) $($(addsuffix $(inc_suffix),$(1)):%=-I%) $(mocks_incs:%=-I%) $(bins_incs:%=-I%) -c -o $$@ $$<
+	$(QUIET)$(cc) $(call all_cflags,$(1)) -c -o $$@ $$<
 	$(QUIET)$(copy) $$< ./$(basename $(notdir $(2)))-$(1)$(suffix $(2))
 endef
 
 # $(1) = test name
 define TESTFILE_template
 $(1) : $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix)))))
-	$(QUIET)$(cc) $(cflags) $(additional_flags) $$($(addsuffix $(cflags_suffix),$(1))) $$($(addsuffix $(inc_suffix),$(1)):%=-I%) $(mocks_incs:%=-I%) $(bins_incs:%=-I%) -o $$@ $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix))))) $(ldflags)
+	$(QUIET)$(cc) $(call all_cflags,$(1)) -o $$@ $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix))))) $(ldflags)
 endef
 
 # $(1) = test name
 define RUN_template
 .PHONY : $(1)_run
-$(1)_run : $(1)
+$(1)_run : $(1) $(call work_dummy,$(1))
 	./$(1)
 	$(QUIET)$(gcov) $(1) *-$(1).c
+	$(QUIET)$(mv) *.gcda *.gcno *.c.gcov $(1) $(call work_dir,$(1))
+	$(QUIET)$(mv) $(addsuffix -$(1).*,$(basename $(notdir $($(1)$(source_suffix))))) $(call work_dir,$(1))
+	
+$(call work_dummy,$(1)) :
+	$(QUIET)$(mkdir) $$(dir $$@)
+	$(QUIET)$(touch) $$@
 endef
 
 # $(1) = test name
@@ -60,6 +75,7 @@ define CLEAN_template
 $(1)_clean :
 	$(QUIET)$(rm) $(1).gcda $(1).gcno $(1).c.gcov $(1) $(addsuffix -$(1).*,$(basename $(notdir $($(1)$(source_suffix)))))
 	$(QUIET)$(rm) $(addsuffix .*.gcov,$(basename $(notdir $($(1)$(source_suffix)))))
+	$(QUIET)$(rmdir) objs
 endef
 
 # invoke the FILES2TEST_templates
