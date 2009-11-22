@@ -46,7 +46,6 @@
 static void add_suites( CU_pSuite *suite );
 static void test_registration( void );
 static void test_get_information( void );
-static bool command( void );
 static media_status_t play( const char *filename,
                             const double gain,
                             const double peak,
@@ -122,8 +121,8 @@ static void test_registration( void )
     CU_ASSERT( NULL == l->head );
     CU_ASSERT( NULL == l->tail );
     CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Foo", &play, &get_type_false, &metadata_ok) );
-    CU_ASSERT( NULL == l->head );
-    CU_ASSERT( NULL == l->tail );
+    CU_ASSERT( NULL != l->head );
+    CU_ASSERT( NULL != l->tail );
     CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &play, &get_type_false, &metadata_ok) );
     CU_ASSERT( NULL != l->head );
     CU_ASSERT( NULL != l->tail );
@@ -136,7 +135,6 @@ static void test_get_information( void )
 {
     media_interface_t *mi;
     media_metadata_t data;
-    media_command_fn_t command_fn;
     media_play_fn_t play_fn;
 
     CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(NULL, NULL, NULL, NULL) );
@@ -145,9 +143,9 @@ static void test_get_information( void )
     CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(mi, NULL, NULL, NULL) );
     CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(mi, "FileName", NULL, NULL) );
     CU_ASSERT( MI_ERROR_NOT_SUPPORTED == media_get_information(mi, "FileName", &data, NULL) );
-    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Foo", &command, &play, &get_type_false) );
+    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Foo", &play, &get_type_false, &metadata_ok) );
     CU_ASSERT( MI_ERROR_NOT_SUPPORTED == media_get_information(mi, "FileName", &data, NULL) );
-    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &command, &play, &get_type_true) );
+    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &play, &get_type_true, &metadata_ok) );
     CU_ASSERT( MI_RETURN_OK == media_get_information(mi, "FileName", &data, NULL) );
     CU_ASSERT( MI_RETURN_OK == media_get_information(mi, "FileName", NULL, &play_fn) );
     CU_ASSERT( play_fn == play );
@@ -159,11 +157,6 @@ static void test_get_information( void )
     CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &play, &get_type_true, &metadata_fail) );
     CU_ASSERT( MI_ERROR_DECODE_ERROR == media_get_information(mi, "FileName", &data, NULL) );
     CU_ASSERT( MI_RETURN_OK == media_delete(mi) );
-}
-
-static bool command( void )
-{
-    return true;
 }
 
 static media_status_t play( const char *filename,
