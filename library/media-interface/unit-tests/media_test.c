@@ -46,8 +46,15 @@
 static void add_suites( CU_pSuite *suite );
 static void test_registration( void );
 static void test_get_information( void );
-static media_status_t command( const media_command_t cmd );
-static media_status_t play( const char *filename, media_suspend_fn_t suspend, media_resume_fn_t resume );
+static bool command( void );
+static media_status_t play( const char *filename,
+                            const double gain,
+                            const double peak,
+                            xQueueHandle idle,
+                            const size_t queue_size,
+                            media_malloc_fn_t malloc_fn,
+                            media_free_fn_t free_fn,
+                            media_command_fn_t command_fn );
 static bool get_type_true( const char *filename );
 static bool get_type_false( const char *filename );
 static media_status_t metadata_ok( const char *filename, media_metadata_t *metadata );
@@ -97,31 +104,27 @@ static void test_registration( void )
     CU_ASSERT( MI_ERROR_PARAMETER == media_delete(NULL) );
     CU_ASSERT( MI_RETURN_OK == media_delete(mi) );
 
-    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(NULL, NULL, NULL, NULL, NULL, NULL) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(NULL, NULL, NULL, NULL, NULL) );
 
     mi = media_new();
     CU_ASSERT( NULL != mi );
     l = (ll_list_t *) mi;
-    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, NULL, NULL, NULL, NULL, NULL) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, NULL, NULL, NULL, NULL) );
     CU_ASSERT( NULL == l->head );
     CU_ASSERT( NULL == l->tail );
-    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, "Foo", NULL, NULL, NULL, NULL) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, "Foo", NULL, NULL, NULL) );
     CU_ASSERT( NULL == l->head );
     CU_ASSERT( NULL == l->tail );
-    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, "Foo", &command, NULL, NULL, NULL) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, "Foo", &play, NULL, NULL) );
     CU_ASSERT( NULL == l->head );
     CU_ASSERT( NULL == l->tail );
-    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, "Foo", &command, &play, NULL, NULL) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, "Foo", &play, NULL, NULL) );
     CU_ASSERT( NULL == l->head );
     CU_ASSERT( NULL == l->tail );
-    CU_ASSERT( MI_ERROR_PARAMETER == media_register_codec(mi, "Foo", &command, &play, &get_type_false, NULL) );
+    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Foo", &play, &get_type_false, &metadata_ok) );
     CU_ASSERT( NULL == l->head );
     CU_ASSERT( NULL == l->tail );
-    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Foo", &command, &play, &get_type_false, &metadata_ok) );
-    CU_ASSERT( NULL != l->head );
-    CU_ASSERT( NULL != l->tail );
-    CU_ASSERT( l->head == l->tail );
-    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &command, &play, &get_type_false, &metadata_ok) );
+    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &play, &get_type_false, &metadata_ok) );
     CU_ASSERT( NULL != l->head );
     CU_ASSERT( NULL != l->tail );
     CU_ASSERT( l->head->next == l->tail );
@@ -136,36 +139,41 @@ static void test_get_information( void )
     media_command_fn_t command_fn;
     media_play_fn_t play_fn;
 
-    CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(NULL, NULL, NULL, NULL, NULL) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(NULL, NULL, NULL, NULL) );
     mi = media_new();
     CU_ASSERT( NULL != mi );
-    CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(mi, NULL, NULL, NULL, NULL) );
-    CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(mi, "FileName", NULL, NULL, NULL) );
-    CU_ASSERT( MI_ERROR_NOT_SUPPORTED == media_get_information(mi, "FileName", &data, NULL, NULL) );
-    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Foo", &command, &play, &get_type_false, &metadata_ok) );
-    CU_ASSERT( MI_ERROR_NOT_SUPPORTED == media_get_information(mi, "FileName", &data, NULL, NULL) );
-    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &command, &play, &get_type_true, &metadata_ok) );
-    CU_ASSERT( MI_RETURN_OK == media_get_information(mi, "FileName", &data, NULL, NULL) );
-    CU_ASSERT( MI_RETURN_OK == media_get_information(mi, "FileName", NULL, &command_fn, NULL) );
-    CU_ASSERT( command_fn == command );
-    CU_ASSERT( MI_RETURN_OK == media_get_information(mi, "FileName", NULL, NULL, &play_fn) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(mi, NULL, NULL, NULL) );
+    CU_ASSERT( MI_ERROR_PARAMETER == media_get_information(mi, "FileName", NULL, NULL) );
+    CU_ASSERT( MI_ERROR_NOT_SUPPORTED == media_get_information(mi, "FileName", &data, NULL) );
+    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Foo", &command, &play, &get_type_false) );
+    CU_ASSERT( MI_ERROR_NOT_SUPPORTED == media_get_information(mi, "FileName", &data, NULL) );
+    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &command, &play, &get_type_true) );
+    CU_ASSERT( MI_RETURN_OK == media_get_information(mi, "FileName", &data, NULL) );
+    CU_ASSERT( MI_RETURN_OK == media_get_information(mi, "FileName", NULL, &play_fn) );
     CU_ASSERT( play_fn == play );
 
     CU_ASSERT( MI_RETURN_OK == media_delete(mi) );
 
     mi = media_new();
     CU_ASSERT( NULL != mi );
-    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &command, &play, &get_type_true, &metadata_fail) );
-    CU_ASSERT( MI_ERROR_DECODE_ERROR == media_get_information(mi, "FileName", &data, NULL, NULL) );
+    CU_ASSERT( MI_RETURN_OK == media_register_codec(mi, "Bar", &play, &get_type_true, &metadata_fail) );
+    CU_ASSERT( MI_ERROR_DECODE_ERROR == media_get_information(mi, "FileName", &data, NULL) );
     CU_ASSERT( MI_RETURN_OK == media_delete(mi) );
 }
 
-static media_status_t command( const media_command_t cmd )
+static bool command( void )
 {
-    return MI_RETURN_OK;
+    return true;
 }
 
-static media_status_t play( const char *filename, media_suspend_fn_t suspend, media_resume_fn_t resume )
+static media_status_t play( const char *filename,
+                            const double gain,
+                            const double peak,
+                            xQueueHandle idle,
+                            const size_t queue_size,
+                            media_malloc_fn_t malloc_fn,
+                            media_free_fn_t free_fn,
+                            media_command_fn_t command_fn )
 {
     return MI_RETURN_OK;
 }
