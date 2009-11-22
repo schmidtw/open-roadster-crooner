@@ -20,11 +20,11 @@ void test_factor( void )
 
     factor_out_two( 2, &pow, &rem );
     CU_ASSERT_EQUAL( 1, pow );
-    CU_ASSERT_EQUAL( 0, rem );
+    CU_ASSERT_EQUAL( 1, rem );
 
     factor_out_two( 1024, &pow, &rem );
     CU_ASSERT_EQUAL( 10, pow );
-    CU_ASSERT_EQUAL( 0, rem );
+    CU_ASSERT_EQUAL( 1, rem );
 
     factor_out_two( 3072, &pow, &rem );
     CU_ASSERT_EQUAL( 10, pow );

@@ -30,6 +30,13 @@
  *  @param in the number to factor
  *  @param power_of_two the largest power of two that can go into the number
  *  @param remainder the remainder of the number
+ *  
+ *  ex: in = 100100 (binary) 36
+ *     power_of_two => 2
+ *     remainder    => 1001
+ *  ex: in 10 (binary) 2
+ *     power_of_two => 1
+ *     remainder    => 1
  */
 void factor_out_two( const uint32_t in,
                       uint32_t *power_of_two,

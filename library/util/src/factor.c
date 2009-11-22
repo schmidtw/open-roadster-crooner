@@ -52,11 +52,11 @@ void factor_out_two( const uint32_t in,
     *power_of_two = 0;
 
     if( 0 != in ) {
-        while( ((in >> (*power_of_two)) << (*power_of_two)) == in ) {
+        while( !((1 << (*power_of_two)) & in ) )
+        {
             (*power_of_two)++;
         }
     }
-
     *remainder = in >> (*power_of_two);
 }
 
