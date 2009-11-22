@@ -12,9 +12,16 @@ char artist[MAX_ARTIST_NAME_W_NULL];
 char album[MAX_ALBUM_TITLE_W_NULL];
 char song[MAX_SONG_TITLE_W_NULL];
 
-void fake_audio_control( void )
+media_status_t fake_play( const char *filename,
+                          const double gain,
+                          const double peak,
+                          xQueueHandle idle,
+                          const size_t queue_size,
+                          media_malloc_fn_t malloc_fn,
+                          media_free_fn_t free_fn,
+                          media_command_fn_t command_fn )
 {
-    printf("fake_audio_control called\n");
+    return MI_RETURN_OK;
 }
 
 void create_simple_database( void )
@@ -34,24 +41,24 @@ void create_simple_database( void )
     sprintf(artist, "A Me");
     sprintf(album, "Brushfire Fairytales");
     sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_audio_control, "Here" );
+    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
     
     sprintf(artist, "Jack Johnson");
     sprintf(album, "Brushfire Fairytales");
     sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_audio_control, "Here");
+    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
     sprintf(song, "Middle Man");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_audio_control, "Here");
+    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
     
     sprintf(album, "In between dreams");
     sprintf(song, "Better Together");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_audio_control, "Here");
+    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
     sprintf(song, "Never Know");
-    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_audio_control, "Here");
+    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
 }
 
