@@ -206,7 +206,7 @@ db_status_t next_song( song_node_t ** current_song,
                 {
                     song_node_t * sn;
                     uint32_t song_index_of_interest;
-                    uint32_t random_song_range = group->index_songs_stop - group->index_songs_start;
+                    uint32_t random_song_range = group->index_songs_stop - group->index_songs_start + 1;
                     if( group->index_songs_start > group->index_songs_stop ) {
                         random_number = 0;
                     }
@@ -229,7 +229,7 @@ db_status_t next_song( song_node_t ** current_song,
                 {
                     song_node_t * sn;
                     uint32_t song_index_of_interest;
-                    uint32_t random_song_range = artist->index_songs_stop - artist->index_songs_start;
+                    uint32_t random_song_range = artist->index_songs_stop - artist->index_songs_start + 1;
                     if( artist->index_songs_start > artist->index_songs_stop ) {
                         random_number = 0;
                     }
@@ -252,7 +252,7 @@ db_status_t next_song( song_node_t ** current_song,
                 {
                     song_node_t * sn;
                     uint32_t song_index_of_interest;
-                    uint32_t random_song_range = album->index_songs_stop - album->index_songs_start;
+                    uint32_t random_song_range = album->index_songs_stop - album->index_songs_start + 1;
                     if( album->index_songs_start > album->index_songs_stop ) {
                         random_number = 0;
                     }
