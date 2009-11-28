@@ -33,6 +33,7 @@
 song_node_t * find_random_song_from_artist( artist_node_t * an, uint32_t first_song_index, uint32_t last_song_index );
 song_node_t * find_random_song_from_album( album_node_t * an, uint32_t random_song_index );
 song_node_t * find_random_song_from_songs( song_node_t * sn, uint32_t random_song_index );
+uint32_t random_number_in_range( uint32_t start, uint32_t stop );
 
 /* See database.h for information */
 db_status_t next_song( song_node_t ** current_song,
@@ -192,7 +193,10 @@ db_status_t next_song( song_node_t ** current_song,
                 int random_number;
                 int ii;
                 case DL_GROUP:
-                    random_number = rand() % rdn.size_list;
+                    /* The group list is 1 larger than the random range 
+                     * function is expecting.
+                     */
+                    random_number = random_number_in_range(0, (rdn.size_list-1));
                     group = (group_node_t *) rdn.groups.head->data;
                     
                     for(ii = 0; ii < random_number; ii++) {
@@ -245,15 +249,9 @@ db_status_t next_song( song_node_t ** current_song,
 song_node_t * find_random_song_from_artist( artist_node_t * an, uint32_t first_song_index, uint32_t last_song_index )
 {
     artist_node_t * artist = an;
-    uint32_t random_number;
     uint32_t random_song_index;
-    uint32_t random_song_range = first_song_index - last_song_index + 1;
     
-    if( first_song_index > last_song_index ) {
-        random_song_range = 1;
-    }
-    random_number = rand() % random_song_range;
-    random_song_index = first_song_index + random_number;
+    random_song_index = random_number_in_range(first_song_index, last_song_index);
     
     _D1( "Random Number = %d\n", random_song_index );
     while( 1 ) {
@@ -300,4 +298,25 @@ song_node_t * find_random_song_from_songs( song_node_t * sn, uint32_t random_son
         }
         song = (song_node_t *) song->node.next->data;
     }
+}
+
+/**
+ * @param start the lowest possible number that can be returned
+ * @param stop  the highest possible number that can be returned
+ * 
+ * @note if an error occurs, start will be returned.
+ * 
+ * @return a random number in the range of [start, stop]
+ */
+uint32_t random_number_in_range( uint32_t start, uint32_t stop )
+{
+    uint32_t range = stop - start + 1;
+    uint32_t rv;
+    if( stop < start ) {
+        return start;
+    }
+    
+    rv = rand()/((float)INT32_MAX) * range;
+    rv += start;
+    return rv;
 }
