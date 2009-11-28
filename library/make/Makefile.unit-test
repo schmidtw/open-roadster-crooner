@@ -38,8 +38,8 @@ all_cflags = $(cflags) $(additional_flags) $$($(addsuffix $(cflags_suffix),$(1))
 unit-test :: $(addsuffix _run,$(TESTS))
 clean     :: $(addsuffix _clean,$(TESTS))
 cleanall  :: clean
-all ::
-install ::
+all :: unit-test
+install :: unit-test
 
 # $(1) = test name
 # $(2) = full filename and path
@@ -52,7 +52,7 @@ endef
 # $(1) = test name
 define TESTFILE_template
 $(1) : $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix)))))
-	$(QUIET)$(cc) $(call all_cflags,$(1)) -o $$@ $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix))))) $(ldflags)
+	$(QUIET)$(cc) $(call all_cflags,$(1)) -o $$@ $(1).c $$(addsuffix -$(1).$(extension),$$(basename $$(notdir $$($(1)$(source_suffix))))) $(ldflags) $(addsuffix .a,$(addprefix $(mocks_lib)/,$($(1)$(mock_suffix))))
 endef
 
 # $(1) = test name
