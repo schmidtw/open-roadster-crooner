@@ -196,7 +196,7 @@ static void __process_command( irp_state_t *device_status,
                 if( (IRP_STATE__PLAYING == *device_status) ||
                     (IRP_STATE__PAUSED == *device_status) )
                 {
-                    ri_playback_command( PB_CMD__STOP );
+                    ri_playback_command( PB_CMD__PAUSE );
                 }
                 break;
 
