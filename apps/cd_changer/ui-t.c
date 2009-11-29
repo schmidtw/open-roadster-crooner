@@ -156,7 +156,17 @@ static void __process_command( irp_state_t *device_status,
                                void *user_data )
 {
     bool shouldSendText = false;
-    _D2( "device_status: 0x%04x\n", *device_status );
+    
+    _D2( "device_status: 0x%04x -- %s\n", *device_status,
+            IRP_STATE__STOPPED==*device_status?"IRP_STATE__STOPPED":
+            IRP_STATE__PAUSED==*device_status?"IRP_STATE__PAUSED":
+            IRP_STATE__PLAYING==*device_status?"IRP_STATE__PLAYING":
+            IRP_STATE__FAST_PLAYING__FORWARD==*device_status?"IRP_STATE__FAST_PLAYING__FORWARD":
+            IRP_STATE__FAST_PLAYING__REVERSE==*device_status?"IRP_STATE__FAST_PLAYING__REVERSE":
+            IRP_STATE__SEEKING==*device_status?"IRP_STATE__SEEKING":
+            IRP_STATE__SEEKING__NEXT==*device_status?"IRP_STATE__SEEKING__NEXT":
+            IRP_STATE__SEEKING__PREV==*device_status?"IRP_STATE__SEEKING__PREV":
+            IRP_STATE__LOADING_DISC==*device_status?"IRP_STATE__LOADING_DISC":"unknown" );
 
     if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
         _D2( "msg->type == RI_MSG_TYPE__IBUS_CMD\n" );
@@ -167,19 +177,15 @@ static void __process_command( irp_state_t *device_status,
             case IRP_CMD__RANDOMIZE__DISABLE:
                 if( IRP_CMD__SCAN_DISC__ENABLE == msg->d.ibus.command ) {
                     _D2( "IRP_CMD__SCAN_DISC__ENABLE\n" );
-                    *device_status = IRP_CMD__RANDOMIZE__ENABLE;
                     enable_scan_state();
                 } else if( IRP_CMD__SCAN_DISC__DISABLE == msg->d.ibus.command ) {
                     _D2( "IRP_CMD__SCAN_DISC__DISABLE\n" );
-                    *device_status = IRP_CMD__RANDOMIZE__DISABLE;
                     disable_scan_state();
                 } else if( IRP_CMD__RANDOMIZE__ENABLE == msg->d.ibus.command ) {
                     _D2( "IRP_CMD__RANDOMIZE__ENABLE\n" );
-                    *device_status = IRP_CMD__RANDOMIZE__ENABLE;
                     set_random_state(true);
                 } else {
                     _D2( "IRP_CMD__RANDOMIZE__DISABLE\n" );
-                    *device_status = IRP_CMD__RANDOMIZE__DISABLE;
                     set_random_state(false);
                 }
                 ri_send_state( *device_status, disc_map, *current_disc, *current_track );
