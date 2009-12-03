@@ -3,11 +3,14 @@ TARGET     = verify
 BASE       = ../..
 
 SOURCES = \
+          abdac.c \
           main.c
 
 LIBRARIES = \
             linked-list \
+            led \
             freertos \
-            bsp
+            bsp \
+            util
 
 include Makefile.common

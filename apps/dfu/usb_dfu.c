@@ -47,6 +47,7 @@
 #include "boot.h"
 #include "conf_isp.h"
 #include "isp.h"
+#include "led.h"
 
 
 //_____ M A C R O S ________________________________________________________
@@ -524,7 +525,10 @@ Bool usb_dfu_dnload(void)
       {
         goto unsupported_request;
       }
-      if (!get_and_check_mem_range()) break;
+      led_active();
+      if (!get_and_check_mem_range()) {
+        break;
+      }
       if (!MEMORY_ACCESS[memory].write)
       {
         dfu_status = STATUS_errWRITE;
@@ -547,7 +551,10 @@ Bool usb_dfu_dnload(void)
       {
         goto unsupported_request;
       }
-      if (!get_and_check_mem_range()) break;
+      led_active();
+      if (!get_and_check_mem_range()) {
+        break;
+      }
       if (!MEMORY_ACCESS[memory].read)
       {
         dfu_status = STATUS_errVERIFY;
@@ -559,7 +566,9 @@ Bool usb_dfu_dnload(void)
         break;
 
       case CMD_BLANK_CHECK:
+        led_active();
         erase_check_mem();
+        led_normal();
         break;
 
       default:
@@ -574,11 +583,13 @@ Bool usb_dfu_dnload(void)
         switch (Usb_read_endpoint_data(EP_CONTROL, 8))
         {
         case CMD_ERASE_ARG_CHIP:
+          led_active();
           memory = MEM_FLASH;
           end_address.long_address = start_address.long_address = 0;
           flashc_lock_all_regions(FALSE);
           flashc_erase_all_pages(FALSE);
           security_active = FALSE;
+          led_normal();
           break;
 
         default:
@@ -698,7 +709,9 @@ Bool usb_dfu_upload(void)
     switch (cmd)
     {
     case CMD_READ_MEMORY:
+      led_active();
       read_mem();
+      led_normal();
       break;
 
     case CMD_BLANK_CHECK:

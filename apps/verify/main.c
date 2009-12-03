@@ -2,31 +2,30 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <bsp/abdac.h>
+#include "abdac.h"
 #include <bsp/delay.h>
 #include <bsp/intc.h>
-#include <bsp/led.h>
+#include <bsp/gpio.h>
+#include <led/led.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 #include <linked-list/linked-list.h>
 
 /* Integers */
 #define SDRAM_SIZE  8388608
 
-#define COLOR_WHITE     0
-#define COLOR_NONE      1
-#define COLOR_RED       2
-#define COLOR_GREEN     3
-#define COLOR_BLUE      4
-#define COLOR_YELLOW    5
-#define COLOR_MAGENTA   6
-#define COLOR_CYAN      7
+static xSemaphoreHandle __card_state_change;
 
-void led_task( void *params );
 void echo_task( void *params );
 void test_sdram( void );
-void test_led( const int color );
 void abdac_task( void *params );
+void simple_test_task( void *params );
 void abdac_done( abdac_node_t *node, const bool last );
+void card_task( void *params );
+static bool is_card_present( void );
+__attribute__((__interrupt__))
+static void __card_change( void );
+static bool is_card_wp( void );
 
 #include "audio.included"
 
@@ -40,6 +39,7 @@ void* pvPortMalloc( size_t size )
     xTaskResumeAll();
 
     return ret;
+
 }
 
 void vPortFree( void *ptr )
@@ -52,21 +52,15 @@ void vPortFree( void *ptr )
 
 int main( void )
 {
-    int i;
+    led_init( tskIDLE_PRIORITY + 1 );
 
-    led_init();
+    vSemaphoreCreateBinary( __card_state_change );
+    xSemaphoreTake( __card_state_change, 0 );
 
-    for( i = 0; i < 8; i++ ) {
-        test_led( i );
-        delay_time( 20000000 );
-    }
-    test_led( 1 );
-
-    test_sdram();
-
-    xTaskCreate(   led_task, (signed portCHAR *) "LED ",  400, NULL, (tskIDLE_PRIORITY+1), NULL );
-    xTaskCreate(  echo_task, (signed portCHAR *) "ECHO", 1000, NULL, (tskIDLE_PRIORITY+1), NULL );
-    xTaskCreate( abdac_task, (signed portCHAR *) "DAC ",  400, NULL, (tskIDLE_PRIORITY+1), NULL );
+    xTaskCreate( simple_test_task, (signed portCHAR *) "TEST", 2000, NULL, (tskIDLE_PRIORITY+1), NULL );
+    xTaskCreate(        echo_task, (signed portCHAR *) "ECHO", 2000, NULL, (tskIDLE_PRIORITY+1), NULL );
+    xTaskCreate(       abdac_task, (signed portCHAR *) "DAC ", 2000, NULL, (tskIDLE_PRIORITY+1), NULL );
+    xTaskCreate(        card_task, (signed portCHAR *) "CARD", 2000, NULL, (tskIDLE_PRIORITY+1), NULL );
 
     printf( "--------------------------------------------------------------------------------\n" );
 
@@ -74,18 +68,6 @@ int main( void )
     vTaskStartScheduler();
     
     return 0;
-}
-
-void led_task( void *params )
-{
-    while( 1 ) {
-        int i;
-
-        for( i = 0; i < 8; i++ ) {
-            test_led( i );
-            vTaskDelay( 1000 );
-        }
-    }
 }
 
 void echo_task( void *params )
@@ -103,6 +85,28 @@ void echo_task( void *params )
     }
 }
 
+void led_red()
+{
+    led_state_t states = { .red = 255, .green = 0, .blue = 0, .duration = 0 };
+    led_set_state( &states, 1, false, NULL );
+}
+
+void simple_test_task( void *params )
+{
+    led_state_t states[] = { { .red = 255, .green =   0, .blue =   0, .duration = 2000 },
+                             { .red =   0, .green = 255, .blue =   0, .duration = 2000 },
+                             { .red =   0, .green =   0, .blue = 255, .duration = 2000 },
+                             { .red = 255, .green =   0, .blue = 255, .duration = 2000 },
+                             { .red = 255, .green = 255, .blue =   0, .duration = 2000 },
+                             { .red = 255, .green = 255, .blue = 255, .duration = 2000 },
+                             { .red =   0, .green = 255, .blue = 255, .duration = 2000 },
+                             { .red =   0, .green =   0, .blue =   0, .duration = 2000 } };
+
+    led_set_state( states, sizeof(states)/sizeof(led_state_t), true, NULL );
+
+    test_sdram();
+}
+
 void test_sdram( void )
 {
     uint32_t *sdram;
@@ -110,90 +114,39 @@ void test_sdram( void )
 
     sdram = (uint32_t*) (0xD0000000);
 
-    test_led( COLOR_BLUE );
+    printf( "Starting SDRAM Test\n" );
 
+    printf( "Writing 0xffffffff\n" );
     for( i = 0; i < SDRAM_SIZE; i++ ) {
         sdram[i] = 0xffffffff;
     }
 
-    test_led( COLOR_YELLOW );
+    printf( "Verifying 0xffffffff\n" );
     for( i = 0; i < SDRAM_SIZE; i++ ) {
         if( 0xffffffff != sdram[i] ) {
-            test_led( COLOR_RED );
+            printf( "Failed SDRAM Test\n" );
+            led_red();
             while( 1 ) {;}
         }
     }
 
-    test_led( COLOR_CYAN );
+    printf( "Writing Sequential\n" );
     for( i = 0; i < SDRAM_SIZE; i++ ) {
         sdram[i] = i;
     }
 
-    test_led( COLOR_WHITE );
+    printf( "Verifying Sequential\n" );
     for( i = 0; i < SDRAM_SIZE; i++ ) {
         if( i != sdram[i] ) {
-            test_led( COLOR_RED );
+            printf( "Failed SDRAM Test\n" );
+            led_red();
             while( 1 ) {;}
         }
     }
 
-    test_led( COLOR_GREEN );
-}
+    printf( "SDRAM Test Succeeded\n" );
 
-void test_led( const int color )
-{
-    switch( color ) {
-        case COLOR_WHITE:
-            led_on( led_red );
-            led_on( led_green );
-            led_on( led_blue );
-            break;
-
-        case COLOR_NONE:
-            led_off( led_red );
-            led_off( led_green );
-            led_off( led_blue );
-            break;
-
-        case COLOR_RED:
-            led_on( led_red );
-            led_off( led_green );
-            led_off( led_blue );
-            break;
-
-        case COLOR_GREEN:
-            led_off( led_red );
-            led_on( led_green );
-            led_off( led_blue );
-            break;
-
-        case COLOR_BLUE:
-            led_off( led_red );
-            led_off( led_green );
-            led_on( led_blue );
-            break;
-
-        case COLOR_YELLOW:
-            led_on( led_red );
-            led_on( led_green );
-            led_off( led_blue );
-            break;
-
-        case COLOR_MAGENTA:
-            led_on( led_red );
-            led_off( led_green );
-            led_on( led_blue );
-            break;
-
-        case COLOR_CYAN:
-            led_off( led_red );
-            led_on( led_green );
-            led_on( led_blue );
-            break;
-
-        default:
-            break;
-    }
+    while( 1 ) { ; }
 }
 
 volatile ll_list_t __idle;
@@ -223,7 +176,7 @@ void abdac_task( void *params )
     count = 0;
     while( 1 ) {
         bool isrs_enabled;
-        interrupts_save_and_disable( isrs_enabled );
+        isrs_enabled = interrupts_save_and_disable();
         node = ll_remove_head( &__idle );
         interrupts_restore( isrs_enabled );
 
@@ -246,4 +199,71 @@ void abdac_task( void *params )
 void abdac_done( abdac_node_t *node, const bool last )
 {
     ll_append( &__idle, &node->node );
+}
+
+void card_task( void *params )
+{
+    /* Create an interrupt on the card ejection. */
+    gpio_set_options( MC_CD_PIN,
+                      GPIO_DIRECTION__INPUT,
+                      GPIO_PULL_UP__DISABLE,
+                      GPIO_GLITCH_FILTER__ENABLE,
+                      GPIO_INTERRUPT__CHANGE,
+                      0 );
+    gpio_set_options( MC_WP_PIN,
+                      GPIO_DIRECTION__INPUT,
+                      GPIO_PULL_UP__DISABLE,
+                      GPIO_GLITCH_FILTER__ENABLE,
+                      GPIO_INTERRUPT__NONE,
+                      0 );
+
+    intc_register_isr( &__card_change, MC_CD_ISR, ISR_LEVEL__2 );
+
+    /* In case we booted with a card in the slot. */
+    if( true == is_card_present() ) {
+        xSemaphoreGive( __card_state_change );
+    }
+
+    while( 1 ) {
+        xSemaphoreTake( __card_state_change, portMAX_DELAY );
+
+        if( true == is_card_present() ) {
+            if( true == is_card_wp() ) {
+                printf( "Card is present & locked.\n" );
+            } else {
+                printf( "Card is present & unlocked.\n" );
+            }
+        } else {
+            printf( "Card is not present.\n" );
+        }
+    }
+}
+
+static bool is_card_present( void )
+{
+#if (0 != MC_CD_ACTIVE_LOW)
+    return (0 == gpio_read_pin(MC_CD_PIN));
+#else
+    return (0 != gpio_read_pin(MC_CD_PIN));
+#endif
+}
+
+static bool is_card_wp( void )
+{
+#if (0 != MC_WP_ACTIVE_LOW)
+    return (0 == gpio_read_pin(MC_WP_PIN));
+#else
+    return (0 != gpio_read_pin(MC_WP_PIN));
+#endif
+}
+
+
+__attribute__((__interrupt__))
+static void __card_change( void )
+{
+    portBASE_TYPE ignore;
+    
+    xSemaphoreGiveFromISR( __card_state_change, &ignore );
+
+    gpio_clr_interrupt_flag( MC_CD_PIN );
 }

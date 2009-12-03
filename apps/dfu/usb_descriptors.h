@@ -117,7 +117,7 @@
   Usb_unicode('r') \
 }
 
-#define USB_PN_LENGTH         18
+#define USB_PN_LENGTH         33
 #define USB_PRODUCT_NAME \
 {\
   Usb_unicode('C'),\
@@ -128,15 +128,31 @@
   Usb_unicode('e'),\
   Usb_unicode('r'),\
   Usb_unicode(' '),\
+  Usb_unicode('M'),\
+  Usb_unicode('e'),\
+  Usb_unicode('d'),\
+  Usb_unicode('i'),\
+  Usb_unicode('a'),\
+  Usb_unicode(' '),\
+  Usb_unicode('P'),\
+  Usb_unicode('l'),\
+  Usb_unicode('a'),\
+  Usb_unicode('y'),\
+  Usb_unicode('e'),\
+  Usb_unicode('r'),\
+  Usb_unicode(' '),\
   Usb_unicode('D'),\
   Usb_unicode('F'),\
   Usb_unicode('U'),\
   Usb_unicode('-'),\
   Usb_unicode('1'),\
   Usb_unicode('.'),\
-  Usb_unicode(((((ISP_VERSION >> 4) & 0x0F) < 0xA) ? '0' : 'A' - 0xA) + ((ISP_VERSION >> 4) & 0x0F)),\
+  Usb_unicode('0'),\
   Usb_unicode('.'),\
-  Usb_unicode((((ISP_VERSION & 0x0F) < 0xA) ? '0' : 'A' - 0xA) + (ISP_VERSION & 0x0F)) \
+  Usb_unicode(((((ISP_VERSION >> 4) & 0x0F) < 0xA) ? '0' : 'A' - 0xA) + ((ISP_VERSION >> 4) & 0x0F)),\
+  Usb_unicode('-'),\
+  Usb_unicode((((ISP_VERSION & 0x0F) < 0xA) ? '0' : 'A' - 0xA) + (ISP_VERSION & 0x0F)), \
+  Usb_unicode(':')\
 }
 
 #define USB_SN_LENGTH         28

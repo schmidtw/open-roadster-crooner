@@ -28,6 +28,7 @@
 
 //_____ I N C L U D E S ____________________________________________________
 
+#include <string.h>
 #include "conf_usb.h"
 
 
@@ -146,9 +147,35 @@ Bool usb_user_get_descriptor(U8 type, U8 string)
       break;
 
     case PROD_INDEX:
+    {
+      static U8 full[512];
+      U8 *firmware;
+      U16 *tmp;
+      int i;
+
+      firmware = (U8 *) FIRMWARE_INFO_START_ADDRESS;
       data_to_transfer = sizeof(usb_user_product_string_descriptor);
-      pbuffer = &usb_user_product_string_descriptor;
+      memcpy( full, &usb_user_product_string_descriptor, data_to_transfer );
+      tmp = (U16*) &full[data_to_transfer];
+
+      for( i = 0; (('\0' != firmware[i]) && (0xff != firmware[i]) && (i < FIRMWARE_INFO_LENGTH)); i++ ) {
+        tmp[i] = Usb_unicode( firmware[i] );
+        full[0] += 2;
+        data_to_transfer += 2;
+      }
+
+      if( 0 == i ) {
+        tmp[i++] = Usb_unicode( 'N' );
+        tmp[i++] = Usb_unicode( 'o' );
+        tmp[i++] = Usb_unicode( 'n' );
+        tmp[i  ] = Usb_unicode( 'e' );
+        full[0] += 8;
+        data_to_transfer += 8;
+      }
+
+      pbuffer = full;
       break;
+    }
 
     case SN_INDEX:
       data_to_transfer = sizeof(usb_user_serial_number);

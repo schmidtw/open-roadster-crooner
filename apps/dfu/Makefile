@@ -195,6 +195,7 @@ ccversion:
 	@echo
 	@echo
 	@$(CC) --version
+	@touch usb_descriptors.h
 
 # Generate preprocessed files from C source files.
 .PHONY: cppfiles

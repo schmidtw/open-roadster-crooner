@@ -71,6 +71,7 @@ CSRCS = \
         pm.c \
         flashc.c \
         usb_drv.c \
+        led.c \
         usb_task.c \
         usb_device_task.c \
         usb_standard_request.c \

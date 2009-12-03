@@ -34,7 +34,10 @@ ENTRY(_start)
 
 MEMORY
 {
-  FLASH (rxai!w) : ORIGIN = 0x80002000, LENGTH = 0x00080000-0x2000
+  LOW_BLANK      : ORIGIN = 0x80002000, LENGTH = 0x00000200
+  FIRMWARE_LABEL : ORIGIN = 0x80002200, LENGTH = 0x00000040
+  FLASH (rxai!w) : ORIGIN = 0x80002240, LENGTH = 0x00080000-0x2440
+  HIGH_BLANK     : ORIGIN = 0x8007FE00, LENGTH = 0x00000200
   SDRAM (wxa!ri) : ORIGIN = 0xD0000000, LENGTH = 32M
   SRAM  (wxa!ri) : ORIGIN = 0x00000004, LENGTH = 0x0000FFFC
   USERPAGE       : ORIGIN = 0x80800000, LENGTH = 0x00000200
@@ -42,7 +45,10 @@ MEMORY
 
 PHDRS
 {
+  FIRMWARE_LABEL PT_LOAD;
+  LOW_BLANK      PT_LOAD;
   FLASH          PT_LOAD;
+  HIGH_BLANK     PT_LOAD;
   SDRAM          PT_NULL;
   SRAM           PT_NULL;
   SDRAM_ALIGN    PT_NULL;
@@ -72,9 +78,9 @@ SECTIONS
   __nano_buffer_size__ = DEFINED(__nano_buffer_size__) ? __nano_buffer_size__ : 0;
 
   /* Read-only sections, merged into text segment: */
-  PROVIDE (__executable_start = 0x80002000); . = 0x80002000;
+  PROVIDE (__executable_start = 0x80002200); . = 0x80002200;
   .interp           : { *(.interp) } >FLASH AT>FLASH :FLASH
-  .reset            : {  *(.reset) } >FLASH AT>FLASH :FLASH
+  .reset            : { *(.reset) } >FLASH AT>FLASH :FLASH
   .hash             : { *(.hash) } >FLASH AT>FLASH :FLASH
   .dynsym           : { *(.dynsym) } >FLASH AT>FLASH :FLASH
   .dynstr           : { *(.dynstr) } >FLASH AT>FLASH :FLASH
@@ -291,4 +297,12 @@ SECTIONS
   } >SRAM AT>SRAM :SRAM
   .userpage       : { *(.userpage .userpage.*) } >USERPAGE AT>USERPAGE :USERPAGE
   /DISCARD/ : { *(.note.GNU-stack) }
+
+  .firmware_label   : { KEEP(*(.firmware_label)) . = ALIGN(LENGTH(FIRMWARE_LABEL)); } >FIRMWARE_LABEL AT>FIRMWARE_LABEL :FIRMWARE_LABEL
+  PROVIDE (__zeros_lo_start = ORIGIN(LOW_BLANK));
+  .zeros_lo         : { KEEP(*(.zeros_lo)) . = 1; . = ALIGN(LENGTH(LOW_BLANK)); FILL(0x00000000);} >LOW_BLANK AT>LOW_BLANK :LOW_BLANK
+  PROVIDE (__zeros_hi_start = ORIGIN(HIGH_BLANK));
+  .zeros_hi         : { KEEP(*(.zeros_hi)) . = 1; . = ALIGN(LENGTH(HIGH_BLANK)); FILL(0x00000000);} >HIGH_BLANK AT>HIGH_BLANK :HIGH_BLANK
+
+
 }

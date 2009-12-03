@@ -32,6 +32,7 @@
 #include "compiler.h"
 #include "board.h"
 #include "pm.h"
+#include "led.h"
 #include "flashc.h"
 #include "conf_usb.h"
 #include "usb_drv.h"
@@ -179,6 +180,9 @@ int main(void)
 {
   wait_10_ms();
 
+  led_init();
+  led_normal();
+
   usb_task_init();
 #if USB_DEVICE_FEATURE == ENABLED
   usb_dfu_init();
@@ -186,6 +190,7 @@ int main(void)
 
   while (TRUE)
   {
+  led_normal();
     usb_task();
   }
 }
