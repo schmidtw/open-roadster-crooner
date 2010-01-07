@@ -29,6 +29,8 @@
 
 #define ALLOW_USING_SLOW_MEMORY 1
 
+const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Testing";
+
 void* pvPortMalloc( size_t size )
 {
     extern void __sram_heap_start__;
@@ -161,7 +163,7 @@ int main( void )
     dsp_init( (tskIDLE_PRIORITY+2) );
     ri_init();
     ui_init();
-    uid_init();
+    ui_t_init();
     playback_init( (tskIDLE_PRIORITY+1) );
     init_database( mi_list );
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );

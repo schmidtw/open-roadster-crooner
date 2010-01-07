@@ -553,9 +553,11 @@ static void __transition_db( ri_state_t *state )
                 __no_discs_loop( state );
                 return;
             }
-        } else if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
-            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+        } else if( (RI_MSG_TYPE__IBUS_CMD == msg->type) &&
+                   (IRP_CMD__GET_STATUS == msg->d.ibus.command) )
+        {
             __send_state( state );
+            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         } else {
             xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
             return;
