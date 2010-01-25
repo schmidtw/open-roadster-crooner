@@ -20,6 +20,8 @@
 #include <stdlib.h>
 #include <sys/reent.h>
 
+#include <newlib/reent-file-glue.h>
+
 #include "fatfs/ff.h"
 #include "dirent.h"
 
@@ -142,14 +144,17 @@ long telldir( DIR *dirp )
 /*----------------------------------------------------------------------------*/
 static int _closedir_r( struct _reent *reent, DIR *dirp )
 {
+    struct reent_glue *r = (struct reent_glue*) reent;
     int fd;
 
-    for( fd = 0; fd < _N_LISTS; fd++ ) {
-        if( 0 != reent->_new._unused._nmalloc[fd] ) {
-            if( dirp == (DIR*) reent->_new._unused._nextf[fd] ) {
-                /* Mark this slot as not in use & we're done. */
-                reent->_new._unused._nmalloc[fd] = 0;
-                return 0;
+    if( REENT_GLUE_MAGIC == r->magic ) {
+        for( fd = 0; fd < REENT_GLUE_MAX_FILES; fd++ ) {
+            if( true == r->active[fd] ) {
+                if( dirp == (DIR*) r->file[fd] ) {
+                    /* Mark this slot as not in use & we're done. */
+                    r->active[fd] = false;
+                    return 0;
+                }
             }
         }
     }
@@ -160,34 +165,40 @@ static int _closedir_r( struct _reent *reent, DIR *dirp )
 
 static DIR* _opendir_r( struct _reent *reent, const char *dirname )
 {
+    struct reent_glue *r = (struct reent_glue*) reent;
     int fd;
     DIR *dir;
 
-    for( fd = 0; fd < _N_LISTS; fd++ ) {
-        if( 0 == reent->_new._unused._nmalloc[fd] ) {
+    if( REENT_GLUE_MAGIC != r->magic ) {
+        reent->_errno = ENFILE;
+        return NULL;
+    }
+
+    for( fd = 0; fd < REENT_GLUE_MAX_FILES; fd++ ) {
+        if( false == r->active[fd] ) {
             /* We found an empty fd. */
             break;
         }
     }
 
-    if( _N_LISTS == fd ) {
+    if( REENT_GLUE_MAX_FILES == fd ) {
         reent->_errno = ENFILE;
         return NULL;
     }
 
-    if( NULL == reent->_new._unused._nextf[fd] ) {
-        reent->_new._unused._nextf[fd] = (unsigned char *) malloc( sizeof(FF_SLOT) );
-        if( NULL == reent->_new._unused._nextf[fd] ) {
+    if( NULL == r->file[fd] ) {
+        r->file[fd] = (unsigned char *) malloc( sizeof(FF_SLOT) );
+        if( NULL == r->file[fd] ) {
             reent->_errno = ENOMEM;
             return NULL;
         }
     }
 
-    dir = (DIR *) reent->_new._unused._nextf[fd];
+    dir = (DIR *) r->file[fd];
 
     switch( f_opendir(dir, dirname) ) {
         case FR_OK:
-            reent->_new._unused._nmalloc[fd] = 1;
+            r->active[fd] = true;
             dir->end = FALSE;
             return dir;
 
@@ -204,5 +215,6 @@ static DIR* _opendir_r( struct _reent *reent, const char *dirname )
             reent->_errno = EACCES;
             break;
     }
+
     return NULL;
 }

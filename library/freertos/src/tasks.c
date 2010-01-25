@@ -61,7 +61,7 @@
 #include "StackMacros.h"
 
 #if ( configUSE_NEWLIB_REENTRANT == 1 )
-    #include <sys/reent.h>
+    #include <newlib/reent-file-glue.h>
 #endif
 
 /*
@@ -82,7 +82,7 @@ typedef struct tskTaskControlBlock
 	portSTACK_TYPE			*pxStack;			/*< Points to the start of the stack. */
 	signed portCHAR			pcTaskName[ configMAX_TASK_NAME_LEN ];/*< Descriptive name given to the task when created.  Facilitates debugging only. */
     #if ( configUSE_NEWLIB_REENTRANT == 1 )
-        struct _reent reent;
+        struct reent_glue newlib_glue;
     #endif
 
 	#if ( portSTACK_GROWTH > 0 )
@@ -1429,7 +1429,7 @@ void vTaskSwitchContext( void )
 	same priority get an equal share of the processor time. */
 	listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopReadyPriority ] ) );
     #if ( configUSE_NEWLIB_REENTRANT == 1 )
-        _impure_ptr = &pxCurrentTCB->reent;
+        _impure_ptr = &pxCurrentTCB->newlib_glue.reent;
     #endif
 
 	traceTASK_SWITCHED_IN();
@@ -1728,8 +1728,7 @@ static void prvInitialiseTCBVariables( tskTCB *pxTCB, const signed portCHAR * co
 	#endif	
 
     #if ( configUSE_NEWLIB_REENTRANT == 1 )
-        memset( &(pxTCB->reent), 0, sizeof(struct _reent) );
-        _REENT_INIT_PTR( (&(pxTCB->reent)) );
+        reent_glue_init( &(pxTCB->newlib_glue) );
     #endif
 }
 /*-----------------------------------------------------------*/

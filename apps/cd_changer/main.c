@@ -147,7 +147,7 @@ int main( void )
 
 #if (1 == ENABLE_STATUS_TASK)
     xTaskCreate( __idle_task, ( signed portCHAR *) "Status",
-                 (configMINIMAL_STACK_SIZE + 200), NULL, tskIDLE_PRIORITY+2, NULL );
+                 (configMINIMAL_STACK_SIZE + 550), NULL, tskIDLE_PRIORITY+2, NULL );
 #endif
 
     mi_list = media_new();

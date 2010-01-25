@@ -4,7 +4,7 @@ BASE    = ../../..
 INCLUDE = -I/usr/avr32/include \
           -I$(BASE)/bins/include
 
-HEADERS =
+HEADERS = reent-file-glue.h
 
 STARTUP = \
     syscalls.c \

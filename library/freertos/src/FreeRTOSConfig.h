@@ -13,7 +13,7 @@
 #define configUSE_TICK_HOOK             0
 #define configTICK_RATE_HZ              1000
 #define configMAX_PRIORITIES            4
-#define configMINIMAL_STACK_SIZE        192
+#define configMINIMAL_STACK_SIZE        100
 #define configMAX_TASK_NAME_LEN         8
 #define configUSE_16_BIT_TICKS          0
 #define configIDLE_SHOULD_YIELD         1

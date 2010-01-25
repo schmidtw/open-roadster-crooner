@@ -24,6 +24,8 @@
 
 #include <freertos/semphr.h>
 
+#include <newlib/reent-file-glue.h>
+
 #include "fatfs/ff.h"
 #include "memcard-private.h"
 
@@ -45,7 +47,7 @@ static xSemaphoreHandle __ff_mutex;
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
-/* none */
+static FIL* __get_file( struct _reent *reent, int *fd );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -121,21 +123,10 @@ int _file_fstat_r( struct _reent *reent, int fd, struct stat *st )
 {
     FIL *file;
 
-    fd -= 3;
-    /* Is our fd in range? */
-    if( (fd < 0) || (_N_LISTS <= fd) ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
+    file = __get_file( reent, &fd );
+    if( NULL == file ) {
         return -1;
     }
-
-    /* Is our fd active? */
-    if( 0 == reent->_new._unused._nmalloc[fd] ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
-        return -1;
-    }
-    file = (FIL *) reent->_new._unused._nextf[fd];
 
     /* Fill in the structure with all we know. */
     st->st_size = file->fsize;
@@ -148,21 +139,10 @@ int _file_write_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
     FIL *file;
 
-    fd -= 3;
-    /* Is our fd in range? */
-    if( (fd < 0) || (_N_LISTS <= fd) ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
+    file = __get_file( reent, &fd );
+    if( NULL == file ) {
         return -1;
     }
-
-    /* Is our fd active? */
-    if( 0 == reent->_new._unused._nmalloc[fd] ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
-        return -1;
-    }
-    file = (FIL *) reent->_new._unused._nextf[fd];
 
     /* Add impl here. */
 
@@ -175,21 +155,10 @@ int _file_read_r( struct _reent *reent, int fd, void *buf, size_t len )
     FIL *file;
     UINT rc;
 
-    fd -= 3;
-    /* Is our fd in range? */
-    if( (fd < 0) || (_N_LISTS <= fd) ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
+    file = __get_file( reent, &fd );
+    if( NULL == file ) {
         return -1;
     }
-
-    /* Is our fd active? */
-    if( 0 == reent->_new._unused._nmalloc[fd] ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
-        return -1;
-    }
-    file = (FIL *) reent->_new._unused._nextf[fd];
 
     switch( f_read(file, buf, len, &rc) ) {
         case FR_OK:
@@ -213,21 +182,10 @@ off_t _file_lseek_r( struct _reent *reent, int fd, off_t offset, int whence )
     FIL *file;
     DWORD goal;
 
-    fd -= 3;
-    /* Is our fd in range? */
-    if( (fd < 0) || (_N_LISTS <= fd) ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
+    file = __get_file( reent, &fd );
+    if( NULL == file ) {
         return -1;
     }
-
-    /* Is our fd active? */
-    if( 0 == reent->_new._unused._nmalloc[fd] ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
-        return -1;
-    }
-    file = (FIL *) reent->_new._unused._nextf[fd];
 
     if( SEEK_CUR == whence ) {
         goal = file->fptr + offset;
@@ -263,25 +221,16 @@ off_t _file_lseek_r( struct _reent *reent, int fd, off_t offset, int whence )
 
 int _file_close_r( struct _reent *reent, int fd )
 {
+    struct reent_glue *r = (struct reent_glue*) reent;
     FIL *file;
 
-    fd -= 3;
-    /* Is our fd in range? */
-    if( (fd < 0) || (_N_LISTS <= fd) ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
+    file = __get_file( reent, &fd );
+    if( NULL == file ) {
         return -1;
     }
 
-    /* Is our fd active? */
-    if( 0 == reent->_new._unused._nmalloc[fd] ) {
-        /* Nope, bail */
-        reent->_errno = EBADF;
-        return -1;
-    }
+    r->active[fd] = false;
 
-    file = (FIL *) reent->_new._unused._nextf[fd];
-    reent->_new._unused._nmalloc[fd] = 0;
     switch( f_close(file) ) {
         case FR_OK:
             return 0;
@@ -303,15 +252,19 @@ int _file_close_r( struct _reent *reent, int fd )
 
 int _file_isatty_r( struct _reent *reent, int fd )
 {
+    struct reent_glue *r = (struct reent_glue*) reent;
+
     fd -= 3;
 
     reent->_errno = EBADF;
 
-    /* Is our fd in range? */
-    if( (0 <= fd) && (fd < _N_LISTS) ) {
-        /* Is our fd active? */
-        if( 0 != reent->_new._unused._nmalloc[fd] ) {
-            reent->_errno = EINVAL;
+    if( REENT_GLUE_MAGIC == r->magic ) {
+        /* Is our fd in range? */
+        if( (0 <= fd) && (fd < REENT_GLUE_MAX_FILES) ) {
+            /* Is our fd active? */
+            if( 0 != r->active[fd] ) {
+                reent->_errno = EINVAL;
+            }
         }
     }
 
@@ -320,31 +273,37 @@ int _file_isatty_r( struct _reent *reent, int fd )
 
 int _open_r( struct _reent *reent, const char *name, int flags, int mode )
 {
+    struct reent_glue *r = (struct reent_glue*) reent;
     int fd;
     FIL *file;
     BYTE mode_flags;
 
-    for( fd = 0; fd < _N_LISTS; fd++ ) {
-        if( 0 == reent->_new._unused._nmalloc[fd] ) {
+    if( REENT_GLUE_MAGIC != r->magic ) {
+        reent->_errno = ENFILE;
+        return -1;
+    }
+
+    for( fd = 0; fd < REENT_GLUE_MAX_FILES; fd++ ) {
+        if( false == r->active[fd] ) {
             /* We found an empty fd. */
             break;
         }
     }
 
-    if( _N_LISTS == fd ) {
+    if( REENT_GLUE_MAX_FILES == fd ) {
         reent->_errno = ENFILE;
         return -1;
     }
 
-    if( NULL == reent->_new._unused._nextf[fd] ) {
-        reent->_new._unused._nextf[fd] = (unsigned char *) malloc( sizeof(FF_SLOT) );
-        if( NULL == reent->_new._unused._nextf[fd] ) {
+    if( NULL == r->file[fd] ) {
+        r->file[fd] = (unsigned char *) malloc( sizeof(FF_SLOT) );
+        if( NULL == r->file[fd] ) {
             reent->_errno = ENOMEM;
             return -1;
         }
     }
 
-    file = (FIL *) reent->_new._unused._nextf[fd];
+    file = (FIL *) r->file[fd];
 
     /* We must have these. */
     if( O_RDONLY == (O_RDONLY & flags) ) {
@@ -364,7 +323,7 @@ int _open_r( struct _reent *reent, const char *name, int flags, int mode )
 
     switch( f_open(file, name, mode_flags) ) {
         case FR_OK:
-            reent->_new._unused._nmalloc[fd] = 1;
+            r->active[fd] = true;
             return (fd + 3);
         case FR_NO_FILE:
             reent->_errno = ENOENT;
@@ -394,4 +353,40 @@ int _open_r( struct _reent *reent, const char *name, int flags, int mode )
     }
 
     return -1;
+}
+
+/**
+ *  Used to take a reent struct & a file descriptor & return
+ *  the resulting file data.
+ *
+ *  @param reent the reent structure to search
+ *  @param fd the file descriptor to search for
+ *
+ *  @return the FIL on success, or NULL on error
+ */
+static FIL* __get_file( struct _reent *reent, int *fd )
+{
+    struct reent_glue *r = (struct reent_glue*) reent;
+
+    if( REENT_GLUE_MAGIC != r->magic ) {
+        reent->_errno = EBADF;
+        return NULL;
+    }
+
+    *fd -= 3;
+    /* Is our fd in range? */
+    if( (*fd < 0) || (REENT_GLUE_MAX_FILES <= *fd) ) {
+        /* Nope, bail */
+        reent->_errno = EBADF;
+        return NULL;
+    }
+
+    /* Is our fd active? */
+    if( false == r->active[*fd] ) {
+        /* Nope, bail */
+        reent->_errno = EBADF;
+        return NULL;
+    }
+
+    return (FIL *) r->file[*fd];
 }
