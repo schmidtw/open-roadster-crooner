@@ -460,25 +460,34 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
     db_status_t rv;
     bool isNewSong = true;
     db_traverse_t direction;
+    uint8_t disc_temp = disc;
     
     switch( cmd ) {
         case IRP_CMD__FAST_PLAY__FORWARD:
-        case IRP_CMD__SEEK__NEXT:
+            disc_temp = DM_SONG;
             direction = DT_NEXT;
             break;
+        case IRP_CMD__SEEK__NEXT:
+            direction = DT_NEXT;
+            if( is_random_enabled() ) {
+                direction = DT_RANDOM;
+            }
+            break;
         case IRP_CMD__FAST_PLAY__REVERSE:
+            disc_temp = DM_SONG;
+            direction = DT_PREVIOUS;
+            break;
         case IRP_CMD__SEEK__PREV:
             direction = DT_PREVIOUS;
+            if( is_random_enabled() ) {
+                direction = DT_RANDOM;
+            }
             break;
         default:
             return false;
     }
     
-    if( is_random_enabled() ) {
-        direction = DT_RANDOM;
-    }
-    
-    switch( disc ) {
+    switch( disc_temp ) {
         case DM_SONG:
             rv = next_song( song, direction, DL_SONG );
             if( DS_END_OF_LIST != rv ) {
