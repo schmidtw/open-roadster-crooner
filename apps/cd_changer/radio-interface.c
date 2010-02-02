@@ -549,6 +549,7 @@ static void __transition_db( ri_state_t *state )
 
                 ui_user_data_destroy( user_data );
             } else {
+                device_status_set( DS__CARD_UNUSABLE );
                 __checking_complete( state, 0, 0, 0 );
                 __no_discs_loop( state );
                 return;
