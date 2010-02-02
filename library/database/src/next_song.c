@@ -54,42 +54,21 @@ db_status_t next_song( song_node_t ** current_song,
     }
     
     if( NULL == *current_song ) {
-        switch( operation ) {
-            case DT_NEXT:
-            case DT_RANDOM:
-                group = (group_node_t *)rdn.groups.head->data;
-                if( NULL == group->artists.head ) {
-                    return DS_FAILURE;
-                }
-                artist = (artist_node_t *)group->artists.head->data;
-                if( NULL == artist->albums.head ) {
-                    return DS_FAILURE;
-                }
-                album = (album_node_t *)artist->albums.head->data;
-                if( NULL == album->songs.head ) {
-                    return DS_FAILURE;
-                }
-                *current_song = (song_node_t *)album->songs.head->data;
-                if( DT_NEXT == operation ) {
-                    return DS_SUCCESS;
-                }
-                /* else DT_RANDOM */
-                break;
-            case DT_PREVIOUS:
-                group = (group_node_t *)rdn.groups.tail->data;
-                if( NULL == group->artists.tail ) {
-                    return DS_FAILURE;
-                }
-                artist = (artist_node_t *)group->artists.tail->data;
-                if( NULL == artist->albums.tail ) {
-                    return DS_FAILURE;
-                }
-                album = (album_node_t *)artist->albums.tail->data;
-                if( NULL == album->songs.tail ) {
-                    return DS_FAILURE;
-                }
-                *current_song = (song_node_t *)album->songs.tail->data;
-                return DS_SUCCESS;
+        group = (group_node_t *)rdn.groups.head->data;
+        if( NULL == group->artists.head ) {
+            return DS_FAILURE;
+        }
+        artist = (artist_node_t *)group->artists.head->data;
+        if( NULL == artist->albums.head ) {
+            return DS_FAILURE;
+        }
+        album = (album_node_t *)artist->albums.head->data;
+        if( NULL == album->songs.head ) {
+            return DS_FAILURE;
+        }
+        *current_song = (song_node_t *)album->songs.head->data;
+        if( DT_NEXT == operation ) {
+            return DS_SUCCESS;
         }
     }
     
@@ -159,7 +138,7 @@ db_status_t next_song( song_node_t ** current_song,
                         album = (album_node_t *)album->node.prev->data;
                         rv = DS_SUCCESS;
                     }
-                    *current_song = (song_node_t *)album->songs.tail->data;
+                    *current_song = (song_node_t *)album->songs.head->data;
                     break;
                 case DL_ARTIST:
                     if( NULL == artist->node.prev ) {
@@ -170,7 +149,7 @@ db_status_t next_song( song_node_t ** current_song,
                         rv = DS_SUCCESS;
                     }
                     album = (album_node_t *)artist->albums.tail->data;
-                    *current_song = (song_node_t *)album->songs.tail->data;
+                    *current_song = (song_node_t *)album->songs.head->data;
                     break;
                 default: /* DL_GROUP */
                     if( NULL == group->node.next ) {
@@ -182,7 +161,7 @@ db_status_t next_song( song_node_t ** current_song,
                     }
                     artist = (artist_node_t *)group->artists.tail->data;
                     album = (album_node_t *)artist->albums.tail->data;
-                    *current_song = (song_node_t *)album->songs.tail->data;
+                    *current_song = (song_node_t *)album->songs.head->data;
                     break;
             }
             break;
