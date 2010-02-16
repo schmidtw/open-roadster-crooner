@@ -47,6 +47,7 @@ $| = 1;
 print STDOUT "--------------------------------------------------------------------------------\n";
 
 my $crlf = 2;
+my $ts = 1;
 while( 1 ) {
     my @temp = $port->read( 1 );
     if( undef == @temp ) {
@@ -55,7 +56,15 @@ while( 1 ) {
 
     my ($count, $saw) = @temp;
     if( 1 == $count ) {
-        printf( STDOUT "%02x ", ord($saw) );
+        if( 1 == $ts ) {
+            my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = localtime( time );
+            printf( STDOUT "[%02d/%02d/%4d %02d:%02d:%02d] %02x ",
+                    $mon, $mday, (1900 + $year), $hour, $min, $sec,
+                    ord($saw) );
+            $ts = 0;
+        } else {
+            printf( STDOUT "%02x ", ord($saw) );
+        }
         $crlf = 2;
     }
 
@@ -64,5 +73,6 @@ while( 1 ) {
     } elsif( 0 == $crlf ) {
         printf( STDOUT "\n" );
         $crlf--;
+        $ts = 1;
     }
 }
