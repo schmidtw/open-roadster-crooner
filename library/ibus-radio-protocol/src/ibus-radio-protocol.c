@@ -72,9 +72,9 @@ typedef enum {
 } ibus_state_t;
 
 typedef enum {
-    IRP_MAGAZINE_STATE__NORMAL      = 0x00,
-    IRP_MAGAZINE_STATE__NO_DISCS    = 0x10,
-    IRP_MAGAZINE_STATE__NO_MAGAZINE = 0x18
+    IRP_MAGAZINE_STATE__NORMAL   = 0x00,
+    IRP_MAGAZINE_STATE__NO_DISCS = 0x10,
+    IRP_MAGAZINE_STATE__ERROR    = 0x18
 } irp_magazine_state_t;
 
 /*----------------------------------------------------------------------------*/
@@ -121,22 +121,20 @@ irp_status_t irp_get_message( irp_rx_msg_t *msg )
             uint8_t checksum;
             int32_t i;
 
-
             checksum = 0;
             for( i = 0; i < ibus_msg->size; i++ ) {
                 checksum ^= ibus_msg->buffer[i];
             }
             if( 0 == checksum ) {
-                uint8_t dst = ibus_msg->buffer[2];
-                if( (((uint8_t) IBUS_DEVICE__CD_CHANGER)     == dst) ||
-                    (((uint8_t) IBUS_DEVICE__BROADCAST_LOW)  == dst) ||
-                    (((uint8_t) IBUS_DEVICE__BROADCAST_HIGH) == dst) )
-                {
-                    uint8_t src = ibus_msg->buffer[0];
-
-                    /* Message is to us */
-                    if( ((uint8_t) IBUS_DEVICE__CD_CHANGER) != src ) {
-                        /* Message is not from us */
+                uint8_t src = ibus_msg->buffer[0];
+                if( ((uint8_t) IBUS_DEVICE__CD_CHANGER) != src ) {
+                    uint8_t dst = ibus_msg->buffer[2];
+                    /* Message is not from us */
+                    if( (((uint8_t) IBUS_DEVICE__CD_CHANGER)     == dst) ||
+                        (((uint8_t) IBUS_DEVICE__BROADCAST_LOW)  == dst) ||
+                        (((uint8_t) IBUS_DEVICE__BROADCAST_HIGH) == dst) )
+                    {
+                        /* Message is to us */
                         uint8_t *payload = &ibus_msg->buffer[3];
                         uint8_t length = ibus_msg->buffer[1];
 
@@ -210,6 +208,11 @@ irp_status_t irp_get_message( irp_rx_msg_t *msg )
                             }
                         }
                     }
+
+                    if( false == done ) {
+                        msg->command = IRP_CMD__TRAFFIC;
+                        done = true;
+                    }
                 }
             }
         }
@@ -267,7 +270,7 @@ irp_status_t irp_send_normal_status( const irp_state_t device_state,
 
         payload[1] = (uint8_t) IBUS_STATE__NO_MAGAZINE;
         payload[2] = (uint8_t) IRP_AUDIO_STATUS__STOPPED;
-        payload[3] = (uint8_t) IRP_MAGAZINE_STATE__NO_MAGAZINE;
+        payload[3] = (uint8_t) IRP_MAGAZINE_STATE__NORMAL;
     } else if( 0 == discs_present ) {
         if( (IRP_STATE__STOPPED != device_state) ||
             (0 != current_disc) || (0 != current_track) )
@@ -348,7 +351,7 @@ irp_status_t irp_completed_disc_check( const uint8_t disc,
                                        const bool disc_present,
                                        const uint8_t active_map )
 {
-    uint8_t payload[] = { 0x39, 0x09, 0x09, 0, 0, 0, 0, 0 };
+    uint8_t payload[] = { 0x39, 0x09, 0x02, 0, 0, 0, 0, 0 };
     uint8_t msg[12];
 
     /* Make sure the disc is in range & also the active map is

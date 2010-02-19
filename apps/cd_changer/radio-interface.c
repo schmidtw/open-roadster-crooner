@@ -36,7 +36,8 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define RI_DEBUG 0
+#define RI_DEBUG    0
+#define RI_TIMEOUT  (TASK_DELAY_S(25))
 
 #define DEBUG_STACK_BUFFER  0
 #if (defined(RI_DEBUG) && (0 < RI_DEBUG))
@@ -214,11 +215,17 @@ int32_t ri_playback_command( const pb_command_t command )
  */
 static void __poll_task( void *params )
 {
-    irp_send_announce();
+    int32_t timeout;
+
+    timeout = RI_TIMEOUT;
 
     while( 1 ) {
         if( pdTRUE == xSemaphoreTake(__poll_cmd, RI_POLL_TIMEOUT) ) {
             _D3( "Poll Request\n" );
+            if( timeout <= 0 ) {
+                irp_send_announce();
+            }
+            timeout = RI_TIMEOUT;
             irp_send_poll_response();
             __connected_to_radio = true;
             /* If nothing else is going on, set the output to normal,
@@ -227,10 +234,19 @@ static void __poll_task( void *params )
                 device_status_set( DS__NORMAL );
             }
         } else {
-            _D3( "ibus timed out\n" );
-            device_status_set( DS__NO_RADIO_CONNECTION );
-            __connected_to_radio = false;
-            irp_send_announce();
+            if( 0 < timeout ) {
+                timeout -= RI_POLL_TIMEOUT;
+            } else {
+                ri_msg_t *ri_msg;
+
+                _D3( "ibus timed out\n" );
+                device_status_set( DS__NO_RADIO_CONNECTION );
+                __connected_to_radio = false;
+                xQueueReceive( __ri_idle, &ri_msg, portMAX_DELAY );
+                ri_msg->type = RI_MSG_TYPE__IBUS_CMD;
+                ri_msg->d.ibus.command = IRP_CMD__STOP;
+                xQueueSendToBack( __ri_active, &ri_msg, portMAX_DELAY );
+            }
         }
     }
 }
@@ -319,10 +335,13 @@ static void __ibus_task( void *params )
         do {
             irp_get_message( &msg->d.ibus );
 
-            if( IRP_CMD__POLL == msg->d.ibus.command ) {
+            if( (IRP_CMD__POLL == msg->d.ibus.command) ||
+                (false == __connected_to_radio) )
+            {
                 xSemaphoreGive( __poll_cmd );
             }
-        } while( IRP_CMD__POLL == msg->d.ibus.command );
+        } while( (IRP_CMD__POLL == msg->d.ibus.command) ||
+                 (IRP_CMD__TRAFFIC == msg->d.ibus.command) );
 
         xQueueSendToBack( __ri_active, &msg, portMAX_DELAY );
         msg = NULL;
@@ -404,12 +423,13 @@ static void __database_purge( void )
  */
 static void __send_state( ri_state_t *state )
 {
-    _D3( "Sending:\n"
+    _D3( "%s:\n"
          "       Status: 0x%04x\n"
          "     Magazine: %s\n"
          "        Discs: 0x%08x\n"
          " Current Disc: %d\n"
          "Current Track: %d\n",
+         (true == __connected_to_radio) ? "Sending" : "Not sending",
          state->device_status,
          (true == state->magazine_present) ? "present" : "not present",
          state->discs_present,
@@ -430,11 +450,13 @@ static void __send_state( ri_state_t *state )
         }
     }
 
-    irp_send_normal_status( state->device_status,
-                            state->magazine_present,
-                            state->discs_present,
-                            state->current_disc,
-                            state->current_track );
+    if( true == __connected_to_radio ) {
+        irp_send_normal_status( state->device_status,
+                                state->magazine_present,
+                                state->discs_present,
+                                state->current_disc,
+                                state->current_track );
+    }
 }
 
 /**
@@ -464,9 +486,13 @@ static void __checking_complete( ri_state_t *state,
              ((true == disc_present) ? "true" : "false"),
              active_map );
 
-        irp_completed_disc_check( i, disc_present, active_map );
+        if( true == __connected_to_radio ) {
+            irp_completed_disc_check( i, disc_present, active_map );
+        }
         if( i < 6 ) {
-            irp_going_to_check_disc( (i+1), active_map );
+            if( true == __connected_to_radio ) {
+                irp_going_to_check_disc( (i+1), active_map );
+            }
         }
     }
 
@@ -512,7 +538,9 @@ static void __transition_db( ri_state_t *state )
 {
     bool keep_going;
 
-    irp_going_to_check_disc( 1, 0 );
+    if( true == __connected_to_radio ) {
+        irp_going_to_check_disc( 1, 0 );
+    }
 
     device_status_set( DS__CARD_BEING_SCANNED );
 
@@ -554,10 +582,10 @@ static void __transition_db( ri_state_t *state )
                 __no_discs_loop( state );
                 return;
             }
-        } else if( (RI_MSG_TYPE__IBUS_CMD == msg->type) &&
-                   (IRP_CMD__GET_STATUS == msg->d.ibus.command) )
-        {
-            __send_state( state );
+        } else if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
+            if( true == __connected_to_radio ) {
+                irp_going_to_check_disc( 1, 0 );
+            }
             xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         } else {
             xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );

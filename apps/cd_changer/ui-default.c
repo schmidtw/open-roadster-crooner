@@ -134,6 +134,7 @@ static void __process_command( irp_state_t *device_status,
             case IRP_CMD__SCAN_DISC__DISABLE:
             case IRP_CMD__RANDOMIZE__ENABLE:
             case IRP_CMD__RANDOMIZE__DISABLE:
+            case IRP_CMD__TRAFFIC:
                 _D2( "MISC Ignored: 0x%04x\n", msg->d.ibus.command );
                 break;
 

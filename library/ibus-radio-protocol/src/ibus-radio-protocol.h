@@ -40,7 +40,8 @@ typedef enum {
     IRP_CMD__RANDOMIZE__ENABLE,
     IRP_CMD__RANDOMIZE__DISABLE,
     IRP_CMD__CHANGE_DISC,
-    IRP_CMD__POLL
+    IRP_CMD__POLL,
+    IRP_CMD__TRAFFIC
 } irp_cmd_t;
 
 typedef enum {
