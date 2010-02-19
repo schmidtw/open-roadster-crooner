@@ -160,7 +160,7 @@ bool fstream_open( const char *filename )
 {
     fstream_command_t *cmd;
 
-    _D1( "%s( %p )\n", __func__, filename );
+    _D1( "%s( '%s' )\n", __func__, filename );
     if( NULL == filename ) {
         _D1( "%s( %p ) -> failure\n", __func__, filename );
         return false;
@@ -173,7 +173,7 @@ bool fstream_open( const char *filename )
     cmd->name = (char *) (*__malloc_fn)( strlen(filename) + 1 );
     if( NULL == cmd->name ) {
         xQueueSendToBack( __command_idle, &cmd, 0 );
-        _D1( "%s( %p ) -> failure\n", __func__, filename );
+        _D1( "%s( '%s' ) -> failure\n", __func__, filename );
         return false;
     }
     strcpy( cmd->name, filename );
