@@ -23,6 +23,7 @@
 #include "device-status.h"
 #include "user-interface.h"
 #include "ui-default.h"
+#include "ui-t.h"
 
 #define ENABLE_STATUS_TASK      0
 #define REPORT_ALL_MALLOC       0
@@ -164,6 +165,7 @@ int main( void )
     ri_init();
     ui_init();
     ui_t_init();
+    //uid_init();
     playback_init( (tskIDLE_PRIORITY+1) );
     init_database( mi_list );
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );
