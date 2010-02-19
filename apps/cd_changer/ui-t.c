@@ -288,6 +288,7 @@ static void __process_command( irp_state_t *device_status,
 
             case IRP_CMD__GET_STATUS:   /* Never sent. */
             case IRP_CMD__POLL:         /* Never sent. */
+            case IRP_CMD__TRAFFIC:      /* Never sent. */
                 break;
         }
     } else {
