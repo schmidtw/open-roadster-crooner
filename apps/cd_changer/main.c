@@ -30,7 +30,7 @@
 
 #define ALLOW_USING_SLOW_MEMORY 1
 
-const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Testing";
+const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Crooner-1.0.2";
 
 void* pvPortMalloc( size_t size )
 {
