@@ -7,6 +7,7 @@ HEADERS = \
     ibus-radio-protocol.h
 
 SOURCES = \
-    ibus-radio-protocol.c
+    ibus-radio-protocol.c \
+    ibus-radio-to-string.c
 
 include ../../make/Makefile.common

@@ -157,4 +157,22 @@ irp_status_t irp_going_to_check_disc( const uint8_t disc,
 irp_status_t irp_completed_disc_check( const uint8_t disc,
                                        const bool disc_present,
                                        const uint8_t active_map );
+
+/**
+ *  Used to convert the state type into a string.
+ *
+ *  @param state the state to convert to a string
+ *
+ *  @return string form of the state
+ */
+const char* irp_state_to_string( const irp_state_t state );
+
+/**
+ *  Used to convert the command type into a string.
+ *
+ *  @param cmd the command to convert to a string
+ *
+ *  @return string form of the state
+ */
+const char* irp_cmd_to_string( const irp_cmd_t cmd );
 #endif
