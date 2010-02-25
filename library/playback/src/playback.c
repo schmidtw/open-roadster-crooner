@@ -192,9 +192,11 @@ int32_t playback_command( const pb_command_t command,
             return -1;
     }
 
+    memset( cmd, 0, sizeof(pb_command_msg_t) );
+
     cmd->cmd = cmd_int;
     cmd->tx_id = __tx_id++;
-    cmd->filename = NULL;
+    cmd->cb_fn = cb_fn;
 
     tx_temp = cmd->tx_id;
     xQueueSendToBack( __cmd_active, &cmd, portMAX_DELAY );
