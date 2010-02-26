@@ -21,7 +21,9 @@
 #include <stdint.h>
 
 #include <freertos/task.h>
+#ifdef SUPPORT_TEXT
 #include <display/display.h>
+#endif
 #include <database/database.h>
 
 #include "user-interface.h"
@@ -604,6 +606,7 @@ static void __update_song_display_info( song_node_t *song, const uint8_t disc )
     if( false == is_display_enabled() ) {
         return;
     }
+#ifdef SUPPORT_TEXT
     switch( disc ) {
         case DM_SONG:
             display_start_text(song->title);
@@ -620,6 +623,7 @@ static void __update_song_display_info( song_node_t *song, const uint8_t disc )
         default:
             break;
     }
+#endif
 }
 
 static void update_text_display_state( irp_state_t *device_status,
@@ -654,10 +658,12 @@ static void update_text_display_state( irp_state_t *device_status,
  */
 static void set_display_state( bool new_state )
 {
+#ifdef SUPPORT_TEXT
     display_text_state = new_state;
     if( false == new_state ) {
         display_stop_text();
     }
+#endif
 }
 
 /**

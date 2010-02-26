@@ -10,7 +10,9 @@
 #include <file-stream/file-stream.h>
 #include <database/database.h>
 #include <memcard/memcard.h>
+#ifdef SUPPORT_TEXT
 #include <display/display.h>
+#endif
 #include <dsp/dsp.h>
 #include <led/led.h>
 #include <media-interface/media-interface.h>
@@ -169,7 +171,9 @@ int main( void )
     playback_init( (tskIDLE_PRIORITY+1) );
     init_database( mi_list );
     fstream_init( (tskIDLE_PRIORITY+2), malloc, free );
+#ifdef SUPPORT_TEXT
     display_init( ibus_phone_display , 5000, 15000, 10000, 1, true);
+#endif
 
     /* Start the RTOS - never returns. */
     __enable_os = true;
