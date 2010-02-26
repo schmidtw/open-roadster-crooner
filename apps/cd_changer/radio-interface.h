@@ -72,10 +72,11 @@ bool ri_init( void );
  *  @param current_disc the current disc to report to the radio
  *  @param current_track the current track to report to the radio
  */
-void ri_send_state( irp_state_t device_status,
+void ri_send_state( const irp_state_t device_status,
+                    const irp_mode_t mode,
                     const uint8_t disc_map,
-                    uint8_t current_disc,
-                    uint8_t current_track );
+                    const uint8_t current_disc,
+                    const uint8_t current_track );
 
 /**
  *  Used to play a song from a user interface implementation.

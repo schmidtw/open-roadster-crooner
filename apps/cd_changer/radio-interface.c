@@ -79,6 +79,7 @@
 /*----------------------------------------------------------------------------*/
 typedef struct {
     irp_state_t device_status;
+    irp_mode_t device_mode;
     bool magazine_present;
     uint8_t discs_present;
     uint8_t current_disc;
@@ -178,14 +179,16 @@ failure:
 }
 
 /* See radio-interface.h for details */
-void ri_send_state( irp_state_t device_status,
+void ri_send_state( const irp_state_t device_status,
+                    const irp_mode_t device_mode,
                     const uint8_t disc_map,
-                    uint8_t current_disc,
-                    uint8_t current_track )
+                    const uint8_t current_disc,
+                    const uint8_t current_track )
 {
     ri_state_t state;
 
     state.device_status = device_status;
+    state.device_mode = device_mode;
     state.magazine_present = true;
     state.discs_present = disc_map;
     state.current_disc = current_disc;
@@ -198,13 +201,13 @@ void ri_send_state( irp_state_t device_status,
 int32_t ri_playback_play( song_node_t *song )
 {
     return playback_play( song->file_location, song->track_gain,
-                          song->track_peak, song->play_fn, __playback_cb );
+                          song->track_peak, song->play_fn, &__playback_cb );
 }
 
 /* See radio-interface.h for details */
 int32_t ri_playback_command( const pb_command_t command )
 {
-    return playback_command( command, __playback_cb );
+    return playback_command( command, &__playback_cb );
 }
 
 /*----------------------------------------------------------------------------*/
@@ -259,6 +262,7 @@ static void __blu_task( void *params )
     ri_state_t state;
 
     state.device_status = IRP_STATE__STOPPED;
+    state.device_status = IRP_MODE__NORMAL;
     state.magazine_present = false;
     state.magazine_indexed = false;
     state.discs_present = 0;
@@ -298,6 +302,7 @@ static void __blu_task( void *params )
                     state.current_disc = 0;
                     state.current_track = 0;
                     state.magazine_present = false;
+                    state.magazine_indexed = false;
                     __send_state( &state );
                     break;
 
@@ -424,13 +429,14 @@ static void __database_purge( void )
 static void __send_state( ri_state_t *state )
 {
     _D3( "%s:\n"
-         "       Status: 0x%04x\n"
+         "       Status: 0x%04x - %s\n"
          "     Magazine: %s\n"
          "        Discs: 0x%08x\n"
          " Current Disc: %d\n"
          "Current Track: %d\n",
          (true == __connected_to_radio) ? "Sending" : "Not sending",
          state->device_status,
+         irp_state_to_string(state->device_status),
          (true == state->magazine_present) ? "present" : "not present",
          state->discs_present,
          state->current_disc,
@@ -452,6 +458,7 @@ static void __send_state( ri_state_t *state )
 
     if( true == __connected_to_radio ) {
         irp_send_normal_status( state->device_status,
+                                state->device_mode,
                                 state->magazine_present,
                                 state->discs_present,
                                 state->current_disc,
@@ -672,6 +679,7 @@ static void __command_loop( ri_state_t *state, song_node_t **song, void *user_da
                 __send_state( state );
             } else {
                 ui_process_command( &state->device_status,
+                                    &state->device_mode,
                                     state->discs_present,
                                     &state->current_disc,
                                     &state->current_track,

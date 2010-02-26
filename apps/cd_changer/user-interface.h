@@ -117,6 +117,7 @@ typedef void (*ui_initial_song_set_fct)( song_node_t **song, void *user_data );
  *  @param user_data the opaque user_data
  */
 typedef void (*ui_process_command_fct)( irp_state_t *device_status,
+                                        irp_mode_t *device_mode,
                                         const uint8_t disc_map,
                                         uint8_t *current_disc,
                                         uint8_t *current_track,
@@ -174,8 +175,8 @@ const char** ui_dir_map_get( size_t *size );
 void ui_dir_map_release( const char **map );
 void ui_get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
                        song_node_t **song, void *user_data );
-void ui_process_command( irp_state_t *device_status, const uint8_t disc_map,
-                         uint8_t *current_disc, uint8_t *current_track,
-                         const ri_msg_t *msg, song_node_t **song,
-                         void *user_data );
+void ui_process_command( irp_state_t *device_status, irp_mode_t *device_mode,
+                         const uint8_t disc_map, uint8_t *current_disc,
+                         uint8_t *current_track, const ri_msg_t *msg,
+                         song_node_t **song, void *user_data );
 #endif

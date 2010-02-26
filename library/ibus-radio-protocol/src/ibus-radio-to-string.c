@@ -88,6 +88,10 @@ const char* irp_cmd_to_string( const irp_cmd_t cmd )
             return "IRP_CMD__SEEK__NEXT";
         case IRP_CMD__SEEK__PREV:
             return "IRP_CMD__SEEK__PREV";
+        case IRP_CMD__SEEK__ALT_NEXT:
+            return "IRP_CMD__SEEK__ALT_NEXT";
+        case IRP_CMD__SEEK__ALT_PREV:
+            return "IRP_CMD__SEEK__ALT_PREV";
         case IRP_CMD__SCAN_DISC__ENABLE:
             return "IRP_CMD__SCAN_DISC__ENABLE";
         case IRP_CMD__SCAN_DISC__DISABLE:
@@ -102,6 +106,20 @@ const char* irp_cmd_to_string( const irp_cmd_t cmd )
             return "IRP_CMD__POLL";
         case IRP_CMD__TRAFFIC:
             return "IRP_CMD__TRAFFIC";
+    }
+
+    return "unknown";
+}
+
+const char* irp_mode_to_string( const irp_mode_t mode )
+{
+    switch( mode ) {
+        case IRP_MODE__NORMAL:
+            return "IRP_MODE__NORMAL";
+        case IRP_MODE__SCANNING:
+            return "IRP_MODE__SCANNING";
+        case IRP_MODE__RANDOM:
+            return "IRP_MODE__RANDOM";
     }
 
     return "unknown";

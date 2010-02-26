@@ -29,8 +29,10 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define DIR_MAP_SIZE  0
-#define UI_T_DEBUG    0
+#define DIR_MAP_SIZE    0
+#define UI_HISTORY      4
+
+#define UI_T_DEBUG      0
 
 #define _D1(...)
 #define _D2(...)
@@ -63,13 +65,20 @@ typedef enum {
     DM_TEXT_DISPLAY = 5
 } disc_mode_t;
 
+typedef struct {
+    size_t valid;
+    ri_msg_t msg[UI_HISTORY];
+} history_t;
+
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
+static void* __get_user_data();
 static const char** __dir_map_get( size_t *size );
 static void __get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
                              song_node_t **song, void *user_data );
 static void __process_command( irp_state_t *device_status,
+                               irp_mode_t *device_mode,
                                const uint8_t disc_map,
                                uint8_t *current_disc,
                                uint8_t *current_track,
@@ -82,7 +91,10 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc );
 static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
 static void __update_song_display_info( song_node_t *song, const uint8_t disc );
 static void update_text_display_state( irp_state_t *device_status,
-        const uint8_t disc_map, const uint8_t disc, uint8_t *track );
+                                       const irp_mode_t device_mode,
+                                       const uint8_t disc_map,
+                                       const uint8_t disc,
+                                       uint8_t *track );
 static void set_display_state( bool new_state );
 static bool is_display_enabled( void );
 static uint8_t get_dispaly_track( bool disp_state );
@@ -93,13 +105,15 @@ static void enable_scan_state( void );
 static void disable_scan_state( void );
 static bool is_scan_enabled( void );
 static void start_scan_timer( void );
+static void history_push( history_t *history, const ri_msg_t *msg );
+static bool history_get_last_cmd( history_t *history, irp_cmd_t *cmd );
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
 static const ui_impl_t __impl = {
     .name = "t",
-    .ui_user_data_init_fn = NULL,
+    .ui_user_data_init_fn = __get_user_data,
     .ui_user_data_destroy_fn = NULL,
     .ui_dir_map_get_fn = &__dir_map_get,
     .ui_dir_map_release_fn = NULL,
@@ -126,6 +140,15 @@ bool ui_t_init( void )
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
 /* See user-interface.h for details. */
+static void* __get_user_data()
+{
+    static history_t h;
+
+    h.valid = 0;
+    return &h;
+}
+
+/* See user-interface.h for details. */
 static const char** __dir_map_get( size_t *size )
 {
     _D2("__dir_map_get() - %d\n", __LINE__);
@@ -139,7 +162,7 @@ static void __get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
                              song_node_t **song, void *user_data )
 {
     _D2("__get_disc_info() - %d\n", __LINE__);
-    
+
     *map = __map_get();
     *disc = 1;
     *track = 1;
@@ -148,6 +171,7 @@ static void __get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
 
 /* See user-interface.h for details. */
 static void __process_command( irp_state_t *device_status,
+                               irp_mode_t *device_mode,
                                const uint8_t disc_map,
                                uint8_t *current_disc,
                                uint8_t *current_track,
@@ -155,134 +179,159 @@ static void __process_command( irp_state_t *device_status,
                                song_node_t **song,
                                void *user_data )
 {
+    irp_cmd_t last;
     bool shouldSendText = false;
-    
-    _D2( "device_status: 0x%04x -- %s\n", *device_status,
-            IRP_STATE__STOPPED==*device_status?"IRP_STATE__STOPPED":
-            IRP_STATE__PAUSED==*device_status?"IRP_STATE__PAUSED":
-            IRP_STATE__PLAYING==*device_status?"IRP_STATE__PLAYING":
-            IRP_STATE__FAST_PLAYING__FORWARD==*device_status?"IRP_STATE__FAST_PLAYING__FORWARD":
-            IRP_STATE__FAST_PLAYING__REVERSE==*device_status?"IRP_STATE__FAST_PLAYING__REVERSE":
-            IRP_STATE__SEEKING==*device_status?"IRP_STATE__SEEKING":
-            IRP_STATE__SEEKING__NEXT==*device_status?"IRP_STATE__SEEKING__NEXT":
-            IRP_STATE__SEEKING__PREV==*device_status?"IRP_STATE__SEEKING__PREV":
-            IRP_STATE__LOADING_DISC==*device_status?"IRP_STATE__LOADING_DISC":"unknown" );
+    bool send_status = true;
+    history_t *history = (history_t *) user_data;
+
+    _D2( "device_status: 0x%04x -- %s\n", *device_status, irp_state_to_string(*device_status) );
+
+    /* Just make it not match the search below... */
+    last = IRP_CMD__GET_STATUS;
+    history_get_last_cmd( history, &last );
+
+    _D2( "Last cmd: %s\n", irp_cmd_to_string(last) );
 
     if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
-        _D2( "msg->type == RI_MSG_TYPE__IBUS_CMD\n" );
+
+        _D2( "RI_MSG_TYPE__IBUS_CMD:%s\n", irp_cmd_to_string(msg->d.ibus.command) );
+
         switch( msg->d.ibus.command ) {
             case IRP_CMD__SCAN_DISC__ENABLE:
+                *device_mode = IRP_MODE__SCANNING;
+                enable_scan_state();
+                break;
             case IRP_CMD__SCAN_DISC__DISABLE:
-            case IRP_CMD__RANDOMIZE__ENABLE:
-            case IRP_CMD__RANDOMIZE__DISABLE:
-                if( IRP_CMD__SCAN_DISC__ENABLE == msg->d.ibus.command ) {
-                    _D2( "IRP_CMD__SCAN_DISC__ENABLE\n" );
-                    enable_scan_state();
-                } else if( IRP_CMD__SCAN_DISC__DISABLE == msg->d.ibus.command ) {
-                    _D2( "IRP_CMD__SCAN_DISC__DISABLE\n" );
-                    disable_scan_state();
-                } else if( IRP_CMD__RANDOMIZE__ENABLE == msg->d.ibus.command ) {
-                    _D2( "IRP_CMD__RANDOMIZE__ENABLE\n" );
-                    set_random_state(true);
-                } else {
-                    _D2( "IRP_CMD__RANDOMIZE__DISABLE\n" );
-                    set_random_state(false);
+                if( IRP_MODE__SCANNING == *device_mode ) {
+                    *device_mode = IRP_MODE__NORMAL;
                 }
-                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
+                disable_scan_state();
+                break;
+            case IRP_CMD__RANDOMIZE__ENABLE:
+                *device_mode = IRP_MODE__RANDOM;
+                set_random_state( true );
+                break;
+            case IRP_CMD__RANDOMIZE__DISABLE:
+                if( IRP_MODE__RANDOM == *device_mode ) {
+                    *device_mode = IRP_MODE__NORMAL;
+                }
+                set_random_state( false );
                 break;
 
             case IRP_CMD__STOP:
-                _D2( "IRP_CMD__STOP\n" );
-                if( (IRP_STATE__PLAYING == *device_status) ||
-                    (IRP_STATE__PAUSED == *device_status) )
-                {
-                    ri_playback_command( PB_CMD__PAUSE );
+                if( NULL == *song ) {
+                    *device_status = IRP_STATE__STOPPED;
+                } else {
+                    if( (IRP_CMD__STOP != last) &&
+                        (IRP_CMD__PAUSE != last) &&
+                        (IRP_STATE__STOPPED != *device_status) )
+                    {
+                        ri_playback_command( PB_CMD__PAUSE );
+                    }
+                    send_status = false;
                 }
                 break;
 
             case IRP_CMD__PAUSE:
-                _D2( "IRP_CMD__PAUSE\n" );
-                if( IRP_STATE__PLAYING == *device_status ) {
-                    ri_playback_command( PB_CMD__PAUSE );
+                if( NULL == *song ) {
+                    *device_status = IRP_STATE__PAUSED;
+                } else {
+                    send_status = false;
+
+                    if( (IRP_CMD__STOP != last) &&
+                        (IRP_CMD__PAUSE != last) )
+                    {
+                        ri_playback_command( PB_CMD__PAUSE );
+                    }
+                    send_status = false;
                 }
                 break;
 
             case IRP_CMD__PLAY:
-                _D2( "IRP_CMD__PLAY\n" );
-                if( IRP_STATE__STOPPED == *device_status ) {
-                    if( NULL == *song ) {
-                        if( is_random_enabled() ) {
-                            next_song( song, DT_RANDOM, DL_GROUP );
-                        } else {
-                            /* Not in the random mode */
-                            next_song( song, DT_NEXT, DL_SONG );
-                        }
+                if( NULL == *song ) {
+                    if( is_random_enabled() ) {
+                        next_song( song, DT_RANDOM, DL_GROUP );
+                    } else {
+                        /* Not in the random mode */
+                        next_song( song, DT_NEXT, DL_SONG );
                     }
                     ri_playback_play( *song );
-                } else if( IRP_STATE__PAUSED == *device_status ) {
+                } else if( (IRP_CMD__SEEK__PREV == last) ||
+                           (IRP_CMD__SEEK__NEXT == last) )
+                {
+                    ri_playback_play( *song );
+                } else {
                     ri_playback_command( PB_CMD__RESUME );
                 }
+                send_status = false;
                 break;
 
             case IRP_CMD__FAST_PLAY__FORWARD:
-                _D2( "IRP_CMD__FAST_PLAY__FORWARD\n" );
-
                 if( IRP_STATE__FAST_PLAYING__FORWARD != *device_status ) {
                     *device_status = IRP_STATE__FAST_PLAYING__FORWARD;
-                    ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                     if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
                         ri_playback_play( *song );
                     } else {
-                        update_text_display_state(device_status, disc_map, *current_disc, current_track);
+                        update_text_display_state(device_status, *device_mode, disc_map, *current_disc, current_track);
                     }
                 }
                 break;
 
             case IRP_CMD__FAST_PLAY__REVERSE:
-                _D2( "IRP_CMD__FAST_PLAY__REVERSE\n" );
                 if( IRP_STATE__FAST_PLAYING__REVERSE != *device_status ) {
                     *device_status = IRP_STATE__FAST_PLAYING__REVERSE;
-                    ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-                    if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
+                    if( __find_song(song, msg->d.ibus.command, *current_disc) ) {
                         ri_playback_play( *song );
                     } else {
-                        update_text_display_state(device_status, disc_map, *current_disc, current_track);
+                        update_text_display_state(device_status, *device_mode, disc_map, *current_disc, current_track);
                     }
                 }
                 break;
 
             case IRP_CMD__SEEK__NEXT:
-            {
-                _D2( "IRP_CMD__SEEK__NEXT\n" );
-                *device_status = IRP_STATE__SEEKING__NEXT;
-                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-                if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
-                    ri_playback_play( *song );
-                } else {
-                    update_text_display_state(device_status, disc_map, *current_disc, current_track);
+                ri_send_state( IRP_STATE__SEEKING__NEXT, *device_mode, disc_map, *current_disc, *current_track );
+                *device_status = IRP_STATE__SEEKING;
+                if( !__find_song(song, msg->d.ibus.command, *current_disc) ) {
+                    update_text_display_state(device_status, *device_mode, disc_map, *current_disc, current_track);
                 }
+                send_status = false;
                 break;
-            }
+
+            case IRP_CMD__SEEK__ALT_NEXT:
+                ri_send_state( IRP_STATE__SEEKING__NEXT, *device_mode, disc_map, *current_disc, *current_track );
+                *device_status = IRP_STATE__SEEKING;
+                if( !__find_song(song, msg->d.ibus.command, *current_disc) ) {
+                    update_text_display_state(device_status, *device_mode, disc_map, *current_disc, current_track);
+                }
+                ri_playback_play( *song );
+                send_status = false;
+                break;
 
             case IRP_CMD__SEEK__PREV:
-                _D2( "IRP_CMD__SEEK__PREV\n" );
-                *device_status = IRP_STATE__SEEKING__PREV;
-                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
-                if( __find_song( song, msg->d.ibus.command, *current_disc ) ) {
-                    ri_playback_play( *song );
-                } else {
-                    update_text_display_state(device_status, disc_map, *current_disc, current_track);
+                ri_send_state( IRP_STATE__SEEKING__PREV, *device_mode, disc_map, *current_disc, *current_track );
+                *device_status = IRP_STATE__SEEKING;
+                if( !__find_song(song, msg->d.ibus.command, *current_disc) ) {
+                    update_text_display_state(device_status, *device_mode, disc_map, *current_disc, current_track);
                 }
+                send_status = false;
+                break;
+
+            case IRP_CMD__SEEK__ALT_PREV:
+                ri_send_state( IRP_STATE__SEEKING__PREV, *device_mode, disc_map, *current_disc, *current_track );
+                *device_status = IRP_STATE__SEEKING;
+                if( !__find_song(song, msg->d.ibus.command, *current_disc) ) {
+                    update_text_display_state(device_status, *device_mode, disc_map, *current_disc, current_track);
+                }
+                ri_playback_play( *song );
+                send_status = false;
                 break;
 
             case IRP_CMD__CHANGE_DISC:
-                _D2( "IRP_CMD__CHANGE_DISC\n" );
                 *device_status = IRP_STATE__LOADING_DISC;
-                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
+                ri_send_state( *device_status, *device_mode, disc_map, *current_disc, *current_track );
                 *current_disc = msg->d.ibus.disc;
                 *current_track = __find_display_number(*song, *current_disc);
                 *device_status = IRP_STATE__PLAYING;
-                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
                 shouldSendText = true;
                 break;
 
@@ -291,34 +340,55 @@ static void __process_command( irp_state_t *device_status,
             case IRP_CMD__TRAFFIC:      /* Never sent. */
                 break;
         }
+
+        if( true == send_status ) {
+            ri_send_state( *device_status, *device_mode, disc_map, *current_disc, *current_track );
+        }
     } else {
-        _D2( "RI_MSG_TYPE__PLAYBACK_STATUS\n" );
         switch( msg->d.song.status ) {
             case PB_STATUS__PLAYING:
-                _D2( "PB_STATUS__PLAYING\n" );
+                _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__PLAYING\n" );
+
                 *current_track = __find_display_number( *song, *current_disc );
                 *device_status = IRP_STATE__PLAYING;
                 shouldSendText = true;
                 break;
+
             case PB_STATUS__PAUSED:
-                _D2( "PB_STATUS__PAUSED\n" );
-                *device_status = IRP_STATE__PAUSED;
+                _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__PAUSED\n" );
+                if( IRP_CMD__PAUSE == last ) {
+                    *device_status = IRP_STATE__PAUSED;
+                } else {
+                    *device_status = IRP_STATE__STOPPED;
+                }
                 break;
+
             case PB_STATUS__STOPPED:
-                _D2( "PB_STATUS__STOPPED\n" );
-                *device_status = IRP_STATE__STOPPED;
+                _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__STOPPED\n" );
+                if( IRP_CMD__PAUSE == last ) {
+                    *device_status = IRP_STATE__PAUSED;
+                } else {
+                    *device_status = IRP_STATE__STOPPED;
+                }
+                send_status = false;
                 break;
 
             case PB_STATUS__ERROR:
-                _D2( "PB_STATUS__ERROR\n" );
+                _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__ERROR\n" );
                 /* Without this we seem to deadlock on "full error" testing. */
                 /* The real error seems to be due to the physical ibus driver. */
                 vTaskDelay( 100 );
 
             case PB_STATUS__END_OF_SONG:
-                _D2( "PB_STATUS__END_OF_SONG\n" );
-                *device_status = IRP_STATE__SEEKING__NEXT;
-                ri_send_state( *device_status, disc_map, *current_disc, *current_track );
+                _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__END_OF_SONG\n" );
+                if( (IRP_STATE__SEEKING__NEXT == *device_status) ||
+                    (IRP_STATE__SEEKING__PREV == *device_status) )
+                {
+                    send_status = false;
+                } else {
+                    *device_status = IRP_STATE__SEEKING__NEXT;
+                }
+
                 if( is_random_enabled() ) {
                     __find_song( song, IRP_CMD__SEEK__NEXT, *current_disc );
                 } else {
@@ -328,19 +398,23 @@ static void __process_command( irp_state_t *device_status,
                 shouldSendText = true;
                 break;
 //            case PB_STATUS__SCAN_NEXT_SONG:
-//                _D2( "PB_STATUS__SCAN_NEXT_SONG\n" );
+//                _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__SCAN_NEXT_SONG\n" );
 //                *device_status = IRP_CMD__SEEK__NEXT;
-//                ri_send_state( *device_status, disc_map, *current_disc, *current_track);
+//                ri_send_state( *device_status, *device_mode, disc_map, *current_disc, *current_track);
 //                __find_song( song, IRP_CMD__SEEK__NEXT, (uint8_t)DM_SONG );
 //                ri_playback_play( *song );
 //                shouldSendText = true;
 //                break;
         }
-        ri_send_state( *device_status, disc_map, *current_disc, *current_track );
+        if( true == send_status ) {
+            ri_send_state( *device_status, *device_mode, disc_map, *current_disc, *current_track );
+        }
     }
     if( true == shouldSendText ) {
         __update_song_display_info(*song, *current_disc);
     }
+
+    history_push( history, msg );
 }
 
 /**
@@ -469,6 +543,7 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
             direction = DT_NEXT;
             break;
         case IRP_CMD__SEEK__NEXT:
+        case IRP_CMD__SEEK__ALT_NEXT:
             direction = DT_NEXT;
             if( is_random_enabled() ) {
                 direction = DT_RANDOM;
@@ -479,6 +554,7 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
             direction = DT_PREVIOUS;
             break;
         case IRP_CMD__SEEK__PREV:
+        case IRP_CMD__SEEK__ALT_PREV:
             direction = DT_PREVIOUS;
             if( is_random_enabled() ) {
                 direction = DT_RANDOM;
@@ -547,22 +623,25 @@ static void __update_song_display_info( song_node_t *song, const uint8_t disc )
 }
 
 static void update_text_display_state( irp_state_t *device_status,
-        const uint8_t disc_map, const uint8_t disc, uint8_t *track )
+                                       const irp_mode_t device_mode,
+                                       const uint8_t disc_map,
+                                       const uint8_t disc,
+                                       uint8_t *track )
 {
     if( DM_TEXT_DISPLAY == disc )
     {
         *device_status = IRP_STATE__STOPPED;
-        ri_send_state( *device_status, disc_map, disc, *track );
+        ri_send_state( *device_status, device_mode, disc_map, disc, *track );
         
         *track = get_dispaly_track( is_display_enabled() );
         *device_status = IRP_STATE__PLAYING;
-        ri_send_state( *device_status, disc_map, disc, *track );
+        ri_send_state( *device_status, device_mode, disc_map, disc, *track );
     } else if( DM_RANDOM == disc ) {
         *device_status = IRP_STATE__STOPPED;
-        ri_send_state( *device_status, disc_map, disc, *track );
+        ri_send_state( *device_status, device_mode, disc_map, disc, *track );
         *track = get_random_track( is_random_enabled() );
         *device_status = IRP_STATE__PLAYING;
-        ri_send_state( *device_status, disc_map, disc, *track );
+        ri_send_state( *device_status, device_mode, disc_map, disc, *track );
     }
 }
 
@@ -686,4 +765,39 @@ static bool is_scan_enabled( void )
 static void start_scan_timer( void )
 {
     return;
+}
+
+static void history_push( history_t *history, const ri_msg_t *msg )
+{
+    if( (NULL != history) && (NULL != msg) ) {
+        int i;
+
+        for( i = UI_HISTORY - 1; 0 < i; i-- ) {
+            memcpy( &history->msg[i], &history->msg[i - 1], sizeof(ri_msg_t) );
+        }
+        memcpy( &history->msg[0], msg, sizeof(ri_msg_t) );
+
+        history->valid++;
+        if( UI_HISTORY <= history->valid ) {
+            history->valid = UI_HISTORY;
+        }
+    }
+}
+
+static bool history_get_last_cmd( history_t *history, irp_cmd_t *cmd )
+{
+    if( NULL != history ) {
+        int i;
+
+        for( i = 0; i < history->valid; i++ ) {
+            if( RI_MSG_TYPE__IBUS_CMD == history->msg[i].type ) {
+                if( NULL != cmd ) {
+                    *cmd = history->msg[i].d.ibus.command;
+                }
+                return true;
+            }
+        }
+    }
+
+    return false;
 }

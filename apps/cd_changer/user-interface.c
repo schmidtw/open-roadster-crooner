@@ -151,12 +151,12 @@ void ui_get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
 }
 
 /* See user-interface.h for details. */
-void ui_process_command( irp_state_t *device_status, const uint8_t disc_map,
-                         uint8_t *current_disc, uint8_t *current_track,
-                         const ri_msg_t *msg, song_node_t **song,
-                         void *user_data )
+void ui_process_command( irp_state_t *device_status, irp_mode_t *device_mode,
+                         const uint8_t disc_map, uint8_t *current_disc,
+                         uint8_t *current_track, const ri_msg_t *msg,
+                         song_node_t **song, void *user_data )
 {
-    (*__current->ui_process_command_fn)( device_status, disc_map, current_disc,
+    (*__current->ui_process_command_fn)( device_status, device_mode, disc_map, current_disc,
                                          current_track, msg, song, user_data );
 }
 

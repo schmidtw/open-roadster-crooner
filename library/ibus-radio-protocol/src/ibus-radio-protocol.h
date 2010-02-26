@@ -35,6 +35,8 @@ typedef enum {
     IRP_CMD__FAST_PLAY__REVERSE,
     IRP_CMD__SEEK__NEXT,
     IRP_CMD__SEEK__PREV,
+    IRP_CMD__SEEK__ALT_NEXT,
+    IRP_CMD__SEEK__ALT_PREV,
     IRP_CMD__SCAN_DISC__ENABLE,
     IRP_CMD__SCAN_DISC__DISABLE,
     IRP_CMD__RANDOMIZE__ENABLE,
@@ -55,6 +57,12 @@ typedef enum {
     IRP_STATE__SEEKING__PREV,
     IRP_STATE__LOADING_DISC
 } irp_state_t;
+
+typedef enum {
+    IRP_MODE__NORMAL,
+    IRP_MODE__SCANNING,
+    IRP_MODE__RANDOM
+} irp_mode_t;
 
 typedef struct {
     irp_cmd_t command;
@@ -108,6 +116,7 @@ void irp_send_poll_response( void );
  *      @retval IRP_ERROR_PARAMETER Failure
  */
 irp_status_t irp_send_normal_status( const irp_state_t device_state,
+                                     const irp_mode_t mode,
                                      const bool magazine_present,
                                      const uint8_t discs_present,
                                      const uint8_t current_disc,
@@ -175,4 +184,13 @@ const char* irp_state_to_string( const irp_state_t state );
  *  @return string form of the state
  */
 const char* irp_cmd_to_string( const irp_cmd_t cmd );
+
+/**
+ *  Used to convert the mode type into a string.
+ *
+ *  @param mode the command to convert to a string
+ *
+ *  @return string form of the state
+ */
+const char* irp_mode_to_string( const irp_mode_t mode );
 #endif

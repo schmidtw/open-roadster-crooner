@@ -169,12 +169,20 @@ irp_status_t irp_get_message( irp_rx_msg_t *msg )
                                     }
                                     break;
                                 case IRP_RX_CMD__SEEK:
-                                case IRP_RX_CMD__ALT_SEEK:
                                     if( 0 == payload[2] ) {
                                         msg->command = IRP_CMD__SEEK__NEXT;
                                         done = true;
                                     } else if( 1 == payload[2] ) {
                                         msg->command = IRP_CMD__SEEK__PREV;
+                                        done = true;
+                                    }
+                                    break;
+                                case IRP_RX_CMD__ALT_SEEK:
+                                    if( 0 == payload[2] ) {
+                                        msg->command = IRP_CMD__SEEK__ALT_NEXT;
+                                        done = true;
+                                    } else if( 1 == payload[2] ) {
+                                        msg->command = IRP_CMD__SEEK__ALT_PREV;
                                         done = true;
                                     }
                                     break;
@@ -253,6 +261,7 @@ void irp_send_poll_response( void )
 
 /* See ibus-radio-protocol.h for details. */
 irp_status_t irp_send_normal_status( const irp_state_t device_state,
+                                     const irp_mode_t mode,
                                      const bool magazine_present,
                                      const uint8_t discs_present,
                                      const uint8_t current_disc,
@@ -262,23 +271,11 @@ irp_status_t irp_send_normal_status( const irp_state_t device_state,
     uint8_t msg[12];
 
     if( false == magazine_present ) {
-        if( (IRP_STATE__STOPPED != device_state) || (0 != discs_present) ||
-            (0 != current_disc) || (0 != current_track) )
-        {
-            return IRP_ERROR_PARAMETER;
-        }
-
         payload[1] = (uint8_t) IBUS_STATE__NO_MAGAZINE;
         payload[2] = (uint8_t) IRP_AUDIO_STATUS__STOPPED;
         payload[3] = (uint8_t) IRP_MAGAZINE_STATE__NORMAL;
     } else if( 0 == discs_present ) {
-        if( (IRP_STATE__STOPPED != device_state) ||
-            (0 != current_disc) || (0 != current_track) )
-        {
-            return IRP_ERROR_PARAMETER;
-        }
-
-        payload[1] = (uint8_t) IBUS_STATE__LOADING_DISC;
+        payload[1] = (uint8_t) IBUS_STATE__STOPPED;
         payload[2] = (uint8_t) IRP_AUDIO_STATUS__STOPPED;
         payload[3] = (uint8_t) IRP_MAGAZINE_STATE__NO_DISCS;
     } else {
@@ -300,10 +297,23 @@ irp_status_t irp_send_normal_status( const irp_state_t device_state,
             case IRP_STATE__PLAYING:
                 payload[1] = (uint8_t) IBUS_STATE__PLAYING;
                 payload[2] = (uint8_t) IRP_AUDIO_STATUS__PLAYING;
+                switch( mode ) {
+                    case IRP_MODE__SCANNING:
+                        payload[2] |= 0x10;
+                        break;
+                    case IRP_MODE__RANDOM:
+                        payload[2] |= 0x20;
+                        break;
+                    default:
+                        break;
+                    }
                 break; 
             case IRP_STATE__FAST_PLAYING__FORWARD:
-            case IRP_STATE__FAST_PLAYING__REVERSE:
                 payload[1] = (uint8_t) IBUS_STATE__FAST_PLAYING;
+                payload[2] = (uint8_t) IRP_AUDIO_STATUS__PLAYING;
+                break; 
+            case IRP_STATE__FAST_PLAYING__REVERSE:
+                payload[1] = (uint8_t) IBUS_STATE__REWINDING;
                 payload[2] = (uint8_t) IRP_AUDIO_STATUS__PLAYING;
                 break; 
             case IRP_STATE__SEEKING:
