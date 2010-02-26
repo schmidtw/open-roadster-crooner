@@ -442,8 +442,10 @@ static bool __get_next_disc_mode_element(disc_mode_t *val)
             *val = DM_RANDOM;
             break;
         case DM_RANDOM:
+#ifdef SUPPORT_TEXT
             *val = DM_TEXT_DISPLAY;
             break;
+#endif
         case DM_TEXT_DISPLAY:
         default:
             return false;
