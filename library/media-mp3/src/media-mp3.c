@@ -133,7 +133,7 @@ media_status_t media_mp3_play( const char *filename,
         goto error_1;
     }
 
-    memset( data, 0, sizeof(mp3_data_t) );
+    //memset( data, 0, sizeof(mp3_data_t) );
 
     /* Decode song */
     rv = decode_song( idle, dsp_scale_factor, data, command_fn );
@@ -300,7 +300,7 @@ decode_more_with_this_buffer:
                 mad_stream_buffer( &stream, stream.next_frame, (got - consumed) );
                 goto decode_more_with_this_buffer;
             }
-        } else {
+        } else if( MAD_ERROR_NONE == stream.error ) {
             mad_synth_frame( &data->synth, &data->frame );
 
             if( 0 < data->synth.pcm.length ) {
@@ -308,6 +308,9 @@ decode_more_with_this_buffer:
                                   data->frame.header.samplerate );
             }
             consumed = stream.next_frame - buffer;
+        } else {
+            consumed = stream.next_frame - buffer;
+            stream.error = MAD_ERROR_NONE;
         }
 
         fstream_release_buffer( consumed );
