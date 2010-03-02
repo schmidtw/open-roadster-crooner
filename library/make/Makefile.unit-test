@@ -5,6 +5,8 @@ endif
 
 cc   = gcc
 gcov = gcov -c -b
+lcov = lcov
+genhtml = genhtml
 copy = cp
 mkdir = mkdir -p
 mv   = mv
@@ -28,9 +30,6 @@ mocks_incs    = $(BASE)/bins/mock/include
 bins_incs     = $(BASE)/bins/include
 additional_flags = -DFOSC0=12000000 -DBOARD=4
 
-work_dir      = objs/$(1)
-work_dummy    = $(call work_dir,$(1))/dummy.txt
-
 all_cflags = $(cflags) $(additional_flags) $$($(addsuffix $(cflags_suffix),$(1))) $($(addsuffix $(inc_suffix),$(1)):%=-I%) $(mocks_incs:%=-I%) $(bins_incs:%=-I%)
 
 .DEFAULT_GOAL : unit-test
@@ -40,6 +39,10 @@ clean     :: $(addsuffix _clean,$(TESTS))
 cleanall  :: clean
 all :: unit-test
 install :: unit-test
+coverage :: unit-test
+	$(QUIET)$(lcov) -q -d . -c --output-file lcov.out
+	$(QUIET)$(lcov) -q --output-file lcov.out -r lcov.out */unit-tests/*
+	$(QUIET)$(genhtml) -q -o html lcov.out
 
 # $(1) = test name
 # $(2) = full filename and path
@@ -58,15 +61,9 @@ endef
 # $(1) = test name
 define RUN_template
 .PHONY : $(1)_run
-$(1)_run : $(1) $(call work_dummy,$(1))
+$(1)_run : $(1)
 	./$(1)
-	$(QUIET)$(gcov) $(1) *-$(1).c
-	$(QUIET)$(mv) *.gcda *.gcno *.c.gcov $(1) $(call work_dir,$(1))
-	$(QUIET)$(mv) $(addsuffix -$(1).*,$(basename $(notdir $($(1)$(source_suffix))))) $(call work_dir,$(1))
-	
-$(call work_dummy,$(1)) :
-	$(QUIET)$(mkdir) $$(dir $$@)
-	$(QUIET)$(touch) $$@
+	$(QUIET)$(gcov) -l -p -o . $(1) *-$(1).c
 endef
 
 # $(1) = test name
@@ -75,7 +72,8 @@ define CLEAN_template
 $(1)_clean :
 	$(QUIET)$(rm) $(1).gcda $(1).gcno $(1).c.gcov $(1) $(addsuffix -$(1).*,$(basename $(notdir $($(1)$(source_suffix)))))
 	$(QUIET)$(rm) $(addsuffix .*.gcov,$(basename $(notdir $($(1)$(source_suffix)))))
-	$(QUIET)$(rmdir) objs
+	$(QUIET)$(rm) lcov.out
+	$(QUIET)$(rmdir) objs html
 endef
 
 # invoke the FILES2TEST_templates
