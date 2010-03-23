@@ -37,6 +37,15 @@ typedef struct {
     uint8_t buffer[IBUS_MAX_MESSAGE_SIZE];
 } ibus_io_msg_t;
 
+typedef enum {
+    IBUS_DEVICE__BROADCAST_LOW  = 0x00,
+    IBUS_DEVICE__CD_CHANGER     = 0x18,
+    IBUS_DEVICE__RADIO          = 0x68,
+    IBUS_DEVICE__IKE            = 0x80,
+    IBUS_DEVICE__PHONE          = 0xc8,
+    IBUS_DEVICE__BROADCAST_HIGH = 0xff
+} ibus_device_t;
+
 /**
  *  Used to initalize the iBus physical layer.
  */

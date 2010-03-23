@@ -66,6 +66,9 @@ $(foreach dir,$(build_dirs),$(foreach target,$(targets_$(dir)),$(eval $(call TAR
 
 $(foreach dir,$(build_dirs),$(foreach target,$(targets_$(dir)),$(eval $(call create_targets,$(target),$(dir)))))
 
+clean ::
+	$(QUIET)rm -rf html lcov.out
+
 cleanall ::
 	$(QUIET)rm -rf ../bins html lcov.out
 

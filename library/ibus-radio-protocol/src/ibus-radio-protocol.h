@@ -141,13 +141,17 @@ irp_status_t irp_send_normal_status( const irp_state_t device_state,
  *
  *  @param disc the disc being checked for
  *  @param active_map the current map of active discs
+ *  @param goal the goal of the player after checking the discs - only
+ *              IRP_CMD__STOP or IRP_CMD__PLAY are allowed, other values will
+ *              result in a failure
  *
  *  @return Status
  *      @retval IRP_RETURN_OK       Success
  *      @retval IRP_ERROR_PARAMETER Failure
  */
 irp_status_t irp_going_to_check_disc( const uint8_t disc,
-                                      const uint8_t active_map );
+                                      const uint8_t active_map,
+                                      const irp_state_t goal );
 
 /**
  *  Used to indicate that a disc has been checked for.
@@ -158,6 +162,9 @@ irp_status_t irp_going_to_check_disc( const uint8_t disc,
  *  @param disc the disc that was checked for
  *  @param disc_present true if there is disc in that slot, false otherwise
  *  @param active_map the current map of active discs (including this disc)
+ *  @param goal the goal of the player after checking the discs - only
+ *              IRP_CMD__STOP or IRP_CMD__PLAY are allowed, other values will
+ *              result in a failure
  *
  *  @return Status
  *      @retval IRP_RETURN_OK       Success
@@ -165,7 +172,8 @@ irp_status_t irp_going_to_check_disc( const uint8_t disc,
  */
 irp_status_t irp_completed_disc_check( const uint8_t disc,
                                        const bool disc_present,
-                                       const uint8_t active_map );
+                                       const uint8_t active_map,
+                                       const irp_state_t goal );
 
 /**
  *  Used to convert the state type into a string.

@@ -494,11 +494,13 @@ static void __checking_complete( ri_state_t *state,
              active_map );
 
         if( true == __connected_to_radio ) {
-            irp_completed_disc_check( i, disc_present, active_map );
+            printf( "goal: %s\n", irp_state_to_string(state->device_status) );
+            irp_completed_disc_check( i, disc_present, active_map, state->device_status );
         }
         if( i < 6 ) {
             if( true == __connected_to_radio ) {
-                irp_going_to_check_disc( (i+1), active_map );
+                printf( "goal: %s\n", irp_state_to_string(state->device_status) );
+                irp_going_to_check_disc( (i+1), active_map, state->device_status );
             }
         }
     }
@@ -509,8 +511,28 @@ static void __checking_complete( ri_state_t *state,
         state->current_disc = 0;
         state->current_track = 0;
     } else {
+        irp_state_t goal_state;
+
+        goal_state = state->device_status;
+
+        /* If we change discs, send that event. */
+        if( state->current_disc != starting_disc ) {
+            state->device_status = IRP_STATE__LOADING_DISC;
+            state->current_disc = starting_disc;
+            state->current_track = 0;
+
+            printf( "Sending disc: %d\n", state->current_disc );
+            __send_state( state );
+        }
+
+        /* Send that we are seeking to the track */
+        state->device_status = IRP_STATE__SEEKING;
         state->current_disc = starting_disc;
         state->current_track = starting_track;
+        __send_state( state );
+
+        /* Send that final status */
+        state->device_status = goal_state;
     }
 
     __send_state( state );
@@ -546,7 +568,8 @@ static void __transition_db( ri_state_t *state )
     bool keep_going;
 
     if( true == __connected_to_radio ) {
-        irp_going_to_check_disc( 1, 0 );
+        printf( "goal: %s\n", irp_state_to_string(state->device_status) );
+        irp_going_to_check_disc( 1, 0, state->device_status );
     }
 
     device_status_set( DS__CARD_BEING_SCANNED );
@@ -591,7 +614,8 @@ static void __transition_db( ri_state_t *state )
             }
         } else if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
             if( true == __connected_to_radio ) {
-                irp_going_to_check_disc( 1, 0 );
+                printf( "goal: %s\n", irp_state_to_string(state->device_status) );
+                irp_going_to_check_disc( 1, 0, state->device_status );
             }
             xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
         } else {

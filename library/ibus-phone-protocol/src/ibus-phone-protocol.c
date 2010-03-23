@@ -32,13 +32,10 @@
 #define _D1(...)
 #endif
 
-#define IBUS_DEVICES__PHONE      0xc8
-#define IBUS_DEVICES__IKE        0x80
-
 const static uint8_t beginning[] = {
-        (uint8_t) IBUS_DEVICES__PHONE,
+        (uint8_t) IBUS_DEVICE__PHONE,
         0, // the number of characters in this message
-        (uint8_t) IBUS_DEVICES__IKE,
+        (uint8_t) IBUS_DEVICE__IKE,
         /* special character for displaying text */
         0x23,
         0x43,
