@@ -16,9 +16,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <string.h>
+#include <stdio.h>
+#include <ibus-physical/ibus-physical.h>
 
-#include "populate-message.h"
+#include "ibus-debug-protocol.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -43,37 +44,28 @@
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
-irp_status_t populate_message( const ibus_device_t src,
-                               const ibus_device_t dst,
-                               const uint8_t *payload,
-                               const size_t payload_length,
-                               uint8_t *out,
-                               const size_t out_length )
+/* See ibus-debug.h for details. */
+int ibus_printf( const char *fmt, ... )
 {
-    int32_t i;
-    int8_t checksum;
+    va_list args;
+    char msg[IBUS_MAX_PAYLOAD_SIZE];
+    int length;
 
-    if( (NULL == payload) ||
-        (0 == payload_length) || (255 <= (payload_length + 4)) ||
-        (NULL == out) || (out_length < (payload_length + 4)) )
-    {
-        return IRP_ERROR_PARAMETER;
+    va_start( args, fmt );
+    length = vsnprintf( msg, sizeof(msg), fmt, args );
+    va_end( args );
+
+    if( 0 < length ) {
+        if( true == ibus_physical_send_message(IBUS_DEVICE__CDC, IBUS_DEVICE__DEBUG,
+                                               (uint8_t *) msg, (uint8_t) length) )
+        {
+            return length;
+        } else {
+            return -1;
+        }
     }
 
-    out[0] = (uint8_t) src;
-    out[1] = (uint8_t) (payload_length + 2);
-    out[2] = (uint8_t) dst;
-
-    memcpy( &out[3], payload, payload_length );
-
-    checksum = 0;
-    for( i = 0; i < (payload_length + 3); i++ ) {
-        checksum ^= out[i];
-    }
-
-    out[i] = checksum;
-
-    return IRP_RETURN_OK;
+    return -1;
 }
 
 /*----------------------------------------------------------------------------*/

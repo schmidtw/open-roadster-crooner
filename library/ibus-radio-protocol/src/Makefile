@@ -9,7 +9,6 @@ HEADERS = \
 SOURCES = \
     ibus-radio-protocol.c \
     bcd-track-converter.c \
-    populate-message.c \
     message-converter.c \
     ibus-radio-to-string.c
 

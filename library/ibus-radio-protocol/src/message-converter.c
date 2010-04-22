@@ -89,13 +89,13 @@ bool message_converter( const ibus_io_msg_t *in, irp_rx_msg_t *out )
     payload = &in->buffer[3];
 
     /* Check the source */
-    if( ((uint8_t) IBUS_DEVICE__CD_CHANGER) == src ) {
+    if( ((uint8_t) IBUS_DEVICE__CDC) == src ) {
         /* If we sent this message, ignore it. */
         return false;
     }
 
     /* Check the destination */
-    if( (((uint8_t) IBUS_DEVICE__CD_CHANGER)     != dst) &&
+    if( (((uint8_t) IBUS_DEVICE__CDC)            != dst) &&
         (((uint8_t) IBUS_DEVICE__BROADCAST_LOW)  != dst) &&
         (((uint8_t) IBUS_DEVICE__BROADCAST_HIGH) != dst) )
     {

@@ -113,7 +113,7 @@ static void test( void )
     /* We sent the message. */
     in.status = IBUS_IO_STATUS__OK;
     in.size = 5;
-    in.buffer[0] = IBUS_DEVICE__CD_CHANGER;
+    in.buffer[0] = IBUS_DEVICE__CDC;
     calc_checksum( &in );
     CU_ASSERT_EQUAL( false,
                      message_converter(&in, &out) );
@@ -122,7 +122,7 @@ static void test( void )
     /* Message not to us */
     in.status = IBUS_IO_STATUS__OK;
     in.size = 5;
-    in.buffer[0] = IBUS_DEVICE__PHONE;
+    in.buffer[0] = IBUS_DEVICE__TEL;
     in.buffer[1] = 3;
     in.buffer[2] = IBUS_DEVICE__IKE;
     calc_checksum( &in );
@@ -134,7 +134,7 @@ static void test( void )
     /* Message is poll request */
     in.status = IBUS_IO_STATUS__OK;
     in.size = 5;
-    in.buffer[0] = IBUS_DEVICE__RADIO;
+    in.buffer[0] = IBUS_DEVICE__RAD;
     in.buffer[1] = 3;
     in.buffer[2] = IBUS_DEVICE__BROADCAST_LOW;
     in.buffer[3] = 0x01;
@@ -151,7 +151,7 @@ static void test( void )
                      message_converter(&in, &out) );
     CU_ASSERT_EQUAL( IRP_CMD__POLL, out.command );
 
-    in.buffer[2] = IBUS_DEVICE__CD_CHANGER;
+    in.buffer[2] = IBUS_DEVICE__CDC;
     calc_checksum( &in );
     out.command = IRP_CMD__TRAFFIC;
     CU_ASSERT_EQUAL( true,
@@ -161,7 +161,7 @@ static void test( void )
     /* Unknown message of length 3 */
     in.status = IBUS_IO_STATUS__OK;
     in.size = 5;
-    in.buffer[0] = IBUS_DEVICE__RADIO;
+    in.buffer[0] = IBUS_DEVICE__RAD;
     in.buffer[1] = 3;
     in.buffer[2] = IBUS_DEVICE__BROADCAST_LOW;
     in.buffer[3] = 0x09;
@@ -174,7 +174,7 @@ static void test( void )
     /* Unknown message of length 5 */
     in.status = IBUS_IO_STATUS__OK;
     in.size = 7;
-    in.buffer[0] = IBUS_DEVICE__RADIO;
+    in.buffer[0] = IBUS_DEVICE__RAD;
     in.buffer[1] = 5;
     in.buffer[2] = IBUS_DEVICE__BROADCAST_LOW;
     in.buffer[3] = 0x09;
@@ -189,9 +189,9 @@ static void test( void )
     /* Status Request */
     in.status = IBUS_IO_STATUS__OK;
     in.size = 7;
-    in.buffer[0] = IBUS_DEVICE__RADIO;
+    in.buffer[0] = IBUS_DEVICE__RAD;
     in.buffer[1] = 5;
-    in.buffer[2] = IBUS_DEVICE__CD_CHANGER;
+    in.buffer[2] = IBUS_DEVICE__CDC;
     in.buffer[3] = 0x38;
     in.buffer[4] = 0x00;
     calc_checksum( &in );

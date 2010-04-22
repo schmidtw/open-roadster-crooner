@@ -226,21 +226,42 @@ void ibus_physical_release_message( ibus_io_msg_t *msg )
 }
 
 /* See ibus_physical.h for details. */
-bool ibus_physical_send_message( const uint8_t *msg, const size_t size )
+bool ibus_physical_send_message( const ibus_device_t src,
+                                 const ibus_device_t dst,
+                                 const uint8_t *payload,
+                                 const size_t payload_length )
 {
     ibus_io_msg_t *ibus_msg;
+    int32_t i;
+    uint8_t checksum;
 
-    _D1( "%s( %p, %lu )\n", __func__, (void*) msg, size );
-
-    if( (NULL == msg) || (0 == size) || (IBUS_MAX_MESSAGE_SIZE < size) ) {
+    if( (NULL == payload) ||
+        (0 == payload_length) ||
+        (IBUS_MAX_MESSAGE_SIZE < (payload_length + 4)) )
+    {
         return false;
+    }
+
+    checksum = 0;
+    checksum ^= (uint8_t) src;
+    checksum ^= (uint8_t) dst;
+    checksum ^= (uint8_t) (2 + payload_length);
+    for( i = 0; i < payload_length; i++ ) {
+        checksum ^= payload[i];
     }
 
     xQueueReceive( __tx_idle, &ibus_msg, portMAX_DELAY );
 
     ibus_msg->status = IBUS_IO_STATUS__OK;
-    ibus_msg->size = size;
-    memcpy( ibus_msg->buffer, msg, size );
+    ibus_msg->size = payload_length + 4;
+
+    ibus_msg->buffer[0] = (uint8_t) src;
+    ibus_msg->buffer[1] = (uint8_t) (payload_length + 2);
+    ibus_msg->buffer[2] = (uint8_t) dst;
+
+    memcpy( &ibus_msg->buffer[3], payload, payload_length );
+
+    ibus_msg->buffer[payload_length + 3] = (uint8_t) checksum;
 
     xQueueSendToBack( __tx_pending, &ibus_msg, portMAX_DELAY );
     xSemaphoreGive( __wake_up_tx_task );

@@ -392,9 +392,25 @@ bool message_converter( const ibus_io_msg_t *in, irp_rx_msg_t *out )
     return true;
 }
 
-bool ibus_physical_send_message( const uint8_t *msg, const size_t size )
+bool ibus_physical_send_message( const ibus_device_t src,
+                                 const ibus_device_t dst,
+                                 const uint8_t *payload,
+                                 const size_t payload_length )
 {
-    memcpy( __last_msg, msg, size );
+    int i;
+    uint8_t checksum;
+
+    __last_msg[0] = (uint8_t) src;
+    __last_msg[1] = (uint8_t) (payload_length + 2);
+    __last_msg[2] = (uint8_t) dst;
+    memcpy( &__last_msg[3], payload, payload_length );
+
+    checksum = 0;
+    for( i = 0; i < (payload_length + 3); i++ ) {
+        checksum ^= __last_msg[i];
+    }
+    __last_msg[i] = checksum;
+
     return true;
 }
 

@@ -23,7 +23,6 @@
 
 #include "ibus-radio-protocol.h"
 #include "bcd-track-converter.h"
-#include "populate-message.h"
 #include "message-converter.h"
 
 /*----------------------------------------------------------------------------*/
@@ -105,28 +104,20 @@ irp_status_t irp_get_message( irp_rx_msg_t *msg )
 void irp_send_announce( void )
 {
     static const uint8_t payload[] = { 0x02, 0x01 };
-    uint8_t msg[6];
 
-    populate_message( IBUS_DEVICE__CD_CHANGER,
-                      IBUS_DEVICE__BROADCAST_HIGH,
-                      payload, sizeof(payload),
-                      msg, sizeof(msg) );
-
-    ibus_physical_send_message( msg, sizeof(msg) );
+    ibus_physical_send_message( IBUS_DEVICE__CDC,
+                                IBUS_DEVICE__BROADCAST_HIGH,
+                                payload, sizeof(payload) );
 }
 
 /* See ibus-radio-protocol.h for details. */
 void irp_send_poll_response( void )
 {
     static const uint8_t payload[] = { 0x02, 0x00 };
-    uint8_t msg[6];
 
-    populate_message( IBUS_DEVICE__CD_CHANGER,
-                      IBUS_DEVICE__BROADCAST_HIGH,
-                      payload, sizeof(payload),
-                      msg, sizeof(msg) );
-
-    ibus_physical_send_message( msg, sizeof(msg) );
+    ibus_physical_send_message( IBUS_DEVICE__CDC,
+                                IBUS_DEVICE__BROADCAST_HIGH,
+                                payload, sizeof(payload) );
 }
 
 /* See ibus-radio-protocol.h for details. */
@@ -138,7 +129,6 @@ irp_status_t irp_send_normal_status( const irp_state_t device_state,
                                      const uint8_t current_track )
 {
     uint8_t payload[] = { 0x39, 0, 0, 0, 0, 0, 0, 0 };
-    uint8_t msg[12];
 
     if( false == magazine_present ) {
         payload[1] = (uint8_t) IBUS_STATE__NO_MAGAZINE;
@@ -214,12 +204,10 @@ irp_status_t irp_send_normal_status( const irp_state_t device_state,
         payload[7] = bcd_track_converter( current_track );
     }
 
-    populate_message( IBUS_DEVICE__CD_CHANGER,
-                      IBUS_DEVICE__RADIO,
-                      payload, sizeof(payload),
-                      msg, sizeof(msg) );
 
-    ibus_physical_send_message( msg, sizeof(msg) );
+    ibus_physical_send_message( IBUS_DEVICE__CDC,
+                                IBUS_DEVICE__RAD,
+                                payload, sizeof(payload) );
 
     return IRP_RETURN_OK;
 }
@@ -230,7 +218,6 @@ irp_status_t irp_going_to_check_disc( const uint8_t disc,
                                       const irp_state_t goal )
 {
     uint8_t payload[] = { 0x39, 0x09, 0, 0, 0, 0, 0, 0 };
-    uint8_t msg[12];
 
     /* Make sure the disc is in range & also the active map is
      * less than or equal to the current disc. */
@@ -245,12 +232,9 @@ irp_status_t irp_going_to_check_disc( const uint8_t disc,
     payload[4] = active_map;
     payload[6] = disc;
 
-    populate_message( IBUS_DEVICE__CD_CHANGER,
-                      IBUS_DEVICE__RADIO,
-                      payload, sizeof(payload),
-                      msg, sizeof(msg) );
-
-    ibus_physical_send_message( msg, sizeof(msg) );
+    ibus_physical_send_message( IBUS_DEVICE__CDC,
+                                IBUS_DEVICE__RAD,
+                                payload, sizeof(payload) );
 
     return IRP_RETURN_OK;
 }
@@ -262,7 +246,6 @@ irp_status_t irp_completed_disc_check( const uint8_t disc,
                                        const irp_state_t goal )
 {
     uint8_t payload[] = { 0x39, 0x09, 0, 0, 0, 0, 0, 0 };
-    uint8_t msg[12];
 
     /* Make sure the disc is in range & also the active map is
      * less than or equal to the current disc. */
@@ -294,12 +277,10 @@ irp_status_t irp_completed_disc_check( const uint8_t disc,
     payload[4] = active_map;
     payload[6] = disc;
 
-    populate_message( IBUS_DEVICE__CD_CHANGER,
-                      IBUS_DEVICE__RADIO,
-                      payload, sizeof(payload),
-                      msg, sizeof(msg) );
+    ibus_physical_send_message( IBUS_DEVICE__CDC,
+                                IBUS_DEVICE__RAD,
+                                payload, sizeof(payload) );
 
-    ibus_physical_send_message( msg, sizeof(msg) );
 
     return IRP_RETURN_OK;
 }

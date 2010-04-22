@@ -18,6 +18,7 @@ LIBRARIES = \
             file-stream \
             ibus-radio-protocol \
             ibus-phone-protocol \
+            ibus-debug-protocol \
             ibus-physical \
             freertos \
             linked-list \
