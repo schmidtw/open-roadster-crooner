@@ -720,7 +720,9 @@ static uint8_t get_random_track( bool random_state )
 
 /**
  * Helper function which enables or disables the random
- * state
+ * state.  When we enable random, we reseed the random
+ * number generator with the current tick count since
+ * boot.
  * 
  * @param new_state true - enable the random next song
  *        false - disable the random next song
@@ -728,6 +730,9 @@ static uint8_t get_random_track( bool random_state )
 static void set_random_state( bool new_state )
 {
     random_state = new_state;
+    if( true == random_state ) {
+        srand( xTaskGetTickCount() );
+    }
 }
 
 /**
