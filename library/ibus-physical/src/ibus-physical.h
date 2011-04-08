@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define IBUS_MAX_MESSAGE_SIZE   32
+#define IBUS_MAX_MESSAGE_SIZE   64
 #define IBUS_MAX_PAYLOAD_SIZE   (IBUS_MAX_MESSAGE_SIZE - 4)
 
 typedef enum {

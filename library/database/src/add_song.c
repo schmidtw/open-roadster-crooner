@@ -1,11 +1,14 @@
 #include <stdbool.h>
+
+#include <linked-list/linked-list.h>
+
 #include "add_song.h"
 #include "database.h"
 #include "artist.h"
 #include "album.h"
 #include "song.h"
 
-ll_ir_t scrubber(ll_node_t *node, volatile void *user_data);
+static ll_ir_t scrubber(ll_node_t *node, volatile void *user_data);
 
 song_node_t * add_song_to_group( group_node_t * group,
         const char * artist, const char * album,
@@ -47,7 +50,7 @@ failure:
     return NULL;
 }
 
-ll_ir_t scrubber(ll_node_t *node, volatile void *user_data)
+static ll_ir_t scrubber(ll_node_t *node, volatile void *user_data)
 {
     if( node == (ll_node_t *)user_data ) {
         return LL_IR__DELETE_AND_STOP;

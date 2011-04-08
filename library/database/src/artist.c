@@ -22,7 +22,7 @@
 #include "album.h"
 #include "w_malloc.h"
 
-ll_node_t * get_new_artist_and_node( const char * name );
+static ll_node_t * get_new_artist_and_node( const char * name );
 
 artist_node_t * find_or_create_artist( group_node_t * group,
                                        const char * artist,
@@ -32,11 +32,15 @@ artist_node_t * find_or_create_artist( group_node_t * group,
     ll_node_t * node_before_new_node = NULL;
     ll_node_t * node;
     int result;
-    
-    *created_node = false;
+
+    if( NULL != created_node ) {
+        *created_node = false;
+    }
     
     if(    ( NULL == group )
-        || ( NULL == artist ) ) {
+        || ( NULL == artist )
+        || ( NULL == created_node ) )
+    {
         return NULL;
     }
     
@@ -80,7 +84,7 @@ artist_node_t * find_or_create_artist( group_node_t * group,
     return ar_n;
 }
 
-ll_node_t * get_new_artist_and_node( const char * name )
+static ll_node_t * get_new_artist_and_node( const char * name )
 {
     artist_node_t * an;
     

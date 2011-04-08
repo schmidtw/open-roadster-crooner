@@ -672,6 +672,9 @@ static media_status_t play_song( FLACContext *fc,
             goto done;
         }
 
+        memset( node->decode_0, 0, sizeof(node->decode_0) );
+        memset( node->decode_1, 0, sizeof(node->decode_1) );
+
         if( 0 != flac_decode_frame(fc, node->decode_0, node->decode_1, read_buffer, bytes_left) ) {
             rv = MI_ERROR_DECODE_ERROR;
             goto done;

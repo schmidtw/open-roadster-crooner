@@ -5,7 +5,7 @@ cc           = avr32-gcc
 nm           = avr32-nm
 objcopy      = avr32-objcopy
 jtag         = avr32program
-dfu          = dfu-programmer
+dfu          = /home/schmidtw/Projects/dfu-programmer/dfu-programmer/src/dfu-programmer
 objs         = $(addprefix $(gen_dir)/,$(filter %.o,$(SOURCES:.c=.o) $(SOURCES:.S=.o)))
 lists        = $(addprefix $(gen_dir)/,$(filter %.S,$(SOURCES:.c=.S)))
 dependencies = $(SOURCES:%.c=%.d)
