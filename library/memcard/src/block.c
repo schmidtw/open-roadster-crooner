@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <bsp/boards/boards.h>
 #include <bsp/pdca.h>
@@ -174,6 +175,17 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
     _D1( "Reading: 0x%08x\n", lba );
     xQueueReceive( __complete, &msg, portMAX_DELAY );
     status = (BRS_SUCCESS == msg->state) ? MC_RETURN_OK : MC_ERROR_TIMEOUT;
+
+    status = MC_ERROR_TIMEOUT;
+    if( BRS_SUCCESS == msg->state ) {
+        uint16_t crc, calc_crc;
+        status = MC_CRC_FAILURE;
+        crc = ((0xff & msg->crc[0]) << 8) | (0xff & msg->crc[1]);
+        calc_crc = crc16( buffer, msg->length );
+        if( crc == calc_crc ) {
+            status = MC_RETURN_OK;
+        }
+    }
     xQueueSendToBack( __idle, &msg, portMAX_DELAY );
 
     _D1( "Got response: 0x%04x\n", status );

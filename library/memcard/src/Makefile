@@ -4,6 +4,8 @@ BASE      = ../../..
 INCLUDE   = -I/usr/avr32/include \
             -I$(BASE)/bins/include
 
+CFLAGS    = -DCRC_FAST=1
+
 HEADERS = \
     memcard.h \
     dirent.h
