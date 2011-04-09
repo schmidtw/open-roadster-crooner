@@ -53,7 +53,7 @@ void group_print( group_node_t * group, int spaces )
 {
     artist_node_t *ar_n;
     
-    printf("%*.*s Group: %d-(%d-%d) %-*.*s\n",
+    printf("%*.*s Group: %lu-(%lu-%lu) %-*.*s\n",
             spaces, spaces, " ",
             group->index_in_list,
             group->index_songs_start,
@@ -78,7 +78,7 @@ void artist_print( artist_node_t * artist, int spaces )
 {
     album_node_t *al_n;
     
-    printf("%*.*s %d-(%d-%d) %-*.*s\n",
+    printf("%*.*s %lu-(%lu-%lu) %-*.*s\n",
             spaces, spaces, " ",
             artist->index_in_list,
             artist->index_songs_start,
@@ -103,7 +103,7 @@ void album_print( album_node_t * album, int spaces )
 {
     song_node_t *so_n;
     
-    printf("%*.*s %d-(%d-%d) %-*.*s\n",
+    printf("%*.*s %lu-(%lu-%lu) %-*.*s\n",
             spaces, spaces, " ",
             album->index_in_list,
             album->index_songs_start,
@@ -126,7 +126,7 @@ void album_print( album_node_t * album, int spaces )
 
 void song_print( song_node_t * song, int spaces )
 {
-    printf("%*.*s %*.*d %d) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
+    printf("%*.*s %*.*u %lu) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
             spaces, spaces, " ",
             MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, song->track_number,
             song->index_songs_value,
