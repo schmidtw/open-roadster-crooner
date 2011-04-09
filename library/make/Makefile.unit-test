@@ -10,6 +10,7 @@ genhtml = genhtml
 copy = cp
 mkdir = mkdir -p
 mv   = mv
+rename = rename
 rm   = rm -f
 rmdir= rm -rf
 touch = touch
@@ -64,6 +65,7 @@ define RUN_template
 $(1)_run : $(1)
 	./$(1)
 	$(QUIET)$(gcov) -l -p -o . $(1) *-$(1).c
+	$(QUIET)$(rename) 's/^..#/gcov..#/' ..#* 
 endef
 
 # $(1) = test name
@@ -73,6 +75,7 @@ $(1)_clean :
 	$(QUIET)$(rm) $(1).gcda $(1).gcno $(1).c.gcov $(1) $(addsuffix -$(1).*,$(basename $(notdir $($(1)$(source_suffix)))))
 	$(QUIET)$(rm) $(addsuffix .*.gcov,$(basename $(notdir $($(1)$(source_suffix)))))
 	$(QUIET)$(rm) lcov.out
+	$(QUIET)$(rm) gcov*
 	$(QUIET)$(rmdir) objs html
 endef
 

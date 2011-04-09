@@ -15,7 +15,7 @@ lists   = $(addprefix $(gen_dir)/,$(filter %.S,$(SOURCES:.c=.S)))
 deps    = $(addprefix $(gen_dir)/,$(filter %.d,$(SOURCES:.c=.d) $(SOURCES:.S=.d)))
 startup = $(addprefix $(gen_dir)/,$(filter %.o,$(STARTUP:.c=.o) $(STARTUP:.S=.o)))
 bins_su = $(addprefix $(lib_dir)/,$(filter %.o,$(STARTUP:.c=.o) $(STARTUP:.S=.o)))
-gen_dir      = objs
+gen_dir      = ../../../bins/objs/${TARGET}
 empty_file   = .auto_gen_file
 gen_file     = $(gen_dir)/$(empty_file)
 QUIET  ?= @
