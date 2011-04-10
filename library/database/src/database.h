@@ -10,11 +10,11 @@
 
 #define MAX_GROUP_NAME           24
 #define MAX_GROUP_NAME_W_NULL    (MAX_GROUP_NAME + 1)
-#define MAX_ARTIST_NAME          127
+#define MAX_ARTIST_NAME          MEDIA_ARTIST_LENGTH
 #define MAX_ARTIST_NAME_W_NULL   (MAX_ALBUM_TITLE + 1)
-#define MAX_ALBUM_TITLE          127
+#define MAX_ALBUM_TITLE          MEDIA_ALBUM_LENGTH
 #define MAX_ALBUM_TITLE_W_NULL   (MAX_ALBUM_TITLE + 1)
-#define MAX_SONG_TITLE           127
+#define MAX_SONG_TITLE           MEDIA_TITLE_LENGTH
 #define MAX_SONG_TITLE_W_NULL    (MAX_SONG_TITLE + 1)
 
 #define MAX_SHORT_FILENAME                 12
@@ -23,48 +23,50 @@
 #define MAX_SHORT_FILENAME_PATH_W_NULL     (MAX_SHORT_FILENAME_PATH + 1)
 
 typedef struct {
-    char name[MAX_GROUP_NAME_W_NULL];
-    ll_node_t node;
-    ll_list_t artists;
-    uint32_t size_list;
-    uint32_t index_in_list;
-    uint32_t index_songs_start;
-    uint32_t index_songs_stop;
-} group_node_t;
+    uint32_t size;  // The number of elements in this list
+    uint32_t index; // The index number of this element in this list
+    uint32_t index_songs_start; // The index start of the songs which are children of this list
+    uint32_t index_songs_stop;   // The index stop (last) of the songs which are children of this list
+} index_song_node_t;
 
 typedef struct {
-    char name[MAX_ARTIST_NAME_W_NULL];
-    ll_node_t node;
-    ll_list_t albums;
-    uint32_t size_list;
-    uint32_t index_in_list;
-    uint32_t index_songs_start;
-    uint32_t index_songs_stop;
-    group_node_t * group;
-} artist_node_t;
-
-typedef struct {
-    char name[MAX_ALBUM_TITLE_W_NULL];
-    ll_node_t node;
-    ll_list_t songs;
-    uint32_t size_list;
-    uint32_t index_in_list;
-    uint32_t index_songs_start;
-    uint32_t index_songs_stop;
-    artist_node_t * artist;
-} album_node_t;
-
-typedef struct {
-    char title[MAX_SONG_TITLE_W_NULL];
-    ll_node_t node;
-    char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
-    album_node_t * album;
-    uint16_t track_number;
-    uint32_t index_songs_value;
     double album_gain;
     double album_peak;
     double track_gain;
     double track_peak;
+} gain_t;
+
+typedef enum {
+    GNT_GROUP,
+    GNT_ARTIST,
+    GNT_ALBUM,
+    GNT_SONG
+} generic_node_types_t;
+
+typedef struct generic_node{
+    generic_node_types_t type;
+    union {
+        char group[MAX_GROUP_NAME_W_NULL];
+        char artist[MAX_ARTIST_NAME_W_NULL];
+        char album[MAX_ALBUM_TITLE_W_NULL];
+        char song[MAX_SONG_TITLE_W_NULL];
+    } name;
+    ll_node_t node;
+    // Parent -- Could be group, artist, album
+    struct generic_node * parent;
+    // Children -- Could be artists, album, song
+    ll_list_t children;
+    union {
+        index_song_node_t list;
+        gain_t gain;
+    } d;
+} generic_node_t;
+
+typedef struct {
+    generic_node_t d;
+    char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
+    uint16_t track_number;
+    uint32_t index_songs_value;
     media_command_fn_t command_fn;
     media_play_fn_t play_fn;
 } song_node_t;

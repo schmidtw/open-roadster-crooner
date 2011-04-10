@@ -32,15 +32,15 @@
 
 void database_print( void )
 {
-    group_node_t * gn;
+    generic_node_t * gn;
     
     printf("==== Database ==========================\n");
     if( NULL != rdn.groups.head ) {
-        gn = (group_node_t *)rdn.groups.head->data;
+        gn = (generic_node_t *)rdn.groups.head->data;
         while( NULL != gn ) {
             group_print( gn, DISPLAY_OFFSET );
             if( NULL != gn->node.next ) {
-                gn = (group_node_t *)gn->node.next->data;
+                gn = (generic_node_t *)gn->node.next->data;
                 printf("------------------------------\n");
             } else {
                 break;
@@ -49,89 +49,89 @@ void database_print( void )
     }
 }
 
-void group_print( group_node_t * group, int spaces )
+void group_print( generic_node_t * group, int spaces )
 {
-    artist_node_t *ar_n;
+    generic_node_t *ar_n;
     
     printf("%*.*s Group: %lu-(%lu-%lu) %-*.*s\n",
             spaces, spaces, " ",
-            group->index_in_list,
-            group->index_songs_start,
-            group->index_songs_stop,
-            MAX_DISPLAY_GROUP_LEN, MAX_DISPLAY_GROUP_LEN, group->name );
-    if( NULL == group->artists.head ) {
+            group->d.list.index,
+            group->d.list.index_songs_start,
+            group->d.list.index_songs_stop,
+            MAX_DISPLAY_GROUP_LEN, MAX_DISPLAY_GROUP_LEN, group->name.group );
+    if( NULL == group->children.head ) {
         printf("%*.*s Why are the artists NULL?\n", spaces, spaces, " ");
         return;
     }
-    ar_n = (artist_node_t *)group->artists.head->data;
+    ar_n = (generic_node_t *)group->children.head->data;
     while( NULL != ar_n ) {
         artist_print( ar_n, (spaces + MAX_DISPLAY_GROUP_LEN + 8 ) );
         if( NULL != ar_n->node.next ) {
-            ar_n = (artist_node_t *)ar_n->node.next->data;
+            ar_n = (generic_node_t *)ar_n->node.next->data;
         } else {
             break;
         }
     }
 }
 
-void artist_print( artist_node_t * artist, int spaces )
+void artist_print( generic_node_t * artist, int spaces )
 {
-    album_node_t *al_n;
+    generic_node_t *al_n;
     
     printf("%*.*s %lu-(%lu-%lu) %-*.*s\n",
             spaces, spaces, " ",
-            artist->index_in_list,
-            artist->index_songs_start,
-            artist->index_songs_stop,
-            MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name );
-    if( NULL == artist->albums.head ) {
+            artist->d.list.index,
+            artist->d.list.index_songs_start,
+            artist->d.list.index_songs_stop,
+            MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name.artist );
+    if( NULL == artist->children.head ) {
         printf("%*.*s Why are the albums NULL?\n", spaces, spaces, " ");
         return;
     }
-    al_n = (album_node_t *)artist->albums.head->data;
+    al_n = (generic_node_t *)artist->children.head->data;
     while( NULL != al_n ) {
         album_print( al_n, (spaces + MAX_DISPLAY_ARTIST_LEN) );
         if( NULL != al_n->node.next ) {
-            al_n = (album_node_t *)al_n->node.next->data;
+            al_n = (generic_node_t *)al_n->node.next->data;
         } else {
             break;
         }
     }
 }
 
-void album_print( album_node_t * album, int spaces )
+void album_print( generic_node_t * album, int spaces )
 {
-    song_node_t *so_n;
+    generic_node_t *so_n;
     
     printf("%*.*s %lu-(%lu-%lu) %-*.*s\n",
             spaces, spaces, " ",
-            album->index_in_list,
-            album->index_songs_start,
-            album->index_songs_stop,
-            MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name );
-    if( NULL == album->songs.head ) {
+            album->d.list.index,
+            album->d.list.index_songs_start,
+            album->d.list.index_songs_stop,
+            MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name.album );
+    if( NULL == album->children.head ) {
         printf("%*.*s Why are the songs NULL?\n", spaces, spaces, " ");
         return;
     }
-    so_n = (song_node_t *)album->songs.head->data;
+    so_n = (generic_node_t *)album->children.head->data;
     while( NULL != so_n ) {
         song_print( so_n, (spaces + MAX_DISPLAY_ARTIST_LEN) );
         if( NULL != so_n->node.next ) {
-            so_n = (song_node_t *)so_n->node.next->data;
+            so_n = (generic_node_t *)so_n->node.next->data;
         } else {
             break;
         }
     }
 }
 
-void song_print( song_node_t * song, int spaces )
+void song_print( generic_node_t * song, int spaces )
 {
     printf("%*.*s %*.*u %lu) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
             spaces, spaces, " ",
-            MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, song->track_number,
-            song->index_songs_value,
-            MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->title,
-            song->album_gain, song->album_peak,
-            song->track_gain, song->track_peak,
-            MAX_FILE_NAME, MAX_FILE_NAME, song->file_location );
+            MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, ((song_node_t*)song)->track_number,
+            ((song_node_t*)song)->index_songs_value,
+            MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->name.song,
+            song->d.gain.album_gain, song->d.gain.album_peak,
+            song->d.gain.track_gain, song->d.gain.track_peak,
+            MAX_FILE_NAME, MAX_FILE_NAME, ((song_node_t*)song)->file_location );
 }

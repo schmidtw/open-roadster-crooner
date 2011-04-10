@@ -503,12 +503,12 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
             break;
         case DM_ALBUM:
         {
-            tn = song->album->index_in_list;
+            tn = song->d.parent->d.list.index;
             break;
         }
         case DM_ARTIST:
         {
-            tn = song->album->artist->index_in_list;
+            tn = song->d.parent->parent->d.list.index;
             break;
         }
         case DM_TEXT_DISPLAY:

@@ -30,8 +30,8 @@
 #define _D1(...) printf( __VA_ARGS__ )
 #endif
 
-song_node_t * find_random_song_from_artist( artist_node_t * an, uint32_t first_song_index, uint32_t last_song_index );
-song_node_t * find_random_song_from_album( album_node_t * an, uint32_t random_song_index );
+song_node_t * find_random_song_from_artist( generic_node_t * an, uint32_t first_song_index, uint32_t last_song_index );
+song_node_t * find_random_song_from_album( generic_node_t * an, uint32_t random_song_index );
 song_node_t * find_random_song_from_songs( song_node_t * sn, uint32_t random_song_index );
 uint32_t random_number_in_range( uint32_t start, uint32_t stop );
 
@@ -40,9 +40,9 @@ db_status_t next_song( song_node_t ** current_song,
                        const db_traverse_t operation,
                        const db_level_t level )
 {
-    group_node_t *group;
-    artist_node_t *artist;
-    album_node_t  *album;
+    generic_node_t *group;
+    generic_node_t *artist;
+    generic_node_t  *album;
     db_status_t rv = DS_FAILURE;
     
     if(    ( false == rdn.initialized )
@@ -54,114 +54,114 @@ db_status_t next_song( song_node_t ** current_song,
     }
     
     if( NULL == *current_song ) {
-        group = (group_node_t *)rdn.groups.head->data;
-        if( NULL == group->artists.head ) {
+        group = (generic_node_t *)rdn.groups.head->data;
+        if( NULL == group->children.head ) {
             return DS_FAILURE;
         }
-        artist = (artist_node_t *)group->artists.head->data;
-        if( NULL == artist->albums.head ) {
+        artist = (generic_node_t *)group->children.head->data;
+        if( NULL == artist->children.head ) {
             return DS_FAILURE;
         }
-        album = (album_node_t *)artist->albums.head->data;
-        if( NULL == album->songs.head ) {
+        album = (generic_node_t *)artist->children.head->data;
+        if( NULL == album->children.head ) {
             return DS_FAILURE;
         }
-        *current_song = (song_node_t *)album->songs.head->data;
+        *current_song = (song_node_t *)album->children.head->data;
         if( DT_NEXT == operation ) {
             return DS_SUCCESS;
         }
     }
     
-    album = (*current_song)->album;
-    artist = album->artist;
-    group = artist->group;
+    album = (*current_song)->d.parent;
+    artist = album->parent;
+    group = artist->parent;
     
     switch( operation ) {
         case DT_NEXT:
             switch( level ) {
                 case DL_SONG:
-                    if( NULL == (*current_song)->node.next ) {
-                        *current_song = (song_node_t *)album->songs.head->data;
+                    if( NULL == (*current_song)->d.node.next ) {
+                        *current_song = (song_node_t *)album->children.head->data;
                         return DS_END_OF_LIST;
                     }
-                    *current_song = (song_node_t *)(*current_song)->node.next->data;
+                    *current_song = (song_node_t *)(*current_song)->d.node.next->data;
                     return DS_SUCCESS;
                 case DL_ALBUM:
                     if( NULL == album->node.next ) {
-                        album = (album_node_t *)artist->albums.head->data;
+                        album = (generic_node_t *)artist->children.head->data;
                         rv = DS_END_OF_LIST;
                     } else {
-                        album = (album_node_t *)album->node.next->data;
+                        album = (generic_node_t *)album->node.next->data;
                         rv = DS_SUCCESS;
                     }
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    *current_song = (song_node_t *)album->children.head->data;
                     break;
                 case DL_ARTIST:
                     if( NULL == artist->node.next ) {
-                        artist = (artist_node_t *)group->artists.head->data;
+                        artist = (generic_node_t *)group->children.head->data;
                         rv = DS_END_OF_LIST;
                     } else {
-                        artist = (artist_node_t *)artist->node.next->data;
+                        artist = (generic_node_t *)artist->node.next->data;
                         rv = DS_SUCCESS;
                     }
-                    album = (album_node_t *)artist->albums.head->data;
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    album = (generic_node_t *)artist->children.head->data;
+                    *current_song = (song_node_t *)album->children.head->data;
                     break;
                 default: /* DL_GROUP */
                     if( NULL == group->node.next ) {
-                        group = (group_node_t *)rdn.groups.head->data;
+                        group = (generic_node_t *)rdn.groups.head->data;
                         rv = DS_END_OF_LIST;
                     } else {
-                        group = (group_node_t *)group->node.next->data;
+                        group = (generic_node_t *)group->node.next->data;
                         rv = DS_SUCCESS;
                     }
-                    artist = (artist_node_t *)group->artists.head->data;
-                    album = (album_node_t *)artist->albums.head->data;
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    artist = (generic_node_t *)group->children.head->data;
+                    album = (generic_node_t *)artist->children.head->data;
+                    *current_song = (song_node_t *)album->children.head->data;
                     break;
             }
             break;
         case DT_PREVIOUS:
             switch( level ) {
                 case DL_SONG:
-                    if( NULL == (*current_song)->node.prev ) {
-                        *current_song = (song_node_t *)album->songs.tail->data;
+                    if( NULL == (*current_song)->d.node.prev ) {
+                        *current_song = (song_node_t *)album->children.tail->data;
                         return DS_END_OF_LIST;
                     }
-                    *current_song = (song_node_t *)(*current_song)->node.prev->data;
+                    *current_song = (song_node_t *)(*current_song)->d.node.prev->data;
                     return DS_SUCCESS;
                 case DL_ALBUM:
                     if( NULL == album->node.prev ) {
-                        album = (album_node_t *)artist->albums.tail->data;
+                        album = (generic_node_t *)artist->children.tail->data;
                         rv = DS_END_OF_LIST;
                     } else {
-                        album = (album_node_t *)album->node.prev->data;
+                        album = (generic_node_t *)album->node.prev->data;
                         rv = DS_SUCCESS;
                     }
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    *current_song = (song_node_t *)album->children.head->data;
                     break;
                 case DL_ARTIST:
                     if( NULL == artist->node.prev ) {
-                        artist = (artist_node_t *)group->artists.tail->data;
+                        artist = (generic_node_t *)group->children.tail->data;
                         rv = DS_END_OF_LIST;
                     } else {
-                        artist = (artist_node_t *)artist->node.prev->data;
+                        artist = (generic_node_t *)artist->node.prev->data;
                         rv = DS_SUCCESS;
                     }
-                    album = (album_node_t *)artist->albums.tail->data;
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    album = (generic_node_t *)artist->children.tail->data;
+                    *current_song = (song_node_t *)album->children.head->data;
                     break;
                 default: /* DL_GROUP */
                     if( NULL == group->node.next ) {
-                        group = (group_node_t *)rdn.groups.tail->data;
+                        group = (generic_node_t *)rdn.groups.tail->data;
                         rv = DS_END_OF_LIST;
                     } else {
-                        group = (group_node_t *)group->node.prev->data;
+                        group = (generic_node_t *)group->node.prev->data;
                         rv = DS_SUCCESS;
                     }
-                    artist = (artist_node_t *)group->artists.tail->data;
-                    album = (album_node_t *)artist->albums.tail->data;
-                    *current_song = (song_node_t *)album->songs.head->data;
+                    artist = (generic_node_t *)group->children.tail->data;
+                    album = (generic_node_t *)artist->children.tail->data;
+                    *current_song = (song_node_t *)album->children.head->data;
                     break;
             }
             break;
@@ -176,24 +176,24 @@ db_status_t next_song( song_node_t ** current_song,
                      * function is expecting.
                      */
                     random_number = random_number_in_range(0, (rdn.size_list-1));
-                    group = (group_node_t *) rdn.groups.head->data;
+                    group = (generic_node_t *) rdn.groups.head->data;
                     
                     for(ii = 0; ii < random_number; ii++) {
                         if( NULL == group->node.next ) {
                             return DS_FAILURE;
                         }
-                        group = (group_node_t *)group->node.next->data;
+                        group = (generic_node_t *)group->node.next->data;
                     }
                     /* Break left out on purpose */
                 case DL_ARTIST:
                 {
                     song_node_t * sn;
-                    if( NULL == group->artists.head ) {
+                    if( NULL == group->children.head ) {
                         return DS_FAILURE;
                     }
-                    sn = find_random_song_from_artist((artist_node_t *)group->artists.head->data,
-                                                      group->index_songs_start,
-                                                      group->index_songs_stop);
+                    sn = find_random_song_from_artist((generic_node_t *)group->children.head->data,
+                                                      group->d.list.index_songs_start,
+                                                      group->d.list.index_songs_stop);
                     if( NULL == sn ) {
                         return DS_FAILURE;
                     }
@@ -203,7 +203,7 @@ db_status_t next_song( song_node_t ** current_song,
                 case DL_ALBUM:
                 {
                     song_node_t * sn;
-                    sn = find_random_song_from_artist(artist, artist->index_songs_start, artist->index_songs_stop);
+                    sn = find_random_song_from_artist(artist, artist->d.list.index_songs_start, artist->d.list.index_songs_stop);
                     if( NULL == sn ) {
                         return DS_FAILURE;
                     }
@@ -213,7 +213,7 @@ db_status_t next_song( song_node_t ** current_song,
                 default: /* DL_SONG */
                 {
                     song_node_t * sn;
-                    sn = find_random_song_from_artist(artist, album->index_songs_start, album->index_songs_stop);
+                    sn = find_random_song_from_artist(artist, album->d.list.index_songs_start, album->d.list.index_songs_stop);
                     if( NULL == sn ) {
                         return DS_FAILURE;
                     }
@@ -225,9 +225,9 @@ db_status_t next_song( song_node_t ** current_song,
     return rv;
 }
 
-song_node_t * find_random_song_from_artist( artist_node_t * an, uint32_t first_song_index, uint32_t last_song_index )
+song_node_t * find_random_song_from_artist( generic_node_t * an, uint32_t first_song_index, uint32_t last_song_index )
 {
-    artist_node_t * artist = an;
+    generic_node_t * artist = an;
     uint32_t random_song_index;
     
     random_song_index = random_number_in_range(first_song_index, last_song_index);
@@ -237,29 +237,29 @@ song_node_t * find_random_song_from_artist( artist_node_t * an, uint32_t first_s
         if( NULL == artist ) {
             return NULL;
         }
-        if(    ( random_song_index >= artist->index_songs_start )
-            && ( random_song_index <= artist->index_songs_stop ) ) {
+        if(    ( random_song_index >= artist->d.list.index_songs_start )
+            && ( random_song_index <= artist->d.list.index_songs_stop ) ) {
             /* We have found the artist of interest */
-            return find_random_song_from_album((album_node_t *)artist->albums.head->data, random_song_index);
+            return find_random_song_from_album((generic_node_t *)artist->children.head->data, random_song_index);
         }
-        artist = (artist_node_t *) artist->node.next->data;
+        artist = (generic_node_t *) artist->node.next->data;
     }
 }
 
-song_node_t * find_random_song_from_album( album_node_t * an, uint32_t random_song_index )
+song_node_t * find_random_song_from_album( generic_node_t * an, uint32_t random_song_index )
 {
-    album_node_t * album = an;
+    generic_node_t * album = an;
     
     while( 1 ) {
         if( NULL == album ) {
             return NULL;
         }
-        if(    ( random_song_index >= album->index_songs_start )
-            && ( random_song_index <= album->index_songs_stop ) ) {
+        if(    ( random_song_index >= album->d.list.index_songs_start )
+            && ( random_song_index <= album->d.list.index_songs_stop ) ) {
             /* We have found the album of interest */
-            return find_random_song_from_songs((song_node_t *)album->songs.head->data, random_song_index);
+            return find_random_song_from_songs((song_node_t *)album->children.head->data, random_song_index);
         }
-        album = (album_node_t *) album->node.next->data;
+        album = (generic_node_t *) album->node.next->data;
     }
 }
 
@@ -275,7 +275,7 @@ song_node_t * find_random_song_from_songs( song_node_t * sn, uint32_t random_son
             /* Found it :) */
             return song;
         }
-        song = (song_node_t *) song->node.next->data;
+        song = (song_node_t *) song->d.node.next->data;
     }
 }
 

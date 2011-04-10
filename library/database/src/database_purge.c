@@ -16,11 +16,11 @@
 
 #include "database.h"
 #include "internal_database.h"
-#include "group.h"
+#include "generic.h"
 
 /* See database.h for information */
 void database_purge( void )
 {
-    ll_delete_list(&rdn.groups, delete_group, NULL);
+    ll_delete_list(&rdn.groups, delete_generic, NULL);
     rdn.size_list = 0;
 }

@@ -44,9 +44,9 @@ typedef enum {
 typedef struct {
     int32_t track_number;
     int32_t disc_number;
-    uint8_t title[MEDIA_TITLE_LENGTH + 1];
-    uint8_t album[MEDIA_ALBUM_LENGTH + 1];
-    uint8_t artist[MEDIA_ARTIST_LENGTH + 1];
+    char title[MEDIA_TITLE_LENGTH + 1];
+    char album[MEDIA_ALBUM_LENGTH + 1];
+    char artist[MEDIA_ARTIST_LENGTH + 1];
 
     double reference_loudness;
     double track_gain;

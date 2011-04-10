@@ -200,8 +200,8 @@ void ri_send_state( const irp_state_t device_status,
 /* See radio-interface.h for details */
 int32_t ri_playback_play( song_node_t *song )
 {
-    return playback_play( song->file_location, song->track_gain,
-                          song->track_peak, song->play_fn, &__playback_cb );
+    return playback_play( song->file_location, song->d.d.gain.track_gain,
+                          song->d.d.gain.track_peak, song->play_fn, &__playback_cb );
 }
 
 /* See radio-interface.h for details */

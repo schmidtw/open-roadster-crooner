@@ -19,7 +19,6 @@
 #include <linked-list/linked-list.h>
 #include "database.h"
 #include "internal_database.h"
-#include "group.h"
 #include "mi_interface.h"
 
 root_database_node_t rdn;

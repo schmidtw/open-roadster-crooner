@@ -4,48 +4,59 @@
 
 #include "add_song.h"
 #include "database.h"
-#include "artist.h"
-#include "album.h"
+#include "generic.h"
 #include "song.h"
 
 static ll_ir_t scrubber(ll_node_t *node, volatile void *user_data);
 
-song_node_t * add_song_to_group( group_node_t * group,
-        const char * artist, const char * album,
-        const char * song, const uint16_t track_number,
-        const double track_gain, const double track_peak,
-        const double album_gain, const double album_peak,
+song_node_t * add_song_to_group( generic_node_t * group,
+        media_metadata_t * metadata,
         media_play_fn_t play_fn,
-        const char * file_location )
+        char * file_location )
 {
-    artist_node_t * ar_n;
-    album_node_t * al_n;
-    song_node_t * so_n = NULL;
+    generic_node_t * artist_n;
+    generic_node_t * album_n;
+    song_node_t * song_n;
     bool artist_created = false;
     bool album_created = false;
     
-    ar_n = find_or_create_artist( group, artist, &artist_created );
-    if( NULL == ar_n ) {
+    if( NULL == metadata ) {
+        goto failure;
+    }
+    artist_n = find_or_create_generic( group, generic_compare,
+                                       get_new_generic_node,
+                                       (void*)metadata->artist,
+                                       &artist_created );
+    if( NULL == artist_n ) {
         goto failure;
     } else {
-        al_n = find_or_create_album( ar_n, album, &album_created );
-        if( NULL == al_n ) {
+        album_n = find_or_create_generic( artist_n, generic_compare,
+                                          get_new_generic_node,
+                                          (void*)metadata->album,
+                                          &album_created );
+        if( NULL == album_n ) {
             goto failure;
         } else {
-            so_n = find_or_create_song( al_n, song, track_number, album_gain, album_peak,
-                                        track_gain, track_peak, play_fn,
-                                        file_location );
-            if( NULL == so_n ) {
+            bool song_created;
+            song_create_t sc;
+            sc.metadata = metadata;
+            sc.play_fn = play_fn;
+            sc.file_location = file_location;
+            song_n = (song_node_t*)find_or_create_generic( album_n, song_compare,
+                                             get_new_generic_node,
+                                             (void*)&sc,
+                                             &song_created);
+            if( NULL == song_n ) {
                 goto failure;
             }
         } 
     }
-    return so_n;
+    return song_n;
 failure:
     if( true == artist_created ) {
-        ll_iterate( &ar_n->group->artists, scrubber, delete_artist, &ar_n->node );
+        ll_iterate( &artist_n->parent->children, scrubber, delete_generic, &artist_n->node );
     } else if( true == album_created ) {
-        ll_iterate( &al_n->artist->albums, scrubber, delete_album, &al_n->node );
+        ll_iterate( &album_n->parent->children, scrubber, delete_generic, &album_n->node );
     }
     return NULL;
 }

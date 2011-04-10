@@ -4,13 +4,9 @@
 #include "internal_database.h"
 #include "database_print.h"
 #include "add_song.h"
-#include "group.h"
+#include "generic.h"
 
 root_database_node_t rdn;
-
-char artist[MAX_ARTIST_NAME_W_NULL];
-char album[MAX_ALBUM_TITLE_W_NULL];
-char song[MAX_SONG_TITLE_W_NULL];
 
 media_status_t fake_play( const char *filename,
                           const double gain,
@@ -24,41 +20,59 @@ media_status_t fake_play( const char *filename,
     return MI_RETURN_OK;
 }
 
+void setup_metadata( media_metadata_t * metadata, char * artist, char * album, char * song, uint32_t track_num )
+{
+    if( NULL == metadata ) {
+        printf("The Metadata pointer must not be NULL\n");
+    }
+    CU_ASSERT(NULL != metadata);
+    bzero(metadata, sizeof(media_metadata_t));
+
+    if( NULL != artist ) {
+        sprintf(metadata->artist, "%s", artist);
+    }
+    if( NULL != album ) {
+        sprintf(metadata->album, "%s", album);
+    }
+    if( NULL != song ) {
+        sprintf(metadata->title, "%s", song);
+    }
+    metadata->track_number = track_num;
+}
+
 void create_simple_database( void )
 {
-    group_node_t * group;
+    generic_node_t * group;
     song_node_t * so_n;
     ll_node_t * node;
+    media_metadata_t metadata;
     
-    node = get_new_group_and_node("1");
+    node = get_new_generic_node(GNT_GROUP, "1");
     CU_ASSERT( NULL != node );
     ll_append( &rdn.groups, node );
     rdn.size_list++;
     rdn.initialized = true;
     
-    group = (group_node_t *)rdn.groups.head->data;
+    group = (generic_node_t *)rdn.groups.head->data;
     
-    sprintf(artist, "A Me");
-    sprintf(album, "Brushfire Fairytales");
-    sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here" );
-    CU_ASSERT( NULL != so_n );
-    
-    sprintf(artist, "Jack Johnson");
-    sprintf(album, "Brushfire Fairytales");
-    sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_play, "Here");
-    CU_ASSERT( NULL != so_n );
-    sprintf(song, "Middle Man");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here");
+    setup_metadata(&metadata, "A Me", "Brushfire Fairytales", "Inaudible Melodies", 1);
+
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
     
-    sprintf(album, "In between dreams");
-    sprintf(song, "Better Together");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here");
+    setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Inaudible Melodies", 2);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
-    sprintf(song, "Never Know");
-    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_play, "Here");
+
+    setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Middle Man", 1);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+    
+    setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Better Together", 1);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+    setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Never Know", 2);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
 }
 
@@ -68,10 +82,10 @@ void print_song_info( song_node_t * node )
         printf("Oops, the song is NULL\n");
     } else {
         printf( "%s -> %s -> %s -> %s\n",
-                node->album->artist->group->name,
-                node->album->artist->name,
-                node->album->name,
-                node->title );
+                node->d.parent->parent->parent->name.group,
+                node->d.parent->parent->name.artist,
+                node->d.parent->name.album,
+                node->d.name.song );
     }
 }
 
@@ -86,46 +100,50 @@ void test_simple_test( void )
 
 void test_group_test( void )
 {
-    group_node_t * group;
+    generic_node_t * group;
     song_node_t * so_n;
     ll_node_t * node;
+    media_metadata_t metadata;
     
     database_purge();
 
-    node = get_new_group_and_node("1");
+    node = get_new_generic_node(GNT_GROUP, "1");
     CU_ASSERT( NULL != node );
     ll_append( &rdn.groups, node );
     rdn.size_list++;
-    node = get_new_group_and_node("2");
+    node = get_new_generic_node(GNT_GROUP, "2");
     CU_ASSERT( NULL != node );
     ll_append( &rdn.groups, node );
     rdn.size_list++;
     rdn.initialized = true;
     
-    group = (group_node_t *)rdn.groups.head->data;
+    group = (generic_node_t *)rdn.groups.head->data;
     
-    sprintf(artist, "A Me");
-    sprintf(album, "Brushfire Fairytales");
-    sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here" );
+    setup_metadata(&metadata, "A Me", "Brushfire Fairytales", "Inaudible Melodies", 1);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
     
-    sprintf(artist, "Jack Johnson");
-    sprintf(album, "Brushfire Fairytales");
-    sprintf(song, "Inaudible Melodies");
-    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_play, "Here");
+    setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Inaudible Melodies", 2);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
-    sprintf(song, "Middle Man");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here");
+    setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Middle Man", 1);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    CU_ASSERT( NULL != so_n );
+    /* Add the exact same song again */
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
     
-    group = (group_node_t *)rdn.groups.head->next->data;
-    sprintf(album, "In between dreams");
-    sprintf(song, "Better Together");
-    so_n = add_song_to_group(group, artist, album, song, 1, 0, 0, 0, 0, fake_play, "Here");
+    /* Add the same song with different gain */
+    metadata.track_gain = 1;
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
-    sprintf(song, "Never Know");
-    so_n = add_song_to_group(group, artist, album, song, 2, 0, 0, 0, 0, fake_play, "Here");
+
+    group = (generic_node_t *)rdn.groups.head->next->data;
+    setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Better Together", 1);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    CU_ASSERT( NULL != so_n );
+    setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Never Know", 2);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
 
     database_print();
@@ -162,16 +180,16 @@ void test_previous_song( void )
     printf("\n");
     CU_ASSERT( DS_FAILURE == next_song(NULL, DT_PREVIOUS, DL_SONG) );
     
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
     printf("Previous Song: ");
     print_song_info( so_n );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
     printf("Previous Song: ");
     print_song_info( so_n );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
     printf("Previous Album: ");
     print_song_info( so_n );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
     printf("Previous Artist: ");
     print_song_info( so_n );
     database_purge();

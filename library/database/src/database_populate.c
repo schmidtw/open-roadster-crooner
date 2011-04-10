@@ -22,11 +22,11 @@
 
 #include "database.h"
 #include "internal_database.h"
-#include "group.h"
 #include "add_song.h"
 #include "database_print.h"
 #include "file_os_wrapper.h"
 #include "mi_interface.h"
+#include "generic.h"
 
 #define DEBUG_DUMP_LIST 0
 
@@ -36,8 +36,8 @@ typedef struct {
 } indexer_t;
 
 bool setup_group_name( const char * name );
-group_node_t * find_group_node( const char * dir_name );
-bool place_songs_into_group( group_node_t * gn, char * dir_name );
+generic_node_t * find_group_node( const char * dir_name );
+bool place_songs_into_group( generic_node_t * gn, char * dir_name );
 bool get_last_dir_name( char * dest, char * src );
 void append_to_path( char * dest, const char * src );
 bool iterate_to_dir_entry( const char * dir_name );
@@ -119,7 +119,7 @@ bool populate_database( const char ** directory,
     {
         goto failure;
     }
-    ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_group, NULL);
+    ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_generic, NULL);
     {
         indexer_t indexer;
         indexer.song_index = 0;
@@ -139,60 +139,60 @@ failure:
 ll_ir_t index_groups( ll_node_t *node, volatile void *user_data )
 {
     indexer_t *indexer = (indexer_t *)user_data;
-    group_node_t *gn = (group_node_t *)node->data;
+    generic_node_t *gn = (generic_node_t *)node->data;
     indexer_t artist_index;
     artist_index.identifier_in_list = 1;
     artist_index.song_index = indexer->song_index;
     if( 0 == indexer->identifier_in_list ) {
         (indexer->identifier_in_list)++;
     }
-    gn->index_in_list = indexer->identifier_in_list;
+    gn->d.list.index = indexer->identifier_in_list;
     (indexer->identifier_in_list)++;
     
-    gn->index_songs_start = indexer->song_index;
-    ll_iterate(&(gn->artists), index_arist, NULL, &artist_index);
+    gn->d.list.index_songs_start = indexer->song_index;
+    ll_iterate(&(gn->children), index_arist, NULL, &artist_index);
     indexer->song_index = artist_index.song_index;
-    gn->index_songs_stop = indexer->song_index - 1;
+    gn->d.list.index_songs_stop = indexer->song_index - 1;
     return LL_IR__CONTINUE;
 }
 
 ll_ir_t index_arist( ll_node_t *node, volatile void *user_data )
 {
     indexer_t *indexer = (indexer_t *)user_data;
-    artist_node_t *an = (artist_node_t *)node->data;
+    generic_node_t *an = (generic_node_t *)node->data;
     indexer_t album_index;
     album_index.identifier_in_list = 1;
     album_index.song_index = indexer->song_index;
     if( 0 == indexer->identifier_in_list ) {
         (indexer->identifier_in_list)++;
     }
-    an->index_in_list = indexer->identifier_in_list;
+    an->d.list.index = indexer->identifier_in_list;
     (indexer->identifier_in_list)++;
     
-    an->index_songs_start = indexer->song_index;
-    ll_iterate(&(an->albums), index_album, NULL, &album_index);
+    an->d.list.index_songs_start = indexer->song_index;
+    ll_iterate(&(an->children), index_album, NULL, &album_index);
     indexer->song_index = album_index.song_index;
-    an->index_songs_stop = indexer->song_index - 1;
+    an->d.list.index_songs_stop = indexer->song_index - 1;
     return LL_IR__CONTINUE;
 }
 
 ll_ir_t index_album( ll_node_t *node, volatile void *user_data )
 {
     indexer_t *indexer = (indexer_t *)user_data;
-    album_node_t *an = (album_node_t *)node->data;
+    generic_node_t *an = (generic_node_t *)node->data;
     indexer_t song_index;
     song_index.identifier_in_list = 1;
     song_index.song_index = indexer->song_index;
     if( 0 == indexer->identifier_in_list ) {
         (indexer->identifier_in_list)++;
     }
-    an->index_in_list = indexer->identifier_in_list;
+    an->d.list.index = indexer->identifier_in_list;
     (indexer->identifier_in_list)++;
     
-    an->index_songs_start = indexer->song_index;
-    ll_iterate(&(an->songs), index_songs, NULL, &song_index);
+    an->d.list.index_songs_start = indexer->song_index;
+    ll_iterate(&(an->children), index_songs, NULL, &song_index);
     indexer->song_index = song_index.song_index;
-    an->index_songs_stop = indexer->song_index - 1;
+    an->d.list.index_songs_stop = indexer->song_index - 1;
     return LL_IR__CONTINUE;
 }
 
@@ -208,13 +208,13 @@ ll_ir_t index_songs( ll_node_t *node, volatile void *user_data )
 
 bool normalize_artists_in_unknown_group_to_unused_groups( void )
 {
-    group_node_t * unknown_group;
+    generic_node_t * unknown_group;
     uint8_t number_of_empty_groups = 0;
     
     if( NULL == rdn.groups.tail ) {
         return false;
     }
-    unknown_group = (group_node_t *)rdn.groups.tail->data;
+    unknown_group = (generic_node_t *)rdn.groups.tail->data;
     if( NULL == unknown_group ) {
         return false;
     }
@@ -225,38 +225,38 @@ bool normalize_artists_in_unknown_group_to_unused_groups( void )
 
 ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data )
 {
-    group_node_t * gn = (group_node_t *)node->data;
-    group_node_t * unknown_node;
-    artist_node_t * artist_node;
+    generic_node_t * group_n = (generic_node_t *)node->data;
+    generic_node_t * group_unknown_n;
+    generic_node_t * artist_node;
     uint8_t * count = (uint8_t *)user_data;
     
     if( NULL == rdn.groups.tail ) {
         return LL_IR__STOP;
     }
-    unknown_node = (group_node_t *)rdn.groups.tail->data;
-    if(    ( NULL == unknown_node )
+    group_unknown_n = (generic_node_t *)rdn.groups.tail->data;
+    if(    ( NULL == group_unknown_n )
         || ( 0 == *count ) )
     {
         return LL_IR__STOP;
     }
-    if( 0 == gn->size_list ) {
+    if( 0 == group_n->d.list.size ) {
         int ii;
-        if( (*count) > gn->size_list ) {
+        if( (*count) > group_n->d.list.size ) {
             ii = 1;
         } else {
-            ii = unknown_node->size_list / (*count);
-            ii += (unknown_node->size_list % (*count)>0?1:0);
+            ii = group_unknown_n->d.list.size / (*count);
+            ii += (group_unknown_n->d.list.size % (*count)>0?1:0);
         }
         for( ; ii > 0 ; ii-- ) {
-            if( NULL == unknown_node->artists.head ) {
+            if( NULL == group_unknown_n->children.head ) {
                 return LL_IR__STOP;
             }
-            artist_node = (artist_node_t *)unknown_node->artists.head->data;
-            ll_remove( &unknown_node->artists, &artist_node->node );
-            unknown_node->size_list--;
-            ll_append( &gn->artists, &artist_node->node );
-            gn->size_list++;
-            artist_node->group = gn;
+            artist_node = (generic_node_t *)group_unknown_n->children.head->data;
+            ll_remove( &group_unknown_n->children, &artist_node->node );
+            group_unknown_n->d.list.size--;
+            ll_append( &group_n->children, &artist_node->node );
+            group_n->d.list.size++;
+            artist_node->parent = group_n;
         }
         *count = *count - 1;
     }
@@ -265,21 +265,21 @@ ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data )
 
 ll_ir_t count_unused_nodes( ll_node_t *node, volatile void *user_data )
 {
-    group_node_t * gn = (group_node_t *)node->data;
-    group_node_t * unknown_node;
+    generic_node_t * gn = (generic_node_t *)node->data;
+    generic_node_t * unknown_node;
     uint8_t * count = (uint8_t *)user_data;
     
     if( NULL == rdn.groups.tail ) {
         return LL_IR__STOP;
     }
-    unknown_node = (group_node_t *)rdn.groups.tail->data;
+    unknown_node = (generic_node_t *)rdn.groups.tail->data;
     if( NULL == unknown_node ) {
         return LL_IR__STOP;
     }
     if( gn == unknown_node ) {
         return LL_IR__STOP;
     }
-    if( 0 == gn->size_list ) {
+    if( 0 == gn->d.list.size ) {
         *count = *count + 1;
     }
     return LL_IR__CONTINUE;
@@ -332,16 +332,11 @@ bool put_songs_into_groups( const char * RootDirectory )
             /* Place this file into the miscellaneous group */
             rv = mi_get_information( base_dir, &metadata, &play_fn );
             if( MI_RETURN_OK == rv ) {
-                uint16_t adjusted_track_number;
-                adjusted_track_number = metadata.track_number;
                 if( 0 < metadata.disc_number ) {
-                    adjusted_track_number += 1000 * (metadata.disc_number - 1);
+                    metadata.track_number += 1000 * (metadata.disc_number - 1);
                 }
-                add_song_to_group( (group_node_t *)rdn.groups.tail->data,
-                        (char *)metadata.artist, (char *)metadata.album,
-                        (char *)metadata.title, adjusted_track_number,
-                        metadata.track_gain, metadata.track_peak,
-                        metadata.album_gain, metadata.album_peak,
+                add_song_to_group( (generic_node_t *)rdn.groups.tail->data,
+                        &metadata,
                         play_fn, base_dir );
             }
             /* After sending the fully qualified path into add the song
@@ -356,10 +351,10 @@ bool put_songs_into_groups( const char * RootDirectory )
 
 ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data )
 {
-    group_node_t *gn;
+    generic_node_t *gn;
     
-    gn = (group_node_t *)node->data;
-    if( 0 == gn->size_list  ) {
+    gn = (generic_node_t *)node->data;
+    if( 0 == gn->d.list.size  ) {
         return LL_IR__DELETE_AND_CONTINUE;
     }
     return LL_IR__CONTINUE;
@@ -368,7 +363,7 @@ ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data )
 bool setup_group_name( const char * name )
 {
     ll_node_t *n;
-    n = get_new_group_and_node( name );
+    n = get_new_generic_node( GNT_GROUP, (void*)name );
     if( NULL == n ) {
         return false;
     }
@@ -376,35 +371,35 @@ bool setup_group_name( const char * name )
     return true;
 }
 
-group_node_t * find_group_node( const char * dir_name )
+generic_node_t * find_group_node( const char * dir_name )
 {
-    group_node_t * gn;
+    generic_node_t * group_n;
     if( NULL == dir_name ) {
         return NULL;
     }
     if( NULL != rdn.groups.head ) {
-        gn = (group_node_t *)rdn.groups.head->data;
+        group_n = (generic_node_t *)rdn.groups.head->data;
     }
-    while( NULL != gn ) {
-        if( 0 == strcmp( dir_name, gn->name ) ) {
+    while( NULL != group_n ) {
+        if( 0 == strcmp( dir_name, group_n->name.artist ) ) {
             break;
         }
-        if( NULL == gn->node.next ) {
-            gn = NULL;
+        if( NULL == group_n->node.next ) {
+            group_n = NULL;
         } else {
-            gn = (group_node_t *)gn->node.next->data;
+            group_n = (generic_node_t *)group_n->node.next->data;
         }
     }
     
-    if( NULL == gn ) {
+    if( NULL == group_n ) {
         if( NULL != rdn.groups.tail ) {
-            return ((group_node_t *)rdn.groups.tail->data);
+            return ((generic_node_t *)rdn.groups.tail->data);
         }
     }
-    return gn;
+    return group_n;
 }
 
-bool place_songs_into_group( group_node_t * gn, char * dir_name )
+bool place_songs_into_group( generic_node_t * gn, char * dir_name )
 {
     char last_dir[MAX_SHORT_FILENAME_W_NULL];
     char full_path[MAX_SHORT_FILENAME_PATH_W_NULL];
@@ -468,10 +463,7 @@ bool place_songs_into_group( group_node_t * gn, char * dir_name )
                     if( 0 < metadata.disc_number ) {
                         adjusted_track_number += 1000 * (metadata.disc_number - 1);
                     }
-                    add_song_to_group( gn, (char *)metadata.artist, (char *)metadata.album,
-                            (char *)metadata.title, adjusted_track_number,
-                            metadata.track_gain, metadata.track_peak,
-                            metadata.album_gain, metadata.album_peak,
+                    add_song_to_group( gn, &metadata,
                             play_fn, full_path );
                 }
                 if( false == get_last_dir_name( junk_filename, full_path ) ) {
