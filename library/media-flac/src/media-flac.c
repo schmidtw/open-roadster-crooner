@@ -762,7 +762,9 @@ static flac_metadata_t flac_get_key_value( int fd, uint32_t *len )
                             if( 0 == strncasecmp((char*) buf, "RTIST", 5) ) {
                                 if( 1 == read(fd, &c, 1) ) {
                                     (*len)--;
-                                    return FM__ARTIST;
+                                    if( '=' == c ) {
+                                        return FM__ARTIST;
+                                    }
                                 }
                             }
                         }
