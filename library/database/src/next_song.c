@@ -152,7 +152,7 @@ db_status_t next_song( song_node_t ** current_song,
                     *current_song = (song_node_t *)album->children.head->data;
                     break;
                 default: /* DL_GROUP */
-                    if( NULL == group->node.next ) {
+                    if( NULL == group->node.prev ) {
                         group = (generic_node_t *)rdn.groups.tail->data;
                         rv = DS_END_OF_LIST;
                     } else {

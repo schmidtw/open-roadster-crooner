@@ -76,30 +76,7 @@ void create_simple_database( void )
     CU_ASSERT( NULL != so_n );
 }
 
-void print_song_info( song_node_t * node )
-{
-    if( NULL == node ) {
-        printf("Oops, the song is NULL\n");
-    } else {
-        printf( "%s -> %s -> %s -> %s\n",
-                node->d.parent->parent->parent->name.group,
-                node->d.parent->parent->name.artist,
-                node->d.parent->name.album,
-                node->d.name.song );
-    }
-}
-
-void test_simple_test( void )
-{
-    database_purge();
-    create_simple_database();
-    database_print();
-    database_purge();
-    database_print();
-}
-
-void test_group_test( void )
-{
+void create_multi_group_database() {
     generic_node_t * group;
     song_node_t * so_n;
     ll_node_t * node;
@@ -112,6 +89,10 @@ void test_group_test( void )
     ll_append( &rdn.groups, node );
     rdn.size_list++;
     node = get_new_generic_node(GNT_GROUP, "2");
+    CU_ASSERT( NULL != node );
+    ll_append( &rdn.groups, node );
+    rdn.size_list++;
+    node = get_new_generic_node(GNT_GROUP, "3");
     CU_ASSERT( NULL != node );
     ll_append( &rdn.groups, node );
     rdn.size_list++;
@@ -138,15 +119,78 @@ void test_group_test( void )
     so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
 
-    group = (generic_node_t *)rdn.groups.head->next->data;
-    setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Better Together", 1);
+    group = (generic_node_t *)group->node.next->data;
+    setup_metadata(&metadata, "Green Day", "In between dreams", "Better Together", 1);
     so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
-    setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Never Know", 2);
+    setup_metadata(&metadata, "Green Day", "In between dreams", "Never Know", 2);
     so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
 
+    group = (generic_node_t *)group->node.next->data;
+    setup_metadata(&metadata, "Muse", "In between dreams", "Better Together", 1);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    CU_ASSERT( NULL != so_n );
+    setup_metadata(&metadata, "Muse", "In between dreams", "Never Know", 2);
+    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    CU_ASSERT( NULL != so_n );
+}
+
+void print_song_info( song_node_t * node )
+{
+    if( NULL == node ) {
+        printf("Oops, the song is NULL\n");
+    } else {
+        printf( "%s -> %s -> %s -> %s\n",
+                node->d.parent->parent->parent->name.group,
+                node->d.parent->parent->name.artist,
+                node->d.parent->name.album,
+                node->d.name.song );
+    }
+}
+
+void test_simple_test( void )
+{
+    database_purge();
+    create_simple_database();
     database_print();
+    database_purge();
+    database_print();
+}
+
+void test_group_test( void )
+{
+    song_node_t * so_n = NULL;
+    create_multi_group_database();
+
+    database_print();
+
+    CU_ASSERT( DS_FAILURE == next_song(NULL, DT_NEXT, DL_GROUP) );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_GROUP) );
+    printf("First Group -- Song: ");
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_GROUP) );
+    printf("Next Group -- Song: ");
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_GROUP) );
+    printf("Next Group -- Song: ");
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_NEXT, DL_GROUP) );
+    printf("Next Group -- Song: ");
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_GROUP) );
+    printf("Prev Group -- Song: ");
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_GROUP) );
+    printf("Prev Group -- Song: ");
+    print_song_info( so_n );
+
+
     database_purge();
     database_print();
 }
