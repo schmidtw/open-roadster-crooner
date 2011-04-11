@@ -22,6 +22,7 @@
 
 #include "database.h"
 #include "internal_database.h"
+#include "indexer.h"
 #include "add_song.h"
 #include "database_print.h"
 #include "file_os_wrapper.h"
@@ -29,11 +30,6 @@
 #include "generic.h"
 
 #define DEBUG_DUMP_LIST 0
-
-typedef struct {
-    uint32_t song_index;
-    uint32_t identifier_in_list;
-} indexer_t;
 
 bool setup_group_name( const char * name );
 generic_node_t * find_group_node( const char * dir_name );
@@ -46,10 +42,7 @@ bool normalize_artists_in_unknown_group_to_unused_groups( void );
 ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data );
 ll_ir_t count_unused_nodes( ll_node_t *node, volatile void *user_data );
 ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data );
-ll_ir_t index_groups( ll_node_t *node, volatile void *user_data );
-ll_ir_t index_arist( ll_node_t *node, volatile void *user_data );
-ll_ir_t index_album( ll_node_t *node, volatile void *user_data );
-ll_ir_t index_songs( ll_node_t *node, volatile void *user_data );
+
 
 /**
  * The structure of the pools are:
@@ -120,12 +113,7 @@ bool populate_database( const char ** directory,
         goto failure;
     }
     ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_generic, NULL);
-    {
-        indexer_t indexer;
-        indexer.song_index = 0;
-        indexer.identifier_in_list = 1;
-        ll_iterate(&rdn.groups, index_groups, NULL, &indexer);
-    }
+    index_groups(&rdn.groups);
     
 #if (0 != DEBUG_DUMP_LIST)
     database_print();
@@ -134,76 +122,6 @@ bool populate_database( const char ** directory,
 failure:
     database_purge();
     return false;
-}
-
-ll_ir_t index_groups( ll_node_t *node, volatile void *user_data )
-{
-    indexer_t *indexer = (indexer_t *)user_data;
-    generic_node_t *gn = (generic_node_t *)node->data;
-    indexer_t artist_index;
-    artist_index.identifier_in_list = 1;
-    artist_index.song_index = indexer->song_index;
-    if( 0 == indexer->identifier_in_list ) {
-        (indexer->identifier_in_list)++;
-    }
-    gn->d.list.index = indexer->identifier_in_list;
-    (indexer->identifier_in_list)++;
-    
-    gn->d.list.index_songs_start = indexer->song_index;
-    ll_iterate(&(gn->children), index_arist, NULL, &artist_index);
-    indexer->song_index = artist_index.song_index;
-    gn->d.list.index_songs_stop = indexer->song_index - 1;
-    return LL_IR__CONTINUE;
-}
-
-ll_ir_t index_arist( ll_node_t *node, volatile void *user_data )
-{
-    indexer_t *indexer = (indexer_t *)user_data;
-    generic_node_t *an = (generic_node_t *)node->data;
-    indexer_t album_index;
-    album_index.identifier_in_list = 1;
-    album_index.song_index = indexer->song_index;
-    if( 0 == indexer->identifier_in_list ) {
-        (indexer->identifier_in_list)++;
-    }
-    an->d.list.index = indexer->identifier_in_list;
-    (indexer->identifier_in_list)++;
-    
-    an->d.list.index_songs_start = indexer->song_index;
-    ll_iterate(&(an->children), index_album, NULL, &album_index);
-    indexer->song_index = album_index.song_index;
-    an->d.list.index_songs_stop = indexer->song_index - 1;
-    return LL_IR__CONTINUE;
-}
-
-ll_ir_t index_album( ll_node_t *node, volatile void *user_data )
-{
-    indexer_t *indexer = (indexer_t *)user_data;
-    generic_node_t *an = (generic_node_t *)node->data;
-    indexer_t song_index;
-    song_index.identifier_in_list = 1;
-    song_index.song_index = indexer->song_index;
-    if( 0 == indexer->identifier_in_list ) {
-        (indexer->identifier_in_list)++;
-    }
-    an->d.list.index = indexer->identifier_in_list;
-    (indexer->identifier_in_list)++;
-    
-    an->d.list.index_songs_start = indexer->song_index;
-    ll_iterate(&(an->children), index_songs, NULL, &song_index);
-    indexer->song_index = song_index.song_index;
-    an->d.list.index_songs_stop = indexer->song_index - 1;
-    return LL_IR__CONTINUE;
-}
-
-ll_ir_t index_songs( ll_node_t *node, volatile void *user_data )
-{
-    indexer_t *indexer = (indexer_t *)user_data;
-    song_node_t *sn = (song_node_t *)node->data;
-    
-    sn->index_songs_value = indexer->song_index;
-    indexer->song_index++;
-    return LL_IR__CONTINUE;
 }
 
 bool normalize_artists_in_unknown_group_to_unused_groups( void )

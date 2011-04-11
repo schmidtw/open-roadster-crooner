@@ -5,6 +5,7 @@
 #include "database_print.h"
 #include "add_song.h"
 #include "generic.h"
+#include "indexer.h"
 
 root_database_node_t rdn;
 
@@ -74,6 +75,7 @@ void create_simple_database( void )
     setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Never Know", 2);
     so_n = add_song_to_group(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
+    index_groups( &rdn.groups );
 }
 
 void create_multi_group_database() {
@@ -134,6 +136,7 @@ void create_multi_group_database() {
     setup_metadata(&metadata, "Muse", "In between dreams", "Never Know", 2);
     so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
+    index_groups( &rdn.groups );
 }
 
 void print_song_info( song_node_t * node )
@@ -205,6 +208,10 @@ void test_next_song( void )
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_SONG) );
     printf("First Song: ");
     print_song_info( so_n );
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_NEXT, DL_SONG) );
+    printf("Next Song: ");
+    print_song_info( so_n );
+
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_ARTIST) );
     printf("Next Artist: ");
     print_song_info( so_n );
@@ -227,13 +234,13 @@ void test_previous_song( void )
     CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
     printf("Previous Song: ");
     print_song_info( so_n );
-    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
-    printf("Previous Song: ");
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    printf("Previous Artist: ");
     print_song_info( so_n );
     CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
     printf("Previous Album: ");
     print_song_info( so_n );
-    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
     printf("Previous Artist: ");
     print_song_info( so_n );
     database_purge();
@@ -241,8 +248,9 @@ void test_previous_song( void )
 
 void test_random_song( void )
 {
+    int ii;
     song_node_t * so_n = NULL;
-    create_simple_database();
+    create_multi_group_database();
     printf("\n");
     CU_ASSERT( DS_FAILURE == next_song(NULL, DT_RANDOM, DL_SONG) );
     srand(11);
@@ -252,12 +260,22 @@ void test_random_song( void )
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
     printf("Random Group: ");
     print_song_info( so_n );
+    srand(2);
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
     printf("Random Group: ");
     print_song_info( so_n );
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
     printf("Random Group: ");
     print_song_info( so_n );
+    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_ALBUM) );
+    printf("Random Album: ");
+    print_song_info( so_n );
+    for( ii = 0; ii < 10; ii++ ) {
+        CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_ARTIST) );
+        printf("Random Artist: ");
+        print_song_info( so_n );
+    }
+
     database_purge();
 }
 
