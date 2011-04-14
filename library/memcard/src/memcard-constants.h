@@ -24,7 +24,13 @@
 
 #define MC_BLOCK_START          0xFE
 
+#define MC_DATA_MASK                    0x1F
+#define MC_DATA_ACCEPTED                0x05
+#define MC_DATA_REJECTED_CRC            0x0B
+#define MC_DATA_REJECTED_WRITE_ERROR    0x0D
+
 #define MC_READ_SINGLE_BLOCK    17
+#define MC_WRITE_SINGLE_BLOCK   24
 #define MC_COMMAND_BUFFER_SIZE  (MC_Ncs + 6 + MC_Ncr)
 #define MC_BLOCK_BUFFER_SIZE    (512 + 10)
 

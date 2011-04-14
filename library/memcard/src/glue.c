@@ -15,6 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
+#include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/reent.h>
@@ -131,6 +132,7 @@ int _file_fstat_r( struct _reent *reent, int fd, struct stat *st )
     /* Fill in the structure with all we know. */
     st->st_size = file->fsize;
     st->st_mode = S_IFREG | S_IFBLK;
+    st->st_blksize = 512;
 
     return 0;
 }
@@ -138,13 +140,23 @@ int _file_fstat_r( struct _reent *reent, int fd, struct stat *st )
 int _file_write_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
     FIL *file;
+    UINT wc;
 
     file = __get_file( reent, &fd );
     if( NULL == file ) {
         return -1;
     }
 
-    /* Add impl here. */
+    switch( f_write(file, buf, len, &wc) ) {
+        case FR_OK:
+            return wc;
+
+        case FR_DENIED:
+        case FR_NOT_READY:
+        case FR_INVALID_OBJECT:
+        default:
+            break;
+    }
 
     reent->_errno = EBADF;
     return -1;
@@ -306,25 +318,52 @@ int _open_r( struct _reent *reent, const char *name, int flags, int mode )
     file = (FIL *) r->file[fd];
 
     /* We must have these. */
-    if( O_RDONLY == (O_RDONLY & flags) ) {
-        mode_flags = FA_READ | FA_OPEN_EXISTING;
-    } else if( O_WRONLY == (O_WRONLY & flags) ) {
-        //mode_flags = FA_WRITE;
-        reent->_errno = EACCES;
-        return -1;
-    } else if( O_RDWR == (O_RDWR & flags) ) {
-        //mode_flags = FA_READ | FA_WRITE;
-        reent->_errno = EACCES;
-        return -1;
+    if( O_RDONLY == (O_ACCMODE & flags) ) {
+        mode_flags = FA_READ;
+    } else if( O_WRONLY == (O_ACCMODE & flags) ) {
+        mode_flags = FA_WRITE;
+    } else if( O_RDWR == (O_ACCMODE & flags) ) {
+        mode_flags = FA_READ | FA_WRITE;
+        if( O_APPEND == (O_APPEND & flags) ) {
+            /* We can't support reading from the start & writing to the end. */
+            reent->_errno = EINVAL;
+            return -1;
+        }
     } else {
         reent->_errno = EINVAL;
         return -1;
     }
 
+    if( O_CREAT == (O_CREAT & flags) ) {
+        mode_flags |= FA_OPEN_ALWAYS;
+    } else {
+        mode_flags |= FA_OPEN_EXISTING;
+    }
+    if( O_TRUNC == (O_TRUNC & flags) ) {
+        mode_flags &= ~FA_OPEN_ALWAYS;
+        mode_flags |= FA_CREATE_ALWAYS;
+    }
+
     switch( f_open(file, name, mode_flags) ) {
         case FR_OK:
+        {
+            DWORD goal;
+
             r->active[fd] = true;
+
+            goal = 0;
+            if( O_APPEND == (O_APPEND & flags) ) {
+                goal = file->fsize;
+            }
+
+            /* Always seek since FA_OPEN_ALWAYS requires a seek to write. */
+            if( FR_OK != f_lseek(file, goal) ) {
+                reent->_errno = EBADF;
+                return -1;
+            }
             return (fd + 3);
+        }
+
         case FR_NO_FILE:
             reent->_errno = ENOENT;
             break;

@@ -60,9 +60,17 @@ typedef enum {
     BRS_COMMAND_SENT,
     BRS_LOOKING_FOR_BLOCK,
     BRS_BLOCK_START_FOUND,
+    BRS_SENT_DATA,
+    BRS_WAITING_UNTIL_NOT_BUSY,
     BRS_SUCCESS,
+    BRS_ERROR,
     BRS_TIMEOUT
 } block_request_state_t;
+
+typedef enum {
+    CMD_READ,
+    CMD_WRITE
+} command_type_t;
 
 typedef struct {
     uint8_t command[MC_COMMAND_BUFFER_SIZE];
@@ -73,6 +81,7 @@ typedef struct {
     uint32_t crc_length;
     block_request_state_t state;
     uint32_t nac;
+    command_type_t type;
 } block_message_t;
 
 /*----------------------------------------------------------------------------*/
@@ -96,6 +105,7 @@ static void __block_isr_state_machine( void );
 static void __block_isr_disable_transfer( void );
 __attribute__((__interrupt__))
 static void __block_handler( void );
+static bool __block_until_not_busy( void );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -166,9 +176,13 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
     msg->length = 0;
     msg->nac = 0;
     msg->crc_length = 0;
+    msg->type = CMD_READ;
 
     msg->state = BRS_COMMAND_SENT;
     xQueueSendToBack( __pending, &msg, portMAX_DELAY );
+
+    __block_until_not_busy();
+
     __block_isr_send_command( msg->command, msg->command,
                               MC_COMMAND_BUFFER_SIZE, true );
 
@@ -195,7 +209,83 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
 /* See block.h for details. */
 mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
 {
-    return MC_NOT_SUPPORTED;
+    mc_card_status_t card_status;
+    mc_status_t status;
+    uint32_t address = lba;
+    block_message_t *msg;
+    int32_t i;
+    uint16_t crc;
+
+    _D1( "%s( 0x%08x, buffer )\n", __FUNCTION__, lba );
+    card_status = mc_get_status();
+
+    if( NULL == buffer ) {
+        return MC_ERROR_PARAMETER;
+    }
+
+    if( (MC_CARD__MOUNTING != card_status) &&
+        (MC_CARD__MOUNTED != card_status) )
+    {
+        return MC_ERROR_MODE;
+    }
+
+    if( MCT_SDHC != mc_get_type() ) {
+        address <<= 9;
+    }
+
+    xQueueReceive( __idle, &msg, portMAX_DELAY );
+
+    /* Fill with 0xff to start with. */
+    memset( &msg->command, 0xff, MC_COMMAND_BUFFER_SIZE );
+
+    /* Fill MC_Ncs bytes worth of data with 0xff.
+     * This is needed for the timing. */
+    i = MC_Ncs;
+
+    /* Calculate the command sequence */
+    msg->command[i++] = 0x40 | (0x3f & MC_WRITE_SINGLE_BLOCK);
+    msg->command[i++] = address >> 24;
+    msg->command[i++] = 0xff & (address >> 16);
+    msg->command[i++] = 0xff & (address >> 8);
+    msg->command[i++] = 0xff & address;
+    msg->command[i++] = (crc7(&msg->command[MC_Ncs], 5) << 1) | 0x01;
+
+    msg->buffer[0] = MC_BLOCK_START;
+    memcpy( &msg->buffer[1], buffer, 512 );
+
+    crc = crc16( buffer, 512 );
+
+    msg->buffer[513] = 0xff & (crc >> 8);
+    msg->buffer[514] = 0xff & crc;
+    msg->buffer[515] = 0xff;
+    msg->buffer[516] = 0xff;
+
+    msg->data = msg->buffer;
+    msg->length = 516;
+    msg->nac = 0;
+    msg->crc_length = 0;
+    msg->type = CMD_WRITE;
+
+    msg->state = BRS_COMMAND_SENT;
+    xQueueSendToBack( __pending, &msg, portMAX_DELAY );
+
+    __block_until_not_busy();
+
+    __block_isr_send_command( msg->command, msg->command,
+                              MC_COMMAND_BUFFER_SIZE, true );
+
+    _D1( "Writing: 0x%08x\n", lba );
+    xQueueReceive( __complete, &msg, portMAX_DELAY );
+    status = (BRS_SUCCESS == msg->state) ? MC_RETURN_OK : MC_ERROR_TIMEOUT;
+
+    status = MC_ERROR_TIMEOUT;
+    if( BRS_SUCCESS == msg->state ) {
+        status = MC_RETURN_OK;
+    }
+    xQueueSendToBack( __idle, &msg, portMAX_DELAY );
+    _D1( "Got response: 0x%04x\n", status );
+
+    return status;
 }
 
 /* See block.h for details. */
@@ -358,66 +448,122 @@ static void __block_isr_state_machine( void )
             goto timeout_failure;
         }
 
-        if( BRS_COMMAND_SENT == msg->state ) {
-            uint8_t *r1, *end;
+        if( CMD_READ == msg->type ) {
+            if( BRS_COMMAND_SENT == msg->state ) {
+                uint8_t *r1, *end;
 
-            end = &msg->command[MC_COMMAND_BUFFER_SIZE];
+                end = &msg->command[MC_COMMAND_BUFFER_SIZE];
 
-            r1 = memchr( msg->command, 0, MC_COMMAND_BUFFER_SIZE );
-            if( NULL == r1 ) {
-                goto timeout_failure;
-            }
-            msg->state = BRS_LOOKING_FOR_BLOCK;
-
-            __block_isr_find_and_process_block_start( msg, r1, (end - r1) );
-
-            __block_isr_send_command( memory_block_dummy_data, msg->buffer,
-                                      MC_BLOCK_BUFFER_SIZE, false );
-        } else if( BRS_LOOKING_FOR_BLOCK == msg->state ) {
-            uint32_t send;
-            bool done = false;
-
-            send = MC_BLOCK_BUFFER_SIZE;
-            __block_isr_find_and_process_block_start( msg, msg->buffer,
-                                                      MC_BLOCK_BUFFER_SIZE );
-
-            if( BRS_LOOKING_FOR_BLOCK == msg->state ) {
-                /* Nac is in clock cycles, there are 8 clock cycles per
-                 * byte, so divide by 8 (or shift right by 3) */
-                if( mc_get_Nac_read() < (msg->nac >> 3) ) {
+                r1 = memchr( msg->command, 0, MC_COMMAND_BUFFER_SIZE );
+                if( NULL == r1 ) {
                     goto timeout_failure;
                 }
-            } else {
-                if( (msg->length < 512) || (msg->crc_length < 2) ) {
-                    send = 512 - msg->length;
-                    send += 2 - msg->crc_length;
+                msg->state = BRS_LOOKING_FOR_BLOCK;
+
+                __block_isr_find_and_process_block_start( msg, r1, (end - r1) );
+
+                __block_isr_send_command( memory_block_dummy_data, msg->buffer,
+                                          MC_BLOCK_BUFFER_SIZE, false );
+            } else if( BRS_LOOKING_FOR_BLOCK == msg->state ) {
+                uint32_t send;
+                bool done = false;
+
+                send = MC_BLOCK_BUFFER_SIZE;
+                __block_isr_find_and_process_block_start( msg, msg->buffer,
+                                                          MC_BLOCK_BUFFER_SIZE );
+
+                if( BRS_LOOKING_FOR_BLOCK == msg->state ) {
+                    /* Nac is in clock cycles, there are 8 clock cycles per
+                     * byte, so divide by 8 (or shift right by 3) */
+                    if( mc_get_Nac_read() < (msg->nac >> 3) ) {
+                        goto timeout_failure;
+                    }
+                } else {
+                    if( (msg->length < 512) || (msg->crc_length < 2) ) {
+                        send = 512 - msg->length;
+                        send += 2 - msg->crc_length;
+                    } else {
+                        msg->state = BRS_SUCCESS;
+                        done = true;
+                        send_to_pending = false;
+                    }
+                }
+
+                if( false == done ) {
+                    __block_isr_send_command( memory_block_dummy_data, msg->buffer, send, false );
+                }
+            } else if( BRS_BLOCK_START_FOUND == msg->state ) {
+                if( msg->length < 512 ) {
+                    uint32_t copy_length;
+
+                    copy_length = 512 - msg->length;
+
+                    /* Need to copy more of the message */
+                    memcpy( &msg->data[msg->length], msg->buffer, copy_length );
+                    msg->length += copy_length;
+                
+                    msg->crc[0] = msg->buffer[copy_length];
+                    msg->crc[1] = msg->buffer[copy_length + 1];
+                    msg->crc_length = 2;
+                }
+
+                msg->state = BRS_SUCCESS;
+                send_to_pending = false;
+            }
+        } else {
+            static uint32_t write_max_recovery_delay;
+
+            if( BRS_COMMAND_SENT == msg->state ) {
+                uint8_t *r1, *end;
+
+                write_max_recovery_delay = 10000;
+
+                end = &msg->command[MC_COMMAND_BUFFER_SIZE];
+
+                r1 = memchr( msg->command, 0, MC_COMMAND_BUFFER_SIZE );
+                if( NULL == r1 ) {
+                    goto timeout_failure;
+                }
+
+                __block_isr_send_command( msg->data, msg->data,
+                                          msg->length, false );
+                msg->state = BRS_SENT_DATA;
+            } else if( BRS_SENT_DATA == msg->state ) {
+                switch( (MC_DATA_MASK & msg->data[515]) ) {
+                    case MC_DATA_ACCEPTED:
+                        msg->state = BRS_WAITING_UNTIL_NOT_BUSY;
+                        break;
+
+                    case MC_DATA_REJECTED_CRC:
+                    case MC_DATA_REJECTED_WRITE_ERROR:
+                    default:
+                        msg->state = BRS_ERROR;
+                        goto error;
+                }
+
+                /* Send data to get the response (success/failure) */
+                memset( msg->data, 0xff, 20 );
+                __block_isr_send_command( msg->data, msg->data, 20, false );
+                msg->state = BRS_WAITING_UNTIL_NOT_BUSY;
+            } else if( BRS_WAITING_UNTIL_NOT_BUSY == msg->state ) {
+                uint8_t *result;
+
+                result = memchr( msg->data, 0, 20 );
+
+                if( NULL == result ) {
+                    write_max_recovery_delay--;
+                    if( 0 < write_max_recovery_delay ) {
+                        memset( msg->data, 0xff, 20 );
+                        __block_isr_send_command( msg->data, msg->data,
+                                                  20, false );
+                    } else {
+                        goto timeout_failure;
+                    }
                 } else {
                     msg->state = BRS_SUCCESS;
-                    done = true;
                     send_to_pending = false;
                 }
             }
-
-            if( false == done ) {
-                __block_isr_send_command( memory_block_dummy_data, msg->buffer, send, false );
-            }
-        } else if( BRS_BLOCK_START_FOUND == msg->state ) {
-            if( msg->length < 512 ) {
-                uint32_t copy_length;
-
-                copy_length = 512 - msg->length;
-
-                /* Need to copy more of the message */
-                memcpy( &msg->data[msg->length], msg->buffer, copy_length );
-                msg->length += copy_length;
-            
-                msg->crc[0] = msg->buffer[copy_length];
-                msg->crc[1] = msg->buffer[copy_length + 1];
-                msg->crc_length = 2;
-            }
-
-            msg->state = BRS_SUCCESS;
-            send_to_pending = false;
         }
 
         interrupts = interrupts_save_and_disable();
@@ -439,6 +585,8 @@ static void __block_isr_state_machine( void )
 timeout_failure:
     /* We're done... */
     msg->state = BRS_TIMEOUT;
+
+error:
 
     /* If we started to send something, cancel it. */
     __block_isr_disable_transfer();
@@ -483,4 +631,21 @@ static void __block_handler( void )
 {
     __block_isr_disable_transfer();
     __block_isr_state_machine();
+}
+
+static bool __block_until_not_busy( void )
+{
+    int max = 100;
+    uint8_t in;
+
+    while( 0 < max ) {
+        io_read( &in );
+        if( 0 == in ) {
+            max--;
+        } else {
+            return true;
+        }
+    }
+
+    return false;
 }
