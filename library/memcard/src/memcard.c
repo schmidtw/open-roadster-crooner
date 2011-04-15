@@ -49,7 +49,7 @@
 /*----------------------------------------------------------------------------*/
 #define MEMCARD_DEBUG 0
 
-#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE+200 + 400)
+#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE+200)
 #define AUTOMOUNT_PRIORITY      (tskIDLE_PRIORITY+1)
 #define AUTOMOUNT_CALLBACK_MAX  3
 
