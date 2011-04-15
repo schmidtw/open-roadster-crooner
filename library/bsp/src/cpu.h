@@ -46,4 +46,11 @@ void cpu_reboot( void );
  *  Used to disable orphaned devices.
  */
 void cpu_disable_orphans( void );
+
+#define cpu_get_sys_count()     __builtin_mfsr( AVR32_COUNT )
+#define cpu_set_sys_count(x)    { __builtin_mtsr( AVR32_COUNT, (x) ); }
+
+#define cpu_get_sys_compare()   __builtin_mfsr( AVR32_COMPARE )
+#define cpu_set_sys_compare(x)  { __builtin_mtsr( AVR32_COMPARE, (x) ); }
+
 #endif
