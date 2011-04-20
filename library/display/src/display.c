@@ -19,9 +19,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
+#include "freertos/os.h"
 
 #include "display.h"
 #include "display_internal.h"
@@ -36,11 +34,11 @@
 
 #define DISPLAY_QUEUE_LENGTH     5
 #define DISPLAY_TASK_DEPTH       2000
-#define DISPLAY_TASK_PRIORITY    ( tskIDLE_PRIORITY + 1 )
+#define DISPLAY_TASK_PRIORITY    1
 #define DISPLAY_MSG_POST_DELAY   10
 
-#define GRAB_MUTEX()       xSemaphoreTake( gld.os.mutex_handle, portMAX_DELAY);
-#define RELEASE_MUTEX()    xSemaphoreGive( gld.os.mutex_handle );
+#define GRAB_MUTEX()       os_semaphore_take( gld.os.mutex_handle, WAIT_FOREVER);
+#define RELEASE_MUTEX()    os_semaphore_give( gld.os.mutex_handle );
 
 static struct display_globals gld;
 
@@ -54,9 +52,9 @@ void display_main( void * parameters );
  */
 /* See display.h for more info */
 DRV_t display_init(text_print_fct text_print_fn,
-        portTickType scroll_speed,
-        portTickType pause_at_beginning_of_text,
-        portTickType pause_at_end_of_text,
+        uint32_t scroll_speed,
+        uint32_t pause_at_beginning_of_text,
+        uint32_t pause_at_end_of_text,
         size_t num_characters_to_shift,
         bool repeat_text)
 {
@@ -76,22 +74,18 @@ DRV_t display_init(text_print_fct text_print_fn,
     }
     gld.repeat = repeat_text;
     
-    gld.os.queue_handle = xQueueCreate(DISPLAY_QUEUE_LENGTH, sizeof(struct display_message));
+    gld.os.queue_handle = os_queue_create(DISPLAY_QUEUE_LENGTH, sizeof(struct display_message));
     if( 0 == gld.os.queue_handle ) {
         /* An error occurred */
         goto failure1;
     }
-    gld.os.mutex_handle = xSemaphoreCreateMutex();
+    gld.os.mutex_handle = os_semaphore_create_binary();
     if( NULL == gld.os.mutex_handle ) {
         goto failure2;
     }
     
-    if( pdPASS != xTaskCreate( display_main,
-         ( signed portCHAR * ) "DISPLAY",
-                               DISPLAY_TASK_DEPTH,
-                               NULL,
-                               DISPLAY_TASK_PRIORITY,
-                               &(gld.os.task_handle) ) )
+    if( true != os_task_create( display_main, "DISPLAY", DISPLAY_TASK_DEPTH,
+                                NULL, DISPLAY_TASK_PRIORITY, &(gld.os.task_handle) ) )
     {
         goto failure3;
     }
@@ -101,7 +95,7 @@ DRV_t display_init(text_print_fct text_print_fn,
     return DRV_SUCCESS;
 failure3:
 failure2:
-    vQueueDelete( gld.os.queue_handle );
+    os_queue_delete( gld.os.queue_handle );
 failure1:
 failure0:
     _D1("%s:%d -- %s -- failure", "display.c", __LINE__, "init()");
@@ -121,7 +115,7 @@ DRV_t display_stop_text( void )
     GRAB_MUTEX();
     msg.identifier = ++gld.os.identifier;
     RELEASE_MUTEX();
-    while( pdTRUE != xQueueSendToBack( gld.os.queue_handle, (void *)(& msg), DISPLAY_MSG_POST_DELAY ) ) {
+    while( true != os_queue_send_to_back( gld.os.queue_handle, &msg, DISPLAY_MSG_POST_DELAY ) ) {
         /* The queue is full, we should continue to try to post this message */
         /* TODO : revisit this idea.  We probably don't want to loop forever,
          * but don't want to fail silently.
@@ -152,7 +146,7 @@ DRV_t display_start_text( const char *text_to_display )
     strcpy( gld.text_info.text, text_to_display );
     msg.identifier = ++gld.os.identifier;
     RELEASE_MUTEX();
-    while( pdTRUE != xQueueSendToBack( gld.os.queue_handle, (void *)(& msg), DISPLAY_MSG_POST_DELAY ) ) {
+    while( true != os_queue_send_to_back( gld.os.queue_handle, &msg, DISPLAY_MSG_POST_DELAY ) ) {
         /* The queue is full, we should continue to try to post this message */
         /* TODO : revisit this idea.  We probably don't want to loop forever,
          * but don't want to fail silently.
@@ -166,8 +160,8 @@ DRV_t display_start_text( const char *text_to_display )
 /* See display.h for more info */
 void display_main( void * parameters )
 {
-    portTickType ticks_to_wait_for_message = portMAX_DELAY;
-    portTickType ticks_to_wait_before_looping = 0;
+    uint32_t ticks_to_wait_for_message = WAIT_FOREVER;
+    uint32_t ticks_to_wait_before_looping = NO_WAIT;
     char local_text[MAX_DISPLAY_LENGTH];
     struct display_message msg;
     bool recieved_message;
@@ -175,9 +169,9 @@ void display_main( void * parameters )
     
     while(1) {
         is_message_stale = false;
-        recieved_message = xQueueReceive( gld.os.queue_handle, (void *)(& msg), ticks_to_wait_for_message );
+        recieved_message = os_queue_receive( gld.os.queue_handle, &msg, ticks_to_wait_for_message );
         
-        if( pdTRUE == recieved_message ) {
+        if( true == recieved_message ) {
             _D1("msg:\n\taction = %d\n\tidentifier = %d\n", msg.action, msg.identifier);
             GRAB_MUTEX();
             is_message_stale = (gld.os.identifier==msg.identifier?false:true);
@@ -191,7 +185,7 @@ void display_main( void * parameters )
         if( true == is_message_stale ) {
             continue;
         }
-        if( pdTRUE == recieved_message ) {
+        if( true == recieved_message ) {
             if( true == handle_msg_action( &msg,
                             &ticks_to_wait_for_message,
                             &ticks_to_wait_before_looping,
@@ -202,7 +196,7 @@ void display_main( void * parameters )
             }
         }
         handle_display_update( &ticks_to_wait_before_looping, local_text, &gld );    
-        vTaskDelay( ticks_to_wait_before_looping );
+        os_task_delay_ticks( ticks_to_wait_before_looping );
     }
 }
 
@@ -211,7 +205,7 @@ void display_destroy( void )
 {
     if( true == gld.valid ) {
         gld.valid = false;
-        vTaskDelete( gld.os.task_handle );
-        vQueueDelete( gld.os.queue_handle );
+        os_task_delete( gld.os.task_handle );
+        os_queue_delete( gld.os.queue_handle );
     }
 }

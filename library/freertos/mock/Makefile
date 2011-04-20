@@ -1,10 +1,2 @@
-TARGET = freertos
-BASE   = ../../..
-
-#HEADERS = mock.h
-
-SOURCES = \
-  queue.c \
-  tasks.c
-
-include ../../make/Makefile.mock
+all clean cleanall unit-test install docs listings ::
+	@echo "Nothing to do for $@"

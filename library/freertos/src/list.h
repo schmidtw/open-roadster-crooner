@@ -1,52 +1,60 @@
 /*
-	FreeRTOS.org V5.2.0 - Copyright (C) 2003-2009 Richard Barry.
+    FreeRTOS V7.0.0 - Copyright (C) 2011 Real Time Engineers Ltd.
+	
 
-	This file is part of the FreeRTOS.org distribution.
+	FreeRTOS supports many tools and architectures. V7.0.0 is sponsored by:
+	Atollic AB - Atollic provides professional embedded systems development 
+	tools for C/C++ development, code analysis and test automation.  
+	See http://www.atollic.com
+	
 
-	FreeRTOS.org is free software; you can redistribute it and/or modify it 
-	under the terms of the GNU General Public License (version 2) as published
-	by the Free Software Foundation and modified by the FreeRTOS exception.
+    ***************************************************************************
+     *                                                                       *
+     *    FreeRTOS tutorial books are available in pdf and paperback.        *
+     *    Complete, revised, and edited pdf reference manuals are also       *
+     *    available.                                                         *
+     *                                                                       *
+     *    Purchasing FreeRTOS documentation will not only help you, by       *
+     *    ensuring you get running as quickly as possible and with an        *
+     *    in-depth knowledge of how to use FreeRTOS, it will also help       *
+     *    the FreeRTOS project to continue with its mission of providing     *
+     *    professional grade, cross platform, de facto standard solutions    *
+     *    for microcontrollers - completely free of charge!                  *
+     *                                                                       *
+     *    >>> See http://www.FreeRTOS.org/Documentation for details. <<<     *
+     *                                                                       *
+     *    Thank you for using FreeRTOS, and thank you for your support!      *
+     *                                                                       *
+    ***************************************************************************
 
-	FreeRTOS.org is distributed in the hope that it will be useful,	but WITHOUT
-	ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or 
-	FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for 
-	more details.
 
-	You should have received a copy of the GNU General Public License along 
-	with FreeRTOS.org; if not, write to the Free Software Foundation, Inc., 59 
-	Temple Place, Suite 330, Boston, MA  02111-1307  USA.
+    This file is part of the FreeRTOS distribution.
 
-	A special exception to the GPL is included to allow you to distribute a 
-	combined work that includes FreeRTOS.org without being obliged to provide
-	the source code for any proprietary components.  See the licensing section
-	of http://www.FreeRTOS.org for full details.
+    FreeRTOS is free software; you can redistribute it and/or modify it under
+    the terms of the GNU General Public License (version 2) as published by the
+    Free Software Foundation AND MODIFIED BY the FreeRTOS exception.
+    >>>NOTE<<< The modification to the GPL is included to allow you to
+    distribute a combined work that includes FreeRTOS without being obliged to
+    provide the source code for proprietary components outside of the FreeRTOS
+    kernel.  FreeRTOS is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+    more details. You should have received a copy of the GNU General Public
+    License and the FreeRTOS license exception along with FreeRTOS; if not it
+    can be viewed here: http://www.freertos.org/a00114.html and also obtained
+    by writing to Richard Barry, contact details for whom are available on the
+    FreeRTOS WEB site.
 
+    1 tab == 4 spaces!
 
-	***************************************************************************
-	*                                                                         *
-	* Get the FreeRTOS eBook!  See http://www.FreeRTOS.org/Documentation      *
-	*                                                                         *
-	* This is a concise, step by step, 'hands on' guide that describes both   *
-	* general multitasking concepts and FreeRTOS specifics. It presents and   *
-	* explains numerous examples that are written using the FreeRTOS API.     *
-	* Full source code for all the examples is provided in an accompanying    *
-	* .zip file.                                                              *
-	*                                                                         *
-	***************************************************************************
+    http://www.FreeRTOS.org - Documentation, latest information, license and
+    contact details.
 
-	1 tab == 4 spaces!
+    http://www.SafeRTOS.com - A version that is certified for use in safety
+    critical systems.
 
-	Please ensure to read the configuration and relevant port sections of the
-	online documentation.
-
-	http://www.FreeRTOS.org - Documentation, latest information, license and
-	contact details.
-
-	http://www.SafeRTOS.com - A version that is certified for use in safety
-	critical systems.
-
-	http://www.OpenRTOS.com - Commercial support, development, porting,
-	licensing and training services.
+    http://www.OpenRTOS.com - Commercial support, development, porting,
+    licensing and training services.
 */
 
 /*
@@ -77,12 +85,6 @@
  * \ingroup FreeRTOSIntro
  */
 
-/*
-	Changes from V4.3.1
-
-	+ Included local const within listGET_OWNER_OF_NEXT_ENTRY() to assist
-	  compiler with optimisation.  Thanks B.R.
-*/
 
 #ifndef LIST_H
 #define LIST_H
@@ -128,7 +130,7 @@ typedef struct xLIST
  * \page listSET_LIST_ITEM_OWNER listSET_LIST_ITEM_OWNER
  * \ingroup LinkedList
  */
-#define listSET_LIST_ITEM_OWNER( pxListItem, pxOwner )		( pxListItem )->pvOwner = ( void * ) pxOwner
+#define listSET_LIST_ITEM_OWNER( pxListItem, pxOwner )		( pxListItem )->pvOwner = ( void * ) ( pxOwner )
 
 /*
  * Access macro to set the value of the list item.  In most cases the value is
@@ -137,7 +139,7 @@ typedef struct xLIST
  * \page listSET_LIST_ITEM_VALUE listSET_LIST_ITEM_VALUE
  * \ingroup LinkedList
  */
-#define listSET_LIST_ITEM_VALUE( pxListItem, xValue )		( pxListItem )->xItemValue = xValue
+#define listSET_LIST_ITEM_VALUE( pxListItem, xValue )		( pxListItem )->xItemValue = ( xValue )
 
 /*
  * Access macro the retrieve the value of the list item.  The value can
@@ -148,6 +150,15 @@ typedef struct xLIST
  * \ingroup LinkedList
  */
 #define listGET_LIST_ITEM_VALUE( pxListItem )				( ( pxListItem )->xItemValue )
+
+/*
+ * Access macro the retrieve the value of the list item at the head of a given
+ * list.
+ *
+ * \page listGET_LIST_ITEM_VALUE listGET_LIST_ITEM_VALUE
+ * \ingroup LinkedList
+ */
+#define listGET_ITEM_VALUE_OF_HEAD_ENTRY( pxList )			( (&( ( pxList )->xListEnd ))->pxNext->xItemValue )
 
 /*
  * Access macro to determine if a list contains any items.  The macro will
@@ -184,7 +195,7 @@ typedef struct xLIST
  */
 #define listGET_OWNER_OF_NEXT_ENTRY( pxTCB, pxList )									\
 {																						\
-xList * const pxConstList = pxList;														\
+xList * const pxConstList = ( pxList );													\
 	/* Increment the index to the next item and return the item, ensuring */			\
 	/* we don't return the marker used at the end of the list.  */						\
 	( pxConstList )->pxIndex = ( pxConstList )->pxIndex->pxNext;						\
@@ -192,7 +203,7 @@ xList * const pxConstList = pxList;														\
 	{																					\
 		( pxConstList )->pxIndex = ( pxConstList )->pxIndex->pxNext;					\
 	}																					\
-	pxTCB = ( pxConstList )->pxIndex->pvOwner;											\
+	( pxTCB ) = ( pxConstList )->pxIndex->pvOwner;										\
 }
 
 
@@ -212,7 +223,7 @@ xList * const pxConstList = pxList;														\
  * \page listGET_OWNER_OF_HEAD_ENTRY listGET_OWNER_OF_HEAD_ENTRY
  * \ingroup LinkedList
  */
-#define listGET_OWNER_OF_HEAD_ENTRY( pxList )  ( ( pxList->uxNumberOfItems != ( unsigned portBASE_TYPE ) 0 ) ? ( (&( pxList->xListEnd ))->pxNext->pvOwner ) : ( NULL ) )
+#define listGET_OWNER_OF_HEAD_ENTRY( pxList )  ( (&( ( pxList )->xListEnd ))->pxNext->pvOwner )
 
 /*
  * Check to see if a list item is within a list.  The list item maintains a
@@ -224,7 +235,7 @@ xList * const pxConstList = pxList;														\
  * @return pdTRUE is the list item is in the list, otherwise pdFALSE.
  * pointer against
  */
-#define listIS_CONTAINED_WITHIN( pxList, pxListItem ) ( ( pxListItem )->pvContainer == ( void * ) pxList )
+#define listIS_CONTAINED_WITHIN( pxList, pxListItem ) ( ( pxListItem )->pvContainer == ( void * ) ( pxList ) )
 
 /*
  * Must be called before a list is used!  This initialises all the members

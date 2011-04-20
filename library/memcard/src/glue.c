@@ -16,6 +16,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/reent.h>
@@ -23,7 +24,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <freertos/semphr.h>
+#include <freertos/os.h>
 
 #include <newlib/reent-file-glue.h>
 
@@ -43,7 +44,7 @@
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xSemaphoreHandle __ff_mutex;
+static semaphore_handle_t __ff_mutex;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -55,7 +56,7 @@ static FIL* __get_file( struct _reent *reent, int *fd );
 /*----------------------------------------------------------------------------*/
 void glue_init( void )
 {
-    vSemaphoreCreateBinary( __ff_mutex );
+    __ff_mutex = os_semaphore_create_binary();
 }
 
 /*----------------------------------------------------------------------------*/
@@ -98,9 +99,9 @@ BOOL ff_del_syncobj( _SYNC_t sobj )
  */
 BOOL ff_req_grant( _SYNC_t sobj )
 {
-    xSemaphoreTake( __ff_mutex, portMAX_DELAY );
+    os_semaphore_take( __ff_mutex, WAIT_FOREVER );
     if( sobj != mc_get_magic_insert_number() ) {
-        xSemaphoreGive( __ff_mutex );
+        os_semaphore_give( __ff_mutex );
         return FALSE;
     }
 
@@ -114,7 +115,7 @@ BOOL ff_req_grant( _SYNC_t sobj )
  */
 void ff_rel_grant( _SYNC_t sobj )
 {
-    xSemaphoreGive( __ff_mutex );
+    os_semaphore_give( __ff_mutex );
 }
 
 /*----------------------------------------------------------------------------*/

@@ -21,8 +21,7 @@
 #include <stdio.h>
 
 #include <ibus-radio-protocol/ibus-radio-protocol.h>
-#include <freertos/task.h>
-#include <freertos/semphr.h>
+#include <freertos/os.h>
 
 #include <database/database.h>
 #include <memcard/memcard.h>
@@ -37,7 +36,7 @@
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
 #define RI_DEBUG    0
-#define RI_TIMEOUT  (TASK_DELAY_S(25))
+#define RI_TIMEOUT  25000
 
 #define DEBUG_STACK_BUFFER  0
 #if (defined(RI_DEBUG) && (0 < RI_DEBUG))
@@ -45,13 +44,13 @@
 #define DEBUG_STACK_BUFFER  100
 #endif
 
-#define RI_POLL_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE+DEBUG_STACK_BUFFER)
-#define RI_IBUS_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE)
-#define RI_MSG_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE+800+DEBUG_STACK_BUFFER)
-#define RI_DBASE_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE+1400)
+#define RI_POLL_TASK_STACK_SIZE  (550+DEBUG_STACK_BUFFER)
+#define RI_IBUS_TASK_STACK_SIZE  (600)
+#define RI_BLU_TASK_STACK_SIZE   (600+DEBUG_STACK_BUFFER)
+#define RI_DBASE_TASK_STACK_SIZE (900)
 
-#define RI_TASK_PRIORITY    (tskIDLE_PRIORITY+1)
-#define RI_POLL_TIMEOUT     (TASK_DELAY_S(15))  /* 15 seconds */
+#define RI_TASK_PRIORITY    1
+#define RI_POLL_TIMEOUT     15000   /* 15 seconds */
 
 #define _D1(...)
 #define _D2(...)
@@ -91,15 +90,15 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xSemaphoreHandle __poll_cmd;
+static semaphore_handle_t __poll_cmd;
 
 static dbase_msg_t __dbase_msg;
-static xQueueHandle __dbase_idle;
-static xQueueHandle __dbase_active;
+static queue_handle_t __dbase_idle;
+static queue_handle_t __dbase_active;
 
 static ri_msg_t __ri_msg[RI_MSG_MAX];
-static xQueueHandle __ri_idle;
-static xQueueHandle __ri_active;
+static queue_handle_t __ri_idle;
+static queue_handle_t __ri_active;
 static volatile bool __connected_to_radio;
 
 /*----------------------------------------------------------------------------*/
@@ -133,13 +132,13 @@ bool ri_init( void )
 
     __connected_to_radio = false;
 
-    vSemaphoreCreateBinary( __poll_cmd );
-    xSemaphoreTake( __poll_cmd, 0 );
+     __poll_cmd = os_semaphore_create_binary();
+    os_semaphore_take( __poll_cmd, NO_WAIT );
 
-    __dbase_idle = xQueueCreate( 1, sizeof(void*) );
-    __dbase_active = xQueueCreate( 1, sizeof(void*) );
-    __ri_idle = xQueueCreate( RI_MSG_MAX, sizeof(void*) );
-    __ri_active = xQueueCreate( RI_MSG_MAX, sizeof(void*) );
+    __dbase_idle = os_queue_create( 1, sizeof(void*) );
+    __dbase_active = os_queue_create( 1, sizeof(void*) );
+    __ri_idle = os_queue_create( RI_MSG_MAX, sizeof(void*) );
+    __ri_active = os_queue_create( RI_MSG_MAX, sizeof(void*) );
 
     if( (NULL == __dbase_idle) || (NULL == __dbase_active) ||
         (NULL == __ri_idle) || (NULL == __ri_active) ||
@@ -151,24 +150,27 @@ bool ri_init( void )
     {
         dbase_msg_t *cmd;
         cmd = &__dbase_msg;
-        xQueueSendToBack( __dbase_idle, &cmd, portMAX_DELAY );
+        os_queue_send_to_back( __dbase_idle, &cmd, WAIT_FOREVER );
     }
 
     for( i = 0; i < RI_MSG_MAX; i++ ) {
         ri_msg_t *m;
 
         m = &__ri_msg[i];
-        xQueueSendToBack( __ri_idle, &m, portMAX_DELAY );
+        os_queue_send_to_back( __ri_idle, &m, WAIT_FOREVER );
     }
 
-    xTaskCreate( __poll_task, (signed portCHAR *) "iBusPoll",
-                 RI_POLL_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
-    xTaskCreate( __blu_task, (signed portCHAR *) "BLU",
-                 RI_MSG_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
-    xTaskCreate( __ibus_task, (signed portCHAR *) "iBusMsg",
-                 RI_IBUS_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
-    xTaskCreate( __dbase_task, (signed portCHAR *) "dbase",
-                 RI_DBASE_TASK_STACK_SIZE, NULL, RI_TASK_PRIORITY, NULL );
+    os_task_create( __poll_task, "iBusPoll", RI_POLL_TASK_STACK_SIZE,
+                    NULL, RI_TASK_PRIORITY, NULL );
+
+    os_task_create( __blu_task, "BLU", RI_BLU_TASK_STACK_SIZE,
+                    NULL, RI_TASK_PRIORITY, NULL );
+
+    os_task_create( __ibus_task, "iBusMsg", RI_IBUS_TASK_STACK_SIZE,
+                    NULL, RI_TASK_PRIORITY, NULL );
+
+    os_task_create( __dbase_task, "dbase", RI_DBASE_TASK_STACK_SIZE,
+                    NULL, RI_TASK_PRIORITY, NULL );
 
     mc_register( &__card_status );
 
@@ -223,7 +225,7 @@ static void __poll_task( void *params )
     timeout = RI_TIMEOUT;
 
     while( 1 ) {
-        if( pdTRUE == xSemaphoreTake(__poll_cmd, RI_POLL_TIMEOUT) ) {
+        if( true == os_semaphore_take(__poll_cmd, RI_POLL_TIMEOUT) ) {
             _D3( "Poll Request\n" );
             if( timeout <= 0 ) {
                 irp_send_announce();
@@ -245,10 +247,10 @@ static void __poll_task( void *params )
                 _D3( "ibus timed out\n" );
                 device_status_set( DS__NO_RADIO_CONNECTION );
                 __connected_to_radio = false;
-                xQueueReceive( __ri_idle, &ri_msg, portMAX_DELAY );
+                os_queue_receive( __ri_idle, &ri_msg, WAIT_FOREVER );
                 ri_msg->type = RI_MSG_TYPE__IBUS_CMD;
                 ri_msg->d.ibus.command = IRP_CMD__STOP;
-                xQueueSendToBack( __ri_active, &ri_msg, portMAX_DELAY );
+                os_queue_send_to_back( __ri_active, &ri_msg, WAIT_FOREVER );
             }
         }
     }
@@ -272,13 +274,13 @@ static void __blu_task( void *params )
     while( 1 ) {
         ri_msg_t *msg;
 
-        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+        os_queue_receive( __ri_active, &msg, WAIT_FOREVER );
 
         if( RI_MSG_TYPE__CARD_STATUS == msg->type ) {
             mc_card_status_t card;
 
             card = msg->d.card;
-            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+            os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
             msg = NULL;
 
             switch( card ) {
@@ -319,7 +321,7 @@ static void __blu_task( void *params )
                     break;
             }
         } else {
-            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+            os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
             __send_state( &state );
         }
     }
@@ -333,7 +335,7 @@ static void __ibus_task( void *params )
     while( 1 ) {
         ri_msg_t *msg;
 
-        xQueueReceive( __ri_idle, &msg, portMAX_DELAY );
+        os_queue_receive( __ri_idle, &msg, WAIT_FOREVER );
 
         msg->type = RI_MSG_TYPE__IBUS_CMD;
 
@@ -343,12 +345,12 @@ static void __ibus_task( void *params )
             if( (IRP_CMD__POLL == msg->d.ibus.command) ||
                 (false == __connected_to_radio) )
             {
-                xSemaphoreGive( __poll_cmd );
+                os_semaphore_give( __poll_cmd );
             }
         } while( (IRP_CMD__POLL == msg->d.ibus.command) ||
                  (IRP_CMD__TRAFFIC == msg->d.ibus.command) );
 
-        xQueueSendToBack( __ri_active, &msg, portMAX_DELAY );
+        os_queue_send_to_back( __ri_active, &msg, WAIT_FOREVER );
         msg = NULL;
     }
 }
@@ -362,8 +364,8 @@ static void __dbase_task( void *params )
         dbase_msg_t *dbase_msg;
         ri_msg_t *ri_msg;
 
-        xQueueReceive( __dbase_active, &dbase_msg, portMAX_DELAY );
-        xQueueReceive( __ri_idle, &ri_msg, portMAX_DELAY );
+        os_queue_receive( __dbase_active, &dbase_msg, WAIT_FOREVER );
+        os_queue_receive( __ri_idle, &ri_msg, WAIT_FOREVER );
 
         if( DBASE__POPULATE == dbase_msg->cmd ) {
             size_t size;
@@ -379,8 +381,8 @@ static void __dbase_task( void *params )
         ri_msg->type = RI_MSG_TYPE__DBASE_STATUS;
         ri_msg->d.dbase.cmd = dbase_msg->cmd;
 
-        xQueueSendToBack( __dbase_idle, &dbase_msg, portMAX_DELAY );
-        xQueueSendToBack( __ri_active, &ri_msg, portMAX_DELAY );
+        os_queue_send_to_back( __dbase_idle, &dbase_msg, WAIT_FOREVER );
+        os_queue_send_to_back( __ri_active, &ri_msg, WAIT_FOREVER );
     }
 }
 
@@ -393,10 +395,10 @@ static void __card_status( const mc_card_status_t status )
 {
     ri_msg_t *msg;
 
-    xQueueReceive( __ri_idle, &msg, portMAX_DELAY );
+    os_queue_receive( __ri_idle, &msg, WAIT_FOREVER );
     msg->type = RI_MSG_TYPE__CARD_STATUS;
     msg->d.card = status;
-    xQueueSendToBack( __ri_active, &msg, portMAX_DELAY );
+    os_queue_send_to_back( __ri_active, &msg, WAIT_FOREVER );
 }
 
 /**
@@ -405,9 +407,9 @@ static void __card_status( const mc_card_status_t status )
 static void __database_populate( void )
 {
     dbase_msg_t *dbase_msg;
-    xQueueReceive( __dbase_idle, &dbase_msg, portMAX_DELAY );
+    os_queue_receive( __dbase_idle, &dbase_msg, WAIT_FOREVER );
     dbase_msg->cmd = DBASE__POPULATE;
-    xQueueSendToBack( __dbase_active, &dbase_msg, portMAX_DELAY );
+    os_queue_send_to_back( __dbase_active, &dbase_msg, WAIT_FOREVER );
 }
 
 /**
@@ -416,9 +418,9 @@ static void __database_populate( void )
 static void __database_purge( void )
 {
     dbase_msg_t *dbase_msg;
-    xQueueReceive( __dbase_idle, &dbase_msg, portMAX_DELAY );
+    os_queue_receive( __dbase_idle, &dbase_msg, WAIT_FOREVER );
     dbase_msg->cmd = DBASE__PURGE;
-    xQueueSendToBack( __dbase_active, &dbase_msg, portMAX_DELAY );
+    os_queue_send_to_back( __dbase_active, &dbase_msg, WAIT_FOREVER );
 }
 
 /**
@@ -549,11 +551,11 @@ static void __playback_cb( const pb_status_t status, const int32_t tx_id )
 {
     ri_msg_t *msg;
 
-    xQueueReceive( __ri_idle, &msg, portMAX_DELAY );
+    os_queue_receive( __ri_idle, &msg, WAIT_FOREVER );
     msg->type = RI_MSG_TYPE__PLAYBACK_STATUS;
     msg->d.song.status = status;
     msg->d.song.tx_id = tx_id;
-    xQueueSendToBack( __ri_active, &msg, portMAX_DELAY );
+    os_queue_send_to_back( __ri_active, &msg, WAIT_FOREVER );
 }
 
 /**
@@ -580,7 +582,7 @@ static void __transition_db( ri_state_t *state )
     while( true == keep_going ) {
         ri_msg_t *msg;
 
-        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+        os_queue_receive( __ri_active, &msg, WAIT_FOREVER );
 
         if( (RI_MSG_TYPE__DBASE_STATUS == msg->type) &&
             (DBASE__POPULATE == msg->d.dbase.cmd) )
@@ -594,7 +596,7 @@ static void __transition_db( ri_state_t *state )
 
                 state->magazine_indexed = true;
                 keep_going = false;
-                xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+                os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
 
                 user_data = ui_user_data_init();
 
@@ -617,9 +619,9 @@ static void __transition_db( ri_state_t *state )
                 printf( "goal: %s\n", irp_state_to_string(state->device_status) );
                 irp_going_to_check_disc( 1, 0, state->device_status );
             }
-            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+            os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
         } else {
-            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+            os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
             return;
         }
     }
@@ -632,7 +634,7 @@ static void __transition_db( ri_state_t *state )
     while( true == keep_going ) {
         ri_msg_t *msg;
 
-        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+        os_queue_receive( __ri_active, &msg, WAIT_FOREVER );
 
         if( (RI_MSG_TYPE__DBASE_STATUS == msg->type) &&
             (DBASE__PURGE == msg->d.dbase.cmd) )
@@ -640,7 +642,7 @@ static void __transition_db( ri_state_t *state )
             keep_going = false;
         }
 
-        xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+        os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
         __send_state( state );
     }
     state->magazine_indexed = false;
@@ -662,16 +664,16 @@ static void __no_discs_loop( ri_state_t *state )
     while( true == keep_going ) {
         ri_msg_t *msg;
 
-        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+        os_queue_receive( __ri_active, &msg, WAIT_FOREVER );
 
         if( (RI_MSG_TYPE__PLAYBACK_STATUS != msg->type) &&
             (RI_MSG_TYPE__IBUS_CMD != msg->type) )
         {
             keep_going = false;
             __send_state( state );
-            xQueueSendToFront( __ri_active, &msg, portMAX_DELAY );
+            os_queue_send_to_front( __ri_active, &msg, WAIT_FOREVER );
         } else {
-            xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+            os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
         }
         __send_state( state );
     }
@@ -692,7 +694,7 @@ static void __command_loop( ri_state_t *state, song_node_t **song, void *user_da
     while( true == keep_going ) {
         ri_msg_t *msg;
 
-        xQueueReceive( __ri_active, &msg, portMAX_DELAY );
+        os_queue_receive( __ri_active, &msg, WAIT_FOREVER );
 
         if( (RI_MSG_TYPE__PLAYBACK_STATUS == msg->type) ||
             (RI_MSG_TYPE__IBUS_CMD == msg->type) )
@@ -715,6 +717,6 @@ static void __command_loop( ri_state_t *state, song_node_t **song, void *user_da
             keep_going = false;
             __send_state( state );
         }
-        xQueueSendToBack( __ri_idle, &msg, portMAX_DELAY );
+        os_queue_send_to_back( __ri_idle, &msg, WAIT_FOREVER );
     }
 }

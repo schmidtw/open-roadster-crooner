@@ -1,9 +1,7 @@
 #ifndef DISPLAY_INTERNAL_H_
 #define DISPLAY_INTERNAL_H_
 
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
+#include "freertos/os.h"
 
 #include "display.h"
 
@@ -31,17 +29,17 @@ struct text_display_info {
 
 struct display_globals {
     text_print_fct text_print_fn;
-    portTickType scroll_speed;
-    portTickType pause_at_beginning_of_text;
-    portTickType pause_at_end_of_text;
+    uint32_t scroll_speed;
+    uint32_t pause_at_beginning_of_text;
+    uint32_t pause_at_end_of_text;
     size_t maximum_number_characters_to_display;
     size_t num_characters_to_shift;
     struct text_display_info text_info;
     int32_t valid;
     struct {
-        xQueueHandle queue_handle;
-        xSemaphoreHandle mutex_handle;
-        xTaskHandle task_handle;
+        queue_handle_t queue_handle;
+        semaphore_handle_t mutex_handle;
+        task_handle_t task_handle;
         uint16_t identifier;
     } os;
     bool repeat;

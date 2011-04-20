@@ -20,8 +20,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <freertos/task.h>
-#include <freertos/queue.h>
+#include <freertos/os.h>
 
 #include <bsp/pwm.h>
 #include <bsp/boards/boards.h>
@@ -31,7 +30,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define LED_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE)
+#define LED_TASK_STACK_SIZE (50)
 #define LED_MSG_MAX         2
 #define LED_CLOCK_FREQUENCY 103125
 
@@ -48,8 +47,8 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xQueueHandle __idle;
-static xQueueHandle __active;
+static queue_handle_t __idle;
+static queue_handle_t __active;
 
 static led_msg_t __msgs[LED_MSG_MAX];
 
@@ -68,7 +67,7 @@ static void __set_colors( const uint8_t red,
 led_status_t led_init( const uint32_t priority )
 {
     int i;
-    portBASE_TYPE status;
+    bool status;
     bsp_status_t bsp_status;
 
     static const gpio_map_t map[] = {
@@ -77,8 +76,8 @@ led_status_t led_init( const uint32_t priority )
         { .pin = LED_PWM_BLUE_PIN,  .function = LED_PWM_BLUE_FUNCTION  }
     };
 
-    __idle = xQueueCreate( LED_MSG_MAX, sizeof(led_msg_t*) );
-    __active = xQueueCreate( LED_MSG_MAX, sizeof(led_msg_t*) );
+    __idle = os_queue_create( LED_MSG_MAX, sizeof(led_msg_t*) );
+    __active = os_queue_create( LED_MSG_MAX, sizeof(led_msg_t*) );
 
     if( (NULL == __idle) || (NULL == __active) ) {
         goto failure;
@@ -86,7 +85,7 @@ led_status_t led_init( const uint32_t priority )
 
     for( i = 0; i < LED_MSG_MAX; i++ ) {
         led_msg_t *msg = &__msgs[i];
-        xQueueSendToBack( __idle, &msg, 0 );
+        os_queue_send_to_back( __idle, &msg, NO_WAIT );
     }
 
     bsp_status = pwm_init( LED_CLOCK_FREQUENCY, 0, map,
@@ -119,10 +118,10 @@ led_status_t led_init( const uint32_t priority )
         goto failure;
     }
 
-    status = xTaskCreate( __led_task, ( signed portCHAR *) "LED",
-                          LED_TASK_STACK_SIZE, NULL, priority, NULL );
+    status = os_task_create( __led_task, "LED", LED_TASK_STACK_SIZE,
+                             NULL, priority, NULL );
 
-    if( pdPASS != status ) {
+    if( true != status ) {
         goto failure;
     }
 
@@ -144,13 +143,13 @@ led_status_t led_set_state( led_state_t *states,
         return LED_PARAMETER_ERROR;
     }
 
-    xQueueReceive( __idle, &msg, portMAX_DELAY );
+    os_queue_receive( __idle, &msg, WAIT_FOREVER );
     msg->state = states;
     msg->count = count;
     msg->repeat = repeat;
     msg->free_fn = free_fn;
 
-    xQueueSendToBack( __active, &msg, portMAX_DELAY );
+    os_queue_send_to_back( __active, &msg, WAIT_FOREVER );
 
     return LED_RETURN_OK;
 }
@@ -161,24 +160,24 @@ led_status_t led_set_state( led_state_t *states,
 static void __led_task( void *params )
 {
     led_msg_t *current;
-    portTickType delay;
+    uint32_t delay;
     int step;
 
     step = 0;
     current = NULL;
-    delay = portMAX_DELAY;
+    delay = WAIT_FOREVER;
 
     while( 1 ) {
         led_msg_t *in;
 
-        if( pdTRUE == xQueueReceive(__active, &in, delay) ) {
+        if( true == os_queue_receive(__active, &in, delay) ) {
             /* We got a new command! */
             if( NULL != current ) {
                 if( NULL != current->free_fn ) {
                     (*current->free_fn)( current->state );
                 }
                 current->state = NULL;
-                xQueueSendToBack( __idle, &current, portMAX_DELAY );
+                os_queue_send_to_back( __idle, &current, WAIT_FOREVER );
             }
             current = in;
             in = NULL;
@@ -195,15 +194,15 @@ static void __led_task( void *params )
                           current->state[step].green,
                           current->state[step].blue );
 
-            delay = TASK_DELAY_MS( current->state[step].duration );
+            delay = current->state[step].duration;
             if( 0 == delay ) {
-                delay = portMAX_DELAY;
+                delay = WAIT_FOREVER;
             }
             step++;
         } else {
             /* Shut off the LEDs and wait for instructions. */
             __set_colors( 0, 0, 0 );
-            delay = portMAX_DELAY;
+            delay = WAIT_FOREVER;
         }
     }
 }

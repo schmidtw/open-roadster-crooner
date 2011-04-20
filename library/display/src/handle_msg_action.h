@@ -2,7 +2,7 @@
 #define HANDLE_MSG_ACTION_H_
 
 #include <stdbool.h>
-#include "freertos/portmacro.h"
+#include "freertos/os.h"
 #include "display_internal.h"
 
 /**
@@ -27,8 +27,8 @@
  *         manipulation should be done immediately
  */
 bool handle_msg_action( struct display_message * msg,
-                        portTickType * ticks_to_wait_for_message,
-                        portTickType * ticks_to_wait_before_looping,
+                        uint32_t * ticks_to_wait_for_message,
+                        uint32_t * ticks_to_wait_before_looping,
                         char * text,
                         struct display_globals * ref );
 

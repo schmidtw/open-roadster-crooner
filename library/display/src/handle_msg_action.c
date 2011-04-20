@@ -17,14 +17,14 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "freertos/portmacro.h"
+#include "freertos/os.h"
 #include "display_internal.h"
 
 
 /* See handle_msg_action.h for documentation */
 bool handle_msg_action( struct display_message * msg,
-                        portTickType * ticks_to_wait_for_message,
-                        portTickType * ticks_to_wait_before_looping,
+                        uint32_t * ticks_to_wait_for_message,
+                        uint32_t * ticks_to_wait_before_looping,
                         char * text,
                         struct display_globals * ref )
 {
@@ -58,7 +58,7 @@ bool handle_msg_action( struct display_message * msg,
         default:
             /* DA_STOP */
             ref->text_info.state = SOD_NOT_DISPLAYING;
-            *ticks_to_wait_for_message = portMAX_DELAY;
+            *ticks_to_wait_for_message = WAIT_FOREVER;
             *ticks_to_wait_before_looping = 0;
     }
     return false;

@@ -24,7 +24,7 @@
 media_status_t media_mp3_play( const char *filename,
                                const double gain,
                                const double peak,
-                               xQueueHandle idle,
+                               queue_handle_t idle,
                                const size_t queue_size,
                                media_malloc_fn_t malloc_fn,
                                media_free_fn_t free_fn,

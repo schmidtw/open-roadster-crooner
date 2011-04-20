@@ -21,10 +21,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <freertos/task.h>
-#include <freertos/queue.h>
-#include <freertos/semphr.h>
+#include <freertos/os.h>
 
+#include <bsp/boards/boards.h>
 #include <bsp/intc.h>
 #include <bsp/pdca.h>
 #include <bsp/dac.h>
@@ -34,7 +33,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define DSP_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE)
+#define DSP_TASK_STACK_SIZE (0)
 #define DSP_OUT_MSG_MAX     20
 #define DSP_IN_MSG_MAX      10
 #define DSP_BUFFER_SIZE     441
@@ -69,14 +68,14 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xQueueHandle __output_idle;
-static xQueueHandle __output_active;
-static xQueueHandle __output_queued;
-static xQueueHandle __output_idle_silence;
+static queue_handle_t __output_idle;
+static queue_handle_t __output_active;
+static queue_handle_t __output_queued;
+static queue_handle_t __output_idle_silence;
 static dsp_output_t __output[DSP_OUT_MSG_MAX];
 
-static xQueueHandle __input_idle;
-static xQueueHandle __input_queued;
+static queue_handle_t __input_idle;
+static queue_handle_t __input_queued;
 static dsp_input_t __input[DSP_IN_MSG_MAX];
 
 static const dsp_output_t __silence[DSP_SILENCE_MSG_MAX] = {
@@ -111,7 +110,7 @@ static void __queue_request( int32_t *left,
 /* See dsp.h for details */
 dsp_status_t dsp_init( const uint32_t priority )
 {
-    portBASE_TYPE status;
+    bool status;
     int32_t i;
 
     __bitrate = 44100;
@@ -123,12 +122,12 @@ dsp_status_t dsp_init( const uint32_t priority )
     __input_idle = NULL;
     __input_queued = NULL;
 
-    __output_idle = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
-    __output_idle_silence = xQueueCreate( DSP_SILENCE_MSG_MAX, sizeof(dsp_output_t*) );
-    __output_active = xQueueCreate( 2, sizeof(dsp_output_t*) );
-    __output_queued = xQueueCreate( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
-    __input_idle = xQueueCreate( DSP_IN_MSG_MAX, sizeof(dsp_input_t*) );
-    __input_queued = xQueueCreate( DSP_IN_MSG_MAX, sizeof(dsp_input_t*) );
+    __output_idle = os_queue_create( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
+    __output_idle_silence = os_queue_create( DSP_SILENCE_MSG_MAX, sizeof(dsp_output_t*) );
+    __output_active = os_queue_create( 2, sizeof(dsp_output_t*) );
+    __output_queued = os_queue_create( DSP_OUT_MSG_MAX, sizeof(dsp_output_t*) );
+    __input_idle = os_queue_create( DSP_IN_MSG_MAX, sizeof(dsp_input_t*) );
+    __input_queued = os_queue_create( DSP_IN_MSG_MAX, sizeof(dsp_input_t*) );
 
     if( (NULL == __output_idle) || (NULL == __output_idle_silence) ||
         (NULL == __output_active) || (NULL == __output_queued) ||
@@ -140,23 +139,23 @@ dsp_status_t dsp_init( const uint32_t priority )
     for( i = 0; i < DSP_OUT_MSG_MAX; i++ ) {
         dsp_output_t *out = &__output[i];
         out->silence = false;
-        xQueueSendToBack( __output_idle, &out, 0 );
+        os_queue_send_to_back( __output_idle, &out, NO_WAIT );
     }
 
     for( i = 0; i < DSP_IN_MSG_MAX; i++ ) {
         dsp_input_t *in = &__input[i];
-        xQueueSendToBack( __input_idle, &in, 0 );
+        os_queue_send_to_back( __input_idle, &in, NO_WAIT );
     }
 
     for( i = 0; i < DSP_SILENCE_MSG_MAX; i++ ) {
         const dsp_output_t *out = &__silence[i];
-        xQueueSendToBack( __output_idle_silence, &out, 0 );
+        os_queue_send_to_back( __output_idle_silence, &out, NO_WAIT );
     }
 
-    status = xTaskCreate( __dsp_task, ( signed portCHAR *) "DSP ",
-                          DSP_TASK_STACK_SIZE, NULL, priority, NULL );
+    status = os_task_create( __dsp_task, "DSP ", DSP_TASK_STACK_SIZE,
+                             NULL, priority, NULL );
 
-    if( pdPASS != status ) {
+    if( true != status ) {
         goto failure;
     }
 
@@ -166,22 +165,22 @@ dsp_status_t dsp_init( const uint32_t priority )
 
 failure:
     if( NULL == __output_idle ) {
-        vQueueDelete( __output_idle );
+        os_queue_delete( __output_idle );
     }
     if( NULL == __output_idle_silence ) {
-        vQueueDelete( __output_idle_silence );
+        os_queue_delete( __output_idle_silence );
     }
     if( NULL == __output_active ) {
-        vQueueDelete( __output_active );
+        os_queue_delete( __output_active );
     }
     if( NULL == __output_queued ) {
-        vQueueDelete( __output_queued );
+        os_queue_delete( __output_queued );
     }
     if( NULL == __input_idle )  {
-        vQueueDelete( __input_idle );
+        os_queue_delete( __input_idle );
     }
     if( NULL == __input_queued ) {
-        vQueueDelete( __input_queued );
+        os_queue_delete( __input_queued );
     }
 
     return DSP_RESOURCE_ERROR;
@@ -247,7 +246,7 @@ static void __dsp_task( void *params )
     while( 1 ) {
         dsp_input_t *in;
 
-        if( pdTRUE == xQueueReceive( __input_queued, &in, portMAX_DELAY) ) {
+        if( true == os_queue_receive( __input_queued, &in, WAIT_FOREVER) ) {
 
             if( 0 == in->count ) {
                 /* No more data - play silence. */
@@ -256,20 +255,20 @@ static void __dsp_task( void *params )
                             (sizeof(int16_t)*2*(DSP_BUFFER_SIZE - out->used)) );
                     out->used = DSP_BUFFER_SIZE;
                     in->offset = 0;
-                    xQueueSendToBack( __output_queued, &out, portMAX_DELAY );
+                    os_queue_send_to_back( __output_queued, &out, WAIT_FOREVER );
                     out = NULL;
                 }
             } else {
                 while( in->offset < in->count ) {
                     if( NULL == out ) {
-                        xQueueReceive( __output_idle, &out, portMAX_DELAY );
+                        os_queue_receive( __output_idle, &out, WAIT_FOREVER );
                         out->used = 0;
                     }
 
                     __process_samples( in, out );
 
                     if( DSP_BUFFER_SIZE == out->used ) {
-                        xQueueSendToBack( __output_queued, &out, portMAX_DELAY );
+                        os_queue_send_to_back( __output_queued, &out, WAIT_FOREVER );
                         out = NULL;
                     }
                 }
@@ -279,7 +278,7 @@ static void __dsp_task( void *params )
             if( NULL != in->cb ) {
                 (*in->cb)( in->left, in->right, in->data );
             }
-            xQueueSendToBack( __input_idle, &in, portMAX_DELAY );
+            os_queue_send_to_back( __input_idle, &in, WAIT_FOREVER );
         }
     }
 }
@@ -294,35 +293,34 @@ static void __dac_buffer_complete( void )
     static bool bitrate_change = false;
     static uint32_t new_bitrate = 0;
     dsp_output_t *out;
-    portBASE_TYPE status;
-    portBASE_TYPE ignore;
+    bool status;
 
     int i;
 
     //intc_isr_puts( "__dac_buffer_complete()\n" );
 
     /* Move the transferred message to the idle queue. */
-    status = xQueueReceiveFromISR( __output_active, &out, &ignore );
-    if( pdTRUE == status ) {
+    status = os_queue_receive_ISR( __output_active, &out, NULL );
+    if( true == status ) {
         if( true == out->silence ) {
-            xQueueSendToBackFromISR( __output_idle_silence, &out, &ignore );
+            os_queue_send_to_back_ISR( __output_idle_silence, &out, NULL );
         } else {
-            xQueueSendToBackFromISR( __output_idle, &out, &ignore );
+            os_queue_send_to_back_ISR( __output_idle, &out, NULL );
         }
     }
 
     if( false == bitrate_change ) {
         /* Look at the first message in the queue to see if the bitrate changes. */
-        status = xQueueReceiveFromISR( __output_queued, &out, &ignore );
-        if( pdTRUE == status ) {
-            xQueueSendToFrontFromISR( __output_queued, &out, &ignore );
+        status = os_queue_receive_ISR( __output_queued, &out, NULL );
+        if( true == status ) {
+            os_queue_send_to_front_ISR( __output_queued, &out, NULL );
 
             if( __bitrate != out->bitrate ) {
                 bitrate_change = true;
                 new_bitrate = out->bitrate;
-                status = xQueueReceiveFromISR( __output_idle_silence, &out, &ignore );
-                if( pdTRUE == status ) {
-                    xQueueSendToBackFromISR( __output_active, &out, &ignore );
+                status = os_queue_receive_ISR( __output_idle_silence, &out, NULL );
+                if( true == status ) {
+                    os_queue_send_to_back_ISR( __output_active, &out, NULL );
                 }
             }
         }
@@ -330,19 +328,19 @@ static void __dac_buffer_complete( void )
         /* Put the next audio clip into the playback system or add
          * silence. */
         for( i = 0; i < 2; i++ ) {
-            xQueueHandle current;
+            queue_handle_t current;
             if( 0 == i ) {
                 current = __output_queued;
             } else {
                 current = __output_idle_silence;
             }
 
-            while( (pdFALSE == xQueueIsQueueFullFromISR(__output_active)) &&
-                   (pdFALSE == xQueueIsQueueEmptyFromISR(current)) )
+            while( (false == os_queue_is_full_ISR(__output_active)) &&
+                   (false == os_queue_is_empty_ISR(current)) )
             {
                 /* Queue the next pending buffer for playback. */
-                status = xQueueReceiveFromISR( current, &out, &ignore );
-                if( pdTRUE == status ) {
+                status = os_queue_receive_ISR( current, &out, NULL );
+                if( true == status ) {
                     bsp_status_t queue_status;
                     /* This can't fail because one of the two buffers just
                      * became available the only other failure is parameter error. */
@@ -350,10 +348,10 @@ static void __dac_buffer_complete( void )
                                                       out->samples, out->used << 2 );
 
                     if( BSP_RETURN_OK == queue_status ) {
-                        xQueueSendToBackFromISR( __output_active, &out, &ignore );
+                        os_queue_send_to_back_ISR( __output_active, &out, NULL );
                     } else {
                         intc_isr_puts( "Bad pdca_queue_buffer() return value\n" );
-                        xQueueSendToFrontFromISR( current, &out, &ignore );
+                        os_queue_send_to_front_ISR( current, &out, NULL );
                     }
                 }
             }
@@ -366,9 +364,9 @@ static void __dac_buffer_complete( void )
         bitrate_change = false;
         new_bitrate = 0;
 
-        status = xQueueReceiveFromISR( __output_idle_silence, &out, &ignore );
-        if( pdTRUE == status ) {
-            xQueueSendToBackFromISR( __output_active, &out, &ignore );
+        status = os_queue_receive_ISR( __output_idle_silence, &out, NULL );
+        if( true == status ) {
+            os_queue_send_to_back_ISR( __output_active, &out, NULL );
         }
     }
 
@@ -559,7 +557,7 @@ static void __queue_request( int32_t *left,
 {
     dsp_input_t *in;
 
-    xQueueReceive( __input_idle, &in, portMAX_DELAY );
+    os_queue_receive( __input_idle, &in, WAIT_FOREVER );
 
     in->left = left;
     in->right = right;
@@ -570,5 +568,5 @@ static void __queue_request( int32_t *left,
     in->cb = cb;
     in->data = data;
 
-    xQueueSendToBack( __input_queued, &in, portMAX_DELAY );
+    os_queue_send_to_back( __input_queued, &in, WAIT_FOREVER );
 }

@@ -18,5 +18,5 @@ LIBRARIES = \
             ibus-radio-protocol \
             ibus-phone-protocol \
             ibus-debug-protocol \
-            display \
+            system-time \
             database

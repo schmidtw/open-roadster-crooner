@@ -28,8 +28,7 @@
 
 #include <dsp/dsp.h>
 #include <file-stream/file-stream.h>
-#include <freertos/semphr.h>
-#include <freertos/queue.h>
+#include <freertos/os.h>
 
 #include "media-mp3.h"
 
@@ -51,7 +50,7 @@
 typedef struct {
     int32_t left[1152];
     int32_t right[1152];
-    xQueueHandle idle;
+    queue_handle_t idle;
 } mp3_data_node_t;
 
 typedef struct {
@@ -68,11 +67,11 @@ typedef struct {
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static void dsp_callback( int32_t *left, int32_t *right, void *data );
-static media_status_t decode_song( xQueueHandle idle,
+static media_status_t decode_song( queue_handle_t idle,
                                    const int32_t gain,
                                    mp3_data_t *data,
                                    media_command_fn_t command_fn );
-static media_status_t output_data( xQueueHandle idle,
+static media_status_t output_data( queue_handle_t idle,
                                    const struct mad_pcm *pcm,
                                    const int32_t gain,
                                    const uint32_t bitrate );
@@ -85,7 +84,7 @@ static media_status_t output_data( xQueueHandle idle,
 media_status_t media_mp3_play( const char *filename,
                                const double gain,
                                const double peak,
-                               xQueueHandle idle,
+                               queue_handle_t idle,
                                const size_t queue_size,
                                media_malloc_fn_t malloc_fn,
                                media_free_fn_t free_fn,
@@ -124,7 +123,7 @@ media_status_t media_mp3_play( const char *filename,
             goto error_1;
         }
         node->idle = idle;
-        xQueueSendToBack( idle, &node, 0 );
+        os_queue_send_to_back( idle, &node, NO_WAIT );
     }
     i = node_count;
 
@@ -145,7 +144,7 @@ error_1:
     while( 0 < i-- ) {
         mp3_data_node_t *node;
 
-        xQueueReceive( idle, &node, portMAX_DELAY );
+        os_queue_receive( idle, &node, WAIT_FOREVER );
         (*free_fn)( node );
     }
 
@@ -239,10 +238,10 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data )
 {
     mp3_data_node_t *node = (mp3_data_node_t*) data;
 
-    xQueueSendToBack( node->idle, &node, 0 );
+    os_queue_send_to_back( node->idle, &node, NO_WAIT );
 }
 
-static media_status_t decode_song( xQueueHandle idle,
+static media_status_t decode_song( queue_handle_t idle,
                                    const int32_t gain,
                                    mp3_data_t *data,
                                    media_command_fn_t command_fn )
@@ -328,7 +327,7 @@ error:
     return rv;
 }
 
-static media_status_t output_data( xQueueHandle idle,
+static media_status_t output_data( queue_handle_t idle,
                                    const struct mad_pcm *pcm,
                                    const int32_t gain,
                                    const uint32_t bitrate )
@@ -337,7 +336,7 @@ static media_status_t output_data( xQueueHandle idle,
     mp3_data_node_t *node;
     int i;
 
-    xQueueReceive( idle, &node, portMAX_DELAY );
+    os_queue_receive( idle, &node, WAIT_FOREVER );
 
     for( i = 0; i < pcm->length; i++ ) {
         node->left[i] = ((int32_t) pcm->samples[0][i]);
@@ -347,7 +346,7 @@ static media_status_t output_data( xQueueHandle idle,
     status = dsp_queue_data( node->left, node->right, pcm->length,
                              bitrate, gain, &dsp_callback, node );
     if( DSP_RETURN_OK != status ) {
-        xQueueSendToBack( idle, &node, 0 );
+        os_queue_send_to_back( idle, &node, NO_WAIT );
         return MI_ERROR_DECODE_ERROR;
     }
     return MI_RETURN_OK;

@@ -25,8 +25,7 @@
 #include <bsp/cpu.h>
 #include <bsp/pm.h>
 
-#include <freertos/task.h>
-#include <freertos/semphr.h>
+#include <freertos/os.h>
 
 #include <newlib/reent-file-glue.h>
 
@@ -35,7 +34,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define SYS_TIME_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE)
+#define SYS_TIME_TASK_STACK_SIZE 0
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -45,7 +44,7 @@
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xSemaphoreHandle __lock;
+static semaphore_handle_t __lock;
 static uint64_t __time_in_ns;
 static uint32_t __last_cpu_time;
 
@@ -60,9 +59,9 @@ static uint64_t __clock_time_to_ns( const uint32_t clock_time );
 /*----------------------------------------------------------------------------*/
 systime_status_t system_time_init( const uint32_t priority )
 {
-    portBASE_TYPE status;
+    bool status;
 
-    vSemaphoreCreateBinary( __lock );
+     __lock = os_semaphore_create_binary();
     __time_in_ns = 0;
     __last_cpu_time = 0;
 
@@ -70,10 +69,10 @@ systime_status_t system_time_init( const uint32_t priority )
         goto failure;
     }
 
-    status = xTaskCreate( __sys_time_task, ( signed portCHAR *) "TIME",
-                          SYS_TIME_TASK_STACK_SIZE, NULL, priority, NULL );
+    status = os_task_create( __sys_time_task, "SysTime", SYS_TIME_TASK_STACK_SIZE,
+                             NULL, priority, NULL );
 
-    if( pdPASS != status ) {
+    if( true != status ) {
         goto failure;
     }
 
@@ -99,7 +98,7 @@ int _gettimeofday( struct timeval *tv, struct timezone *tz )
     tz->tz_minuteswest = 0;
     tz->tz_dsttime = 0;
 
-    xSemaphoreTake( __lock, portMAX_DELAY );
+    os_semaphore_take( __lock, WAIT_FOREVER );
     now = cpu_get_sys_count();
     if( __last_cpu_time < now ) {
         delta = now - __last_cpu_time;
@@ -107,7 +106,7 @@ int _gettimeofday( struct timeval *tv, struct timezone *tz )
         delta = 0xffffffffu - __last_cpu_time + now + 1;
     }
     offset = __time_in_ns;
-    xSemaphoreGive( __lock );
+    os_semaphore_give( __lock );
 
     offset += __clock_time_to_ns( delta );
     offset /= 1000;
@@ -129,9 +128,9 @@ static void __sys_time_task( void *params )
     uint32_t now, delta;
 
     while( 1 ) {
-        vTaskDelay( 1000 / portTICK_RATE_MS );
+        os_task_delay_ms( 1000 );
 
-        xSemaphoreTake( __lock, portMAX_DELAY );
+        os_semaphore_take( __lock, WAIT_FOREVER );
         now = cpu_get_sys_count();
         if( __last_cpu_time < now ) {
             delta = now - __last_cpu_time;
@@ -140,7 +139,7 @@ static void __sys_time_task( void *params )
         }
         __last_cpu_time = now;
         __time_in_ns += __clock_time_to_ns( delta );
-        xSemaphoreGive( __lock );
+        os_semaphore_give( __lock );
     }
 }
 

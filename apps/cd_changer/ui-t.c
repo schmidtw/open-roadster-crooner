@@ -19,8 +19,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
-#include <freertos/task.h>
+#include <bsp/boards/boards.h>
+#include <bsp/cpu.h>
+#include <freertos/os.h>
 #ifdef SUPPORT_TEXT
 #include <display/display.h>
 #endif
@@ -379,7 +382,7 @@ static void __process_command( irp_state_t *device_status,
                 _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__ERROR\n" );
                 /* Without this we seem to deadlock on "full error" testing. */
                 /* The real error seems to be due to the physical ibus driver. */
-                vTaskDelay( 100 );
+                os_task_delay_ticks( 100 );
 
             case PB_STATUS__END_OF_SONG:
                 _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__END_OF_SONG\n" );
@@ -731,7 +734,7 @@ static void set_random_state( bool new_state )
 {
     random_state = new_state;
     if( true == random_state ) {
-        srand( xTaskGetTickCount() );
+        srand( cpu_get_sys_count() );
     }
 }
 

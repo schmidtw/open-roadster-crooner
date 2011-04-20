@@ -16,18 +16,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
 #include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
-#include <freertos/task.h>
-#include <freertos/queue.h>
+#include <freertos/os.h>
 
 #include "playback.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define PB_TASK_STACK_SIZE  (configMINIMAL_STACK_SIZE + 5000)
+#define PB_TASK_STACK_SIZE  (5000)
 #define PB_COMMAND_MSG_MAX  10
 #define IDLE_QUEUE_SIZE     10
 
@@ -70,10 +71,10 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xQueueHandle __idle;
+static queue_handle_t __idle;
 
-static xQueueHandle __cmd_idle;
-static xQueueHandle __cmd_active;
+static queue_handle_t __cmd_idle;
+static queue_handle_t __cmd_active;
 static pb_command_msg_t __commands[PB_COMMAND_MSG_MAX];
 
 static uint16_t __tx_id = 0;
@@ -93,17 +94,17 @@ static bool __continue_decoding( void );
 /* See playback.h for details. */
 int32_t playback_init( const uint32_t priority )
 {
-    portBASE_TYPE status;
+    bool status;
     int i;
 
     __idle = NULL;
     __cmd_idle = NULL;
     __cmd_active = NULL;
 
-    __idle = xQueueCreate( IDLE_QUEUE_SIZE, sizeof(void*) );
+    __idle = os_queue_create( IDLE_QUEUE_SIZE, sizeof(void*) );
 
-    __cmd_idle = xQueueCreate( PB_COMMAND_MSG_MAX, sizeof(void*) );
-    __cmd_active = xQueueCreate( PB_COMMAND_MSG_MAX, sizeof(void*) );
+    __cmd_idle = os_queue_create( PB_COMMAND_MSG_MAX, sizeof(void*) );
+    __cmd_active = os_queue_create( PB_COMMAND_MSG_MAX, sizeof(void*) );
 
     if( (NULL == __idle) || (NULL == __cmd_idle) || (NULL == __cmd_active) ) {
         goto failure;
@@ -111,27 +112,27 @@ int32_t playback_init( const uint32_t priority )
 
     for( i = 0; i < PB_COMMAND_MSG_MAX; i++ ) {
         pb_command_msg_t *cmd = &__commands[i];
-        xQueueSendToBack( __cmd_idle, &cmd, portMAX_DELAY );
+        os_queue_send_to_back( __cmd_idle, &cmd, WAIT_FOREVER );
     }
 
-    status = xTaskCreate( __pb_task, ( signed portCHAR *) "Playbck",
-                          PB_TASK_STACK_SIZE, NULL, priority, NULL );
+    status = os_task_create( __pb_task, "Playbck", PB_TASK_STACK_SIZE,
+                             NULL, priority, NULL );
 
-    if( pdPASS == status ) {
+    if( true == status ) {
         return 0;
     }
 
 failure:
     if( NULL != __idle ) {
-        vQueueDelete( __idle );
+        os_queue_delete( __idle );
         __idle = NULL;
     }
     if( NULL != __cmd_idle ) {
-        vQueueDelete( __cmd_idle );
+        os_queue_delete( __cmd_idle );
         __cmd_idle = NULL;
     }
     if( NULL != __cmd_active ) {
-        vQueueDelete( __cmd_active );
+        os_queue_delete( __cmd_active );
         __cmd_active = NULL;
     }
 
@@ -152,7 +153,7 @@ int32_t playback_play( const char *filename,
         pb_command_msg_t *cmd;
         int32_t tx_temp;
 
-        xQueueReceive( __cmd_idle, &cmd, portMAX_DELAY );
+        os_queue_receive( __cmd_idle, &cmd, WAIT_FOREVER );
         cmd->cmd = PB_CMD_INT__PLAY;
         cmd->tx_id = __tx_id++;
         cmd->gain = gain;
@@ -161,13 +162,13 @@ int32_t playback_play( const char *filename,
         cmd->filename = (char*) malloc( strlen(filename) + 1 );
         cmd->cb_fn = cb_fn;
         if( NULL == cmd->filename ) {
-            xQueueSendToBack( __cmd_idle, &cmd, portMAX_DELAY );
+            os_queue_send_to_back( __cmd_idle, &cmd, WAIT_FOREVER );
             return -1;
         }
         strcpy( cmd->filename, filename );
 
         tx_temp = cmd->tx_id;
-        xQueueSendToBack( __cmd_active, &cmd, portMAX_DELAY );
+        os_queue_send_to_back( __cmd_active, &cmd, WAIT_FOREVER );
 
         return tx_temp;
     }
@@ -182,7 +183,7 @@ int32_t playback_command( const pb_command_t command,
     pb_command_int_t cmd_int;
     int32_t tx_temp;
 
-    xQueueReceive( __cmd_idle, &cmd, portMAX_DELAY );
+    os_queue_receive( __cmd_idle, &cmd, WAIT_FOREVER );
 
     switch( command ) {
         case PB_CMD__RESUME:    cmd_int = PB_CMD_INT__RESUME;   break;
@@ -199,7 +200,7 @@ int32_t playback_command( const pb_command_t command,
     cmd->cb_fn = cb_fn;
 
     tx_temp = cmd->tx_id;
-    xQueueSendToBack( __cmd_active, &cmd, portMAX_DELAY );
+    os_queue_send_to_back( __cmd_active, &cmd, WAIT_FOREVER );
 
     return tx_temp;
 }
@@ -213,7 +214,7 @@ static void __pb_task( void *params )
         pb_command_msg_t *cmd;
 
         _D2( "Waiting on file to play\n" );
-        xQueueReceive( __cmd_active, &cmd, portMAX_DELAY );
+        os_queue_receive( __cmd_active, &cmd, WAIT_FOREVER );
 
         if( PB_CMD_INT__PLAY == cmd->cmd ) {
             pb_status_t cb_status;
@@ -264,26 +265,26 @@ static void __notify_and_return( const pb_status_t status,
     cmd->peak = 0;
     cmd->play_fn = NULL;
 
-    xQueueSendToBack( __cmd_idle, &cmd, portMAX_DELAY );
+    os_queue_send_to_back( __cmd_idle, &cmd, WAIT_FOREVER );
 }
 
 static bool __continue_decoding( void )
 {
     pb_command_msg_t *cmd;
 
-    if( pdTRUE == xQueuePeek(__cmd_active, &cmd, 0) ) {
+    if( true == os_queue_peek(__cmd_active, &cmd, NO_WAIT) ) {
 
         /* Pause? */
         if( PB_CMD_INT__PAUSE == cmd->cmd ) {
             /* Yes */
-            xQueueReceive( __cmd_active, &cmd, portMAX_DELAY );
+            os_queue_receive( __cmd_active, &cmd, WAIT_FOREVER );
             __notify_and_return( PB_STATUS__PAUSED, cmd );
             cmd = NULL;
 
             /* Wait for a resume, or error out & stop */
-            xQueuePeek( __cmd_active, &cmd, portMAX_DELAY );
+            os_queue_peek( __cmd_active, &cmd, WAIT_FOREVER );
             if( PB_CMD_INT__RESUME == cmd->cmd ) {
-                xQueueReceive( __cmd_active, &cmd, portMAX_DELAY );
+                os_queue_receive( __cmd_active, &cmd, WAIT_FOREVER );
                 __notify_and_return( PB_STATUS__PLAYING, cmd );
                 cmd = NULL;
 

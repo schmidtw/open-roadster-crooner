@@ -27,6 +27,7 @@
 #define configKERNEL_INTERRUPT_PRIORITY 0
 #define configUSE_TRACE_FACILITY        1
 #define configUSE_NEWLIB_REENTRANT      1
+#define configGENERATE_RUN_TIME_STATS   1
 
 /* Code inclusion optimizations */
 #define INCLUDE_vTaskPrioritySet            0

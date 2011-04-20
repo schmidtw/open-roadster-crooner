@@ -22,7 +22,7 @@
 
 
 /* See handle_display_update.h  for documentation */
-void handle_display_update( portTickType * ticks_to_wait_before_looping,
+void handle_display_update( uint32_t * ticks_to_wait_before_looping,
                             char * text,
                             struct display_globals * ref )
 {

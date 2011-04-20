@@ -27,8 +27,7 @@
 
 #include <dsp/dsp.h>
 #include <file-stream/file-stream.h>
-#include <freertos/semphr.h>
-#include <freertos/queue.h>
+#include <freertos/os.h>
 
 #include "media-flac.h"
 #include "decoder.h"
@@ -45,7 +44,7 @@
 typedef struct {
     int32_t decode_0[MAX_BLOCKSIZE];
     int32_t decode_1[MAX_BLOCKSIZE];
-    xQueueHandle idle;
+    queue_handle_t idle;
 } flac_data_node_t;
 
 typedef enum {
@@ -89,7 +88,7 @@ typedef media_status_t (*file__block_handler_t)( int fd,
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static media_status_t play_song( FLACContext *fc,
-                                 xQueueHandle idle,
+                                 queue_handle_t idle,
                                  const int32_t gain,
                                  media_command_fn_t command_fn );
 static void process_metadata_block_header( uint8_t *header,
@@ -99,7 +98,7 @@ static void process_metadata_block_header( uint8_t *header,
 
 /*---------- Stream based metadata handlers ----------*/
 static media_status_t stream__process_file( FLACContext *fc,
-                                            xQueueHandle idle,
+                                            queue_handle_t idle,
                                             const int32_t gain,
                                             media_command_fn_t command_fn );
 static media_status_t stream__process_metadata( FLACContext *fc );
@@ -132,7 +131,7 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data );
 media_status_t media_flac_play( const char *filename,
                                 const double gain,
                                 const double peak,
-                                xQueueHandle idle,
+                                queue_handle_t idle,
                                 const size_t queue_size,
                                 media_malloc_fn_t malloc_fn,
                                 media_free_fn_t free_fn,
@@ -184,7 +183,7 @@ media_status_t media_flac_play( const char *filename,
             goto error_1;
         }
         node->idle = idle;
-        xQueueSendToBack( idle, &node, 0 );
+        os_queue_send_to_back( idle, &node, NO_WAIT );
     }
     i = node_count;
 
@@ -202,7 +201,7 @@ error_1:
     while( 0 < i-- ) {
         flac_data_node_t *node;
 
-        xQueueReceive( idle, &node, portMAX_DELAY );
+        os_queue_receive( idle, &node, WAIT_FOREVER );
         (*free_fn)( node );
     }
 
@@ -288,7 +287,7 @@ error_0:
  *  @retval MI_RETURN_OK
  */
 static media_status_t stream__process_file( FLACContext *fc,
-                                            xQueueHandle idle,
+                                            queue_handle_t idle,
                                             const int32_t gain,
                                             media_command_fn_t command_fn )
 {
@@ -641,7 +640,7 @@ static media_status_t file__metadata_vorbis_comment( int fd,
 }
 
 static media_status_t play_song( FLACContext *fc,
-                                 xQueueHandle idle,
+                                 queue_handle_t idle,
                                  const int32_t gain,
                                  media_command_fn_t command_fn )
 {
@@ -658,7 +657,7 @@ static media_status_t play_song( FLACContext *fc,
         int32_t bytes_left;
 
         if( NULL == node ) {
-            xQueueReceive( idle, &node, portMAX_DELAY );
+            os_queue_receive( idle, &node, WAIT_FOREVER );
         }
 
         read_buffer = (uint8_t*) fstream_get_buffer( fc->max_framesize, (size_t*) &bytes_left );
@@ -688,7 +687,7 @@ static media_status_t play_song( FLACContext *fc,
             status = dsp_queue_data( node->decode_0, node->decode_1, fc->blocksize,
                                      fc->samplerate, gain, &dsp_callback, node );
             if( DSP_RETURN_OK != status ) {
-                xQueueSendToBack( idle, &node, 0 );
+                os_queue_send_to_back( idle, &node, NO_WAIT );
                 rv = MI_ERROR_DECODE_ERROR;
                 goto done;
             }
@@ -700,7 +699,7 @@ static media_status_t play_song( FLACContext *fc,
 done:
     fstream_release_buffer( 0 );
     if( NULL != node ) {
-        xQueueSendToBack( idle, &node, 0 );
+        os_queue_send_to_back( idle, &node, NO_WAIT );
     }
     dsp_data_complete( NULL, NULL );
     return rv;
@@ -966,5 +965,5 @@ static void dsp_callback( int32_t *left, int32_t *right, void *data )
 {
     flac_data_node_t *node = (flac_data_node_t*) data;
 
-    xQueueSendToBack( node->idle, &node, 0 );
+    os_queue_send_to_back( node->idle, &node, NO_WAIT );
 }

@@ -22,8 +22,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <freertos/semphr.h>
-#include <freertos/queue.h>
+#include <freertos/os.h>
 
 #define MEDIA_TITLE_LENGTH  127
 #define MEDIA_ALBUM_LENGTH  127
@@ -92,7 +91,7 @@ typedef bool (*media_command_fn_t)( void );
 typedef media_status_t (*media_play_fn_t)( const char *filename,
                                            const double gain,
                                            const double peak,
-                                           xQueueHandle idle,
+                                           queue_handle_t idle,
                                            const size_t queue_size,
                                            media_malloc_fn_t malloc_fn,
                                            media_free_fn_t free_fn,

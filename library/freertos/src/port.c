@@ -70,7 +70,6 @@
 /* Scheduler includes. */
 #include "FreeRTOS.h"
 #include "task.h"
-#include "task_internal.h"
 
 /* AVR32 UC3 includes. */
 #include <avr32/io.h>
@@ -89,8 +88,8 @@
 #define portINSTRUCTION_SIZE      ( ( portSTACK_TYPE ) 0 )
 
 /* Each task maintains its own critical nesting variable. */
-#define portNO_CRITICAL_NESTING   ( ( unsigned portLONG ) 0 )
-volatile unsigned portLONG ulCriticalNesting = 9999UL;
+#define portNO_CRITICAL_NESTING   ( ( unsigned long ) 0 )
+volatile unsigned long ulCriticalNesting = 9999UL;
 
 /* Setup the timer to generate the tick interrupts. */
 static void prvSetupTimerInterrupt( void );

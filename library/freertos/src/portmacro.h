@@ -1,56 +1,51 @@
-/*! \file *********************************************************************
- *
- * \brief FreeRTOS port header for AVR32 UC3.
- *
- * - Compiler:           GNU GCC for AVR32
- * - Supported devices:  All AVR32 devices can be used.
- * - AppNote:
- *
- * \author               Atmel Corporation: http://www.atmel.com \n
- *                       Support and FAQ: http://support.atmel.no/
- *
- *****************************************************************************/
-
 /*
-	FreeRTOS.org V5.2.0 - Copyright (C) 2003-2009 Richard Barry.
+    FreeRTOS V7.0.0 - Copyright (C) 2011 Real Time Engineers Ltd.
 
-    This file is part of the FreeRTOS.org distribution.
 
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    FreeRTOS.org is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with FreeRTOS.org; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
-	A special exception to the GPL is included to allow you to distribute a 
-	combined work that includes FreeRTOS.org without being obliged to provide
-    the source code for any proprietary components.  See the licensing section
-	of http://www.FreeRTOS.org for full details.
+	FreeRTOS supports many tools and architectures. V7.0.0 is sponsored by:
+	Atollic AB - Atollic provides professional embedded systems development 
+	tools for C/C++ development, code analysis and test automation.  
+	See http://www.atollic.com
 
 
 	***************************************************************************
 	*                                                                         *
-	* Get the FreeRTOS eBook!  See http://www.FreeRTOS.org/Documentation      *
+     *    FreeRTOS tutorial books are available in pdf and paperback.        *
+     *    Complete, revised, and edited pdf reference manuals are also       *
+     *    available.                                                         *
+     *                                                                       *
+     *    Purchasing FreeRTOS documentation will not only help you, by       *
+     *    ensuring you get running as quickly as possible and with an        *
+     *    in-depth knowledge of how to use FreeRTOS, it will also help       *
+     *    the FreeRTOS project to continue with its mission of providing     *
+     *    professional grade, cross platform, de facto standard solutions    *
+     *    for microcontrollers - completely free of charge!                  *
 	*                                                                         *
-	* This is a concise, step by step, 'hands on' guide that describes both   *
-	* general multitasking concepts and FreeRTOS specifics. It presents and   *
-	* explains numerous examples that are written using the FreeRTOS API.     *
-	* Full source code for all the examples is provided in an accompanying    *
-	* .zip file.                                                              *
+     *    >>> See http://www.FreeRTOS.org/Documentation for details. <<<     *
+     *                                                                       *
+     *    Thank you for using FreeRTOS, and thank you for your support!      *
 	*                                                                         *
     ***************************************************************************
 
-	1 tab == 4 spaces!
 
-    Please ensure to read the configuration and relevant port sections of the 
-    online documentation.
+    This file is part of the FreeRTOS distribution.
+
+    FreeRTOS is free software; you can redistribute it and/or modify it under
+    the terms of the GNU General Public License (version 2) as published by the
+    Free Software Foundation AND MODIFIED BY the FreeRTOS exception.
+    >>>NOTE<<< The modification to the GPL is included to allow you to
+    distribute a combined work that includes FreeRTOS without being obliged to
+    provide the source code for proprietary components outside of the FreeRTOS
+    kernel.  FreeRTOS is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+    more details. You should have received a copy of the GNU General Public
+    License and the FreeRTOS license exception along with FreeRTOS; if not it
+    can be viewed here: http://www.freertos.org/a00114.html and also obtained
+    by writing to Richard Barry, contact details for whom are available on the
+    FreeRTOS WEB site.
+
+    1 tab == 4 spaces!
 
 	http://www.FreeRTOS.org - Documentation, latest information, license and
 	contact details.
@@ -62,6 +57,9 @@
 	licensing and training services.
 */
 
+/*-----------------------------------------------------------
+ * Portable layer API.  Each function must be defined for each port.
+ *----------------------------------------------------------*/
 
 #ifndef PORTMACRO_H
 #define PORTMACRO_H
@@ -78,6 +76,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <avr32/io.h>
+#include <bsp/cpu.h>
 #include <bsp/intc.h>
 
 #ifdef __cplusplus
@@ -86,11 +85,8 @@ extern "C" {
 
 
 /* Type definitions. */
-#define portCHAR        char
 #define portFLOAT       float
 #define portDOUBLE      double
-#define portLONG        long
-#define portSHORT       short
 #define portSTACK_TYPE  unsigned long
 #define portBASE_TYPE   long
 
@@ -115,23 +111,6 @@ extern "C" {
 /*-----------------------------------------------------------*/
 
 
-/*-----------------------------------------------------------*/
-
-/*
- * Debug trace.
- * Activated if and only if configDBG is nonzero.
- * Prints a formatted string to stdout.
- * The current source file name and line number are output with a colon before
- * the formatted string.
- * A carriage return and a linefeed are appended to the output.
- * stdout is redirected to the USART configured by configDBG_USART.
- * The parameters are the same as for the standard printf function.
- * There is no return value.
- * SHALL NOT BE CALLED FROM WITHIN AN INTERRUPT as fputs and printf use malloc,
- * which is interrupt-unsafe with the current __malloc_lock and __malloc_unlock.
- */
-#define configDBG 1
-
 /* Critical section management. */
 #define portDISABLE_INTERRUPTS()  disable_global_interrupts()
 #define portENABLE_INTERRUPTS()   enable_global_interrupts()
@@ -150,7 +129,7 @@ void vPortExitCritical( void );
  */
 #define portRESTORE_CONTEXT()                                                      \
 {                                                                                  \
-  extern volatile unsigned portLONG ulCriticalNesting;                             \
+  extern volatile unsigned long ulCriticalNesting;                                 \
   extern volatile void *volatile pxCurrentTCB;                                     \
                                                                                    \
   __asm__ __volatile__ (                                                           \
@@ -256,7 +235,7 @@ void vPortExitCritical( void );
  */
 #define portSAVE_CONTEXT_OS_INT()                                                                           \
 {                                                                                                           \
-  extern volatile unsigned portLONG ulCriticalNesting;                                                      \
+  extern volatile unsigned long ulCriticalNesting;                                                          \
   extern volatile void *volatile pxCurrentTCB;                                                              \
                                                                                                             \
   /* When we come here */                                                                                   \
@@ -308,7 +287,7 @@ void vPortExitCritical( void );
  */
 #define portRESTORE_CONTEXT_OS_INT()                                                                      \
 {                                                                                                         \
-  extern volatile unsigned portLONG ulCriticalNesting;                                                    \
+  extern volatile unsigned long ulCriticalNesting;                                                        \
   extern volatile void *volatile pxCurrentTCB;                                                            \
                                                                                                           \
   /* Check if AVR32_INTC_INT0 or higher were being handled (case where the OS tick interrupted another */ \
@@ -374,7 +353,7 @@ void vPortExitCritical( void );
  */
 #define portSAVE_CONTEXT_SCALL()                                                            \
 {                                                                                           \
-  extern volatile unsigned portLONG ulCriticalNesting;                                      \
+  extern volatile unsigned long ulCriticalNesting;                                          \
   extern volatile void *volatile pxCurrentTCB;                                              \
                                                                                             \
   /* Warning: the stack layout after SCALL doesn't match the one after an interrupt. */     \
@@ -441,7 +420,7 @@ void vPortExitCritical( void );
  */
 #define portRESTORE_CONTEXT_SCALL()                                                          \
 {                                                                                            \
-  extern volatile unsigned portLONG ulCriticalNesting;                                       \
+  extern volatile unsigned long ulCriticalNesting;                                           \
   extern volatile void *volatile pxCurrentTCB;                                               \
                                                                                              \
   /* Restore all registers */                                                                \
@@ -533,7 +512,7 @@ void vPortExitCritical( void );
  */
 #define portENTER_SWITCHING_ISR()                                                                           \
 {                                                                                                           \
-  extern volatile unsigned portLONG ulCriticalNesting;                                                      \
+  extern volatile unsigned long ulCriticalNesting;                                                          \
   extern volatile void *volatile pxCurrentTCB;                                                              \
                                                                                                             \
   /* When we come here */                                                                                   \
@@ -581,7 +560,7 @@ void vPortExitCritical( void );
  */
 #define portEXIT_SWITCHING_ISR()                                                                            \
 {                                                                                                           \
-  extern volatile unsigned portLONG ulCriticalNesting;                                                      \
+  extern volatile unsigned long ulCriticalNesting;                                                          \
   extern volatile void *volatile pxCurrentTCB;                                                              \
                                                                                                             \
   __asm__ __volatile__ (                                                                                    \
@@ -650,6 +629,9 @@ void vPortExitCritical( void );
 /* Task function macros as described on the FreeRTOS.org WEB site. */
 #define portTASK_FUNCTION_PROTO( vFunction, pvParameters ) void vFunction( void *pvParameters )
 #define portTASK_FUNCTION( vFunction, pvParameters ) void vFunction( void *pvParameters )
+
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
+#define portGET_RUN_TIME_COUNTER_VALUE() cpu_get_sys_count()
 
 #ifdef __cplusplus
 }

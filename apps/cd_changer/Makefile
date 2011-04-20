@@ -22,10 +22,10 @@ LIBRARIES = \
             ibus-physical \
             freertos \
             linked-list \
-            display \
             memcard \
             dsp \
             led \
+            system-time \
             bsp \
             util
 

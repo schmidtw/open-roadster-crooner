@@ -4,16 +4,10 @@ BASE      = ../../..
 INCLUDE   = -I/usr/avr32/include \
             -I$(BASE)/bins/include
 
-HEADERS = \
-    task.h \
-    queue.h \
-    semphr.h \
-    portable.h \
-    projdefs.h \
-    FreeRTOSConfig.h \
-    portmacro.h
+HEADERS = os.h
 
 SOURCES = \
+    os.c \
     list.c \
     queue.c \
     tasks.c \

@@ -28,9 +28,7 @@
 #include <bsp/intc.h>
 #include <bsp/spi.h>
 
-#include <freertos/portmacro.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
+#include <freertos/os.h>
 
 #include "config.h"
 #include "block.h"
@@ -49,8 +47,8 @@
 /*----------------------------------------------------------------------------*/
 #define MEMCARD_DEBUG 0
 
-#define AUTOMOUNT_STACK_SIZE    (configMINIMAL_STACK_SIZE+200)
-#define AUTOMOUNT_PRIORITY      (tskIDLE_PRIORITY+1)
+#define AUTOMOUNT_STACK_SIZE    (200)
+#define AUTOMOUNT_PRIORITY      (1)
 #define AUTOMOUNT_CALLBACK_MAX  3
 
 #define _D1(...)
@@ -98,7 +96,7 @@ static uint32_t __mc_Nac_read;
 static uint32_t __mc_block_size;  /**< In bytes. */
 static volatile uint32_t __magic_insert_number;
 
-static xSemaphoreHandle __card_state_change;
+static semaphore_handle_t __card_state_change;
 static volatile mc_card_status_t __card_status;
 static card_status_fct __callback_fns[AUTOMOUNT_CALLBACK_MAX];
 
@@ -127,8 +125,8 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
     glue_init();
 
     __card_status = MC_CARD__REMOVED;
-    vSemaphoreCreateBinary( __card_state_change );
-    xSemaphoreTake( __card_state_change, 0 );
+    __card_state_change = os_semaphore_create_binary();
+    os_semaphore_take( __card_state_change, 0 );
 
     for( i = 0; i < AUTOMOUNT_CALLBACK_MAX; i++ ) {
         __callback_fns[i] = NULL;
@@ -138,8 +136,8 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
 
     io_disable();
 
-    xTaskCreate( __automount_task, (signed portCHAR *) "Auto Mnt",
-                 AUTOMOUNT_STACK_SIZE, NULL, AUTOMOUNT_PRIORITY, NULL );
+    os_task_create( __automount_task, "Auto Mnt",
+                    AUTOMOUNT_STACK_SIZE, NULL, AUTOMOUNT_PRIORITY, NULL );
 
     return MC_RETURN_OK;
 }
@@ -300,8 +298,6 @@ static mc_status_t __set_block_size( void )
 __attribute__((__interrupt__))
 static void __card_change( void )
 {
-    portBASE_TYPE ignore;
-    
     __magic_insert_number++;
 
     if( false == __isr_card_present() ) {
@@ -313,7 +309,7 @@ static void __card_change( void )
         block_isr_cancel();
     }
 
-    xSemaphoreGiveFromISR( __card_state_change, &ignore );
+    os_semaphore_give_ISR( __card_state_change, NULL );
 
     gpio_clr_interrupt_flag( MC_CD_PIN );
 }
@@ -334,11 +330,11 @@ static void __automount_task( void *data )
 
     /* In case we booted with a card in the slot. */
     if( true == __isr_card_present() ) {
-        xSemaphoreGive( __card_state_change );
+        os_semaphore_give( __card_state_change );
     }
 
     while( 1 ) {
-        xSemaphoreTake( __card_state_change, portMAX_DELAY );
+        os_semaphore_take( __card_state_change, WAIT_FOREVER );
 
         if( true == __isr_card_present() ) {
             __card_status = MC_CARD__INSERTED;
@@ -420,7 +416,7 @@ static mc_status_t __mc_mount( void )
             case MCS_CARD_DETECTED:
                 _D2( "MCS_CARD_DETECTED:\n" );
                 /* Make sure the power is stable. */
-                vTaskDelay( TASK_DELAY_MS(250) );
+                os_task_delay_ms( 250 );
                 _D2( "MCS_CARD_DETECTED -> MCS_POWERED_ON\n" );
                 mount_state = MCS_POWERED_ON;
                 break;

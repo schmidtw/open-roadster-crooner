@@ -6,7 +6,7 @@
 #include <bsp/boards/boards.h>
 #include <bsp/wdt.h>
 #include <bsp/cpu.h>
-#include <freertos/task.h>
+#include <freertos/os.h>
 #include <file-stream/file-stream.h>
 #include <database/database.h>
 #include <memcard/memcard.h>
@@ -34,37 +34,39 @@
 
 const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Crooner-1.0.7";
 
+static int32_t __sram_offset = 0;
+static int32_t __sram_have = -1;
+static int32_t __sdram_use = 0;
 void* pvPortMalloc( size_t size )
 {
     extern void __sram_heap_start__;
     extern void __sram_heap_end__;
-    static int32_t offset = 0;
-    static int32_t have = -1;
     void *ret;
 
-    vTaskSuspendAll();
+    os_task_suspend_all();
 
     ret = NULL;
 
-    if( -1 == have ) {
-        have = (&__sram_heap_end__ - (&__sram_heap_start__));
+    if( -1 == __sram_have ) {
+        __sram_have = (&__sram_heap_end__ - (&__sram_heap_start__));
     }
 
-    if( size < have ) {
+    if( size < __sram_have ) {
         size_t aligned_size;
 
-        ret = (void *) (&__sram_heap_start__ + offset);
+        ret = (void *) (&__sram_heap_start__ + __sram_offset);
 
         aligned_size = (0xfffffff8 & (size + 7));
 
-        offset += aligned_size;
-        have -= aligned_size;
+        __sram_offset += aligned_size;
+        __sram_have -= aligned_size;
     } else {
 #if (1 == ALLOW_USING_SLOW_MEMORY)
         ret = malloc( size );
+        __sdram_use += size;
 #else
         fprintf( stderr, "%s( %lu ) Failure - Needed: %lu Have: %ld - using malloc()\n",
-                 __func__, size, size, have );
+                 __func__, size, size, __sram_have );
 
         fflush( stderr );
 
@@ -73,10 +75,10 @@ void* pvPortMalloc( size_t size )
     }
 
 #if (1 == REPORT_ALL_MALLOC)
-    printf( "%s( %lu ) ->: %p (total: %lu left: %ld)\n", __func__, size, ret, offset, have );
+    printf( "%s( %lu ) ->: %p (total: %lu left: %ld)\n", __func__, size, ret, __sram_offset, __sram_have );
 #endif
 
-    xTaskResumeAll();
+    os_task_resume_all();
 
     return ret;
 }
@@ -87,47 +89,46 @@ void vPortFree( void *ptr )
 }
 
 static bool __enable_os = false;
-static xSemaphoreHandle __debug_mutex;
-static xSemaphoreHandle __debug_block;
+static semaphore_handle_t __debug_mutex;
+static semaphore_handle_t __debug_block;
 
 void _debug_lock( void )
 {
     if( true == __enable_os ) {
-        xSemaphoreTake( __debug_mutex, portMAX_DELAY );
+        os_semaphore_take( __debug_mutex, WAIT_FOREVER );
     }
 }
 
 void _debug_unlock( void )
 {
     if( true == __enable_os ) {
-        xSemaphoreGive( __debug_mutex );
+        os_semaphore_give( __debug_mutex );
     }
 }
 
 void _debug_block( void )
 {
     if( true == __enable_os ) {
-        xSemaphoreTake( __debug_block, portMAX_DELAY );
+        os_semaphore_take( __debug_block, WAIT_FOREVER );
     }
 }
 
 void _debug_isr_tx_complete( void )
 {
     if( true == __enable_os ) {
-        portBASE_TYPE ignore;
-        xSemaphoreGiveFromISR( __debug_block, &ignore );
+        os_semaphore_give_ISR( __debug_block, NULL );
     }
 }
 
 
 #if (1 == ENABLE_STATUS_TASK)
-static char task_buffer[512];
+static char task_buffer[1024];
 static void __idle_task( void *params )
 {
     while( 1 ) {
-        vTaskDelay( 5000 / portTICK_RATE_MS );
-        printf( "Still alive\n" );
-        vTaskList( (signed portCHAR *) task_buffer );
+        os_task_delay_ms( 2000 );
+        printf( "Still alive, SRAM Left: %ld, OS/Stack SDRAM Usage: %ld\n", __sram_have, __sdram_use );
+        os_task_get_run_time_stats( task_buffer );
         printf( "%s\n", task_buffer );
     }
 }
@@ -142,15 +143,14 @@ int main( void )
     printf( "--------------------------------------------------------------------------------\n" );
     wdt_start( WDT__36s );
 
-    vSemaphoreCreateBinary( __debug_mutex );
-    vSemaphoreCreateBinary( __debug_block );
-    xSemaphoreTake( __debug_block, 0 );
+     __debug_mutex = os_semaphore_create_binary();
+     __debug_block = os_semaphore_create_binary();
+    os_semaphore_take( __debug_block, NO_WAIT );
 
     srand( 12 );
 
 #if (1 == ENABLE_STATUS_TASK)
-    xTaskCreate( __idle_task, ( signed portCHAR *) "Status",
-                 (configMINIMAL_STACK_SIZE + 550), NULL, tskIDLE_PRIORITY+2, NULL );
+    os_task_create( __idle_task, "Status", 550, NULL, 2, NULL );
 #endif
 
     mi_list = media_new();
@@ -160,24 +160,24 @@ int main( void )
     media_register_codec( mi_list, "mp3", media_mp3_play,
                           media_mp3_get_type, media_mp3_get_metadata );
 
-    led_init( (tskIDLE_PRIORITY+1) );
+    led_init( 1 );
     device_status_init();
     mc_init( pvPortMalloc );
-    dsp_init( (tskIDLE_PRIORITY+2) );
+    dsp_init( 2 );
     ri_init();
     ui_init();
     ui_t_init();
     //uid_init();
-    playback_init( (tskIDLE_PRIORITY+1) );
+    playback_init( 1 );
     init_database( mi_list );
-    fstream_init( (tskIDLE_PRIORITY+2), malloc, free );
+    fstream_init( 2, malloc, free );
 #ifdef SUPPORT_TEXT
     display_init( ibus_phone_display , 5000, 15000, 10000, 1, true);
 #endif
 
     /* Start the RTOS - never returns. */
     __enable_os = true;
-    vTaskStartScheduler();
+    os_task_start_scheduler();
     
     return 0;
 }

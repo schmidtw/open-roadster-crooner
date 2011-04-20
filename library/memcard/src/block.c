@@ -21,8 +21,9 @@
 #include <stdio.h>
 
 #include <bsp/boards/boards.h>
+#include <bsp/intc.h>
 #include <bsp/pdca.h>
-#include <freertos/queue.h>
+#include <freertos/os.h>
 
 #include "crc.h"
 #include "io.h"
@@ -87,9 +88,9 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-static xQueueHandle __idle;
-static xQueueHandle __pending;
-static xQueueHandle __complete;
+static queue_handle_t __idle;
+static queue_handle_t __pending;
+static queue_handle_t __complete;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -114,9 +115,9 @@ mc_status_t block_init( void* (*fast_malloc_fn)(size_t) )
 {
     block_message_t *msg;
 
-    __idle = xQueueCreate( 1, sizeof(void*) );
-    __pending = xQueueCreate( 1, sizeof(void*) );
-    __complete = xQueueCreate( 1, sizeof(void*) );
+    __idle = os_queue_create( 1, sizeof(void*) );
+    __pending = os_queue_create( 1, sizeof(void*) );
+    __complete = os_queue_create( 1, sizeof(void*) );
 
     msg = (block_message_t*) (*fast_malloc_fn)( sizeof(block_message_t) );
 
@@ -125,7 +126,7 @@ mc_status_t block_init( void* (*fast_malloc_fn)(size_t) )
 
     intc_register_isr( &__block_handler, MC_RX_ISR, ISR_LEVEL__1 );
 
-    xQueueSendToBack( __idle, &msg, portMAX_DELAY );
+    os_queue_send_to_back( __idle, &msg, WAIT_FOREVER );
 
     return MC_RETURN_OK;
 }
@@ -155,7 +156,7 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
         address <<= 9;
     }
 
-    xQueueReceive( __idle, &msg, portMAX_DELAY );
+    os_queue_receive( __idle, &msg, WAIT_FOREVER );
 
     /* Fill with 0xff to start with. */
     memset( &msg->command, 0xff, MC_COMMAND_BUFFER_SIZE );
@@ -179,15 +180,15 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
     msg->type = CMD_READ;
 
     msg->state = BRS_COMMAND_SENT;
-    xQueueSendToBack( __pending, &msg, portMAX_DELAY );
+    os_queue_send_to_back( __pending, &msg, WAIT_FOREVER );
 
-    __block_until_not_busy();
+    //__block_until_not_busy();
 
     __block_isr_send_command( msg->command, msg->command,
                               MC_COMMAND_BUFFER_SIZE, true );
 
     _D1( "Reading: 0x%08x\n", lba );
-    xQueueReceive( __complete, &msg, portMAX_DELAY );
+    os_queue_receive( __complete, &msg, WAIT_FOREVER );
     status = (BRS_SUCCESS == msg->state) ? MC_RETURN_OK : MC_ERROR_TIMEOUT;
 
     status = MC_ERROR_TIMEOUT;
@@ -200,7 +201,7 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
             status = MC_RETURN_OK;
         }
     }
-    xQueueSendToBack( __idle, &msg, portMAX_DELAY );
+    os_queue_send_to_back( __idle, &msg, WAIT_FOREVER );
 
     _D1( "Got response: 0x%04x\n", status );
     return status;
@@ -233,7 +234,7 @@ mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
         address <<= 9;
     }
 
-    xQueueReceive( __idle, &msg, portMAX_DELAY );
+    os_queue_receive( __idle, &msg, WAIT_FOREVER );
 
     /* Fill with 0xff to start with. */
     memset( &msg->command, 0xff, MC_COMMAND_BUFFER_SIZE );
@@ -267,7 +268,7 @@ mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
     msg->type = CMD_WRITE;
 
     msg->state = BRS_COMMAND_SENT;
-    xQueueSendToBack( __pending, &msg, portMAX_DELAY );
+    os_queue_send_to_back( __pending, &msg, WAIT_FOREVER );
 
     __block_until_not_busy();
 
@@ -275,14 +276,16 @@ mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
                               MC_COMMAND_BUFFER_SIZE, true );
 
     _D1( "Writing: 0x%08x\n", lba );
-    xQueueReceive( __complete, &msg, portMAX_DELAY );
+    os_queue_receive( __complete, &msg, WAIT_FOREVER );
     status = (BRS_SUCCESS == msg->state) ? MC_RETURN_OK : MC_ERROR_TIMEOUT;
 
     status = MC_ERROR_TIMEOUT;
     if( BRS_SUCCESS == msg->state ) {
         status = MC_RETURN_OK;
     }
-    xQueueSendToBack( __idle, &msg, portMAX_DELAY );
+    //__block_until_not_busy();
+
+    os_queue_send_to_back( __idle, &msg, WAIT_FOREVER );
     _D1( "Got response: 0x%04x\n", status );
 
     return status;
@@ -292,9 +295,8 @@ mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
 void block_isr_cancel( void )
 {
     block_message_t *msg;
-    portBASE_TYPE ignore;
 
-    if( pdTRUE == xQueueReceiveFromISR(__pending, &msg, &ignore) ) {
+    if( true == os_queue_receive_ISR(__pending, &msg, NULL) ) {
         /* We're done... */
         msg->state = BRS_TIMEOUT;
 
@@ -303,7 +305,7 @@ void block_isr_cancel( void )
         pdca_isr_disable( PDCA_CHANNEL_ID_MC_RX, PDCA_ISR__TRANSFER_COMPLETE );
 
         /* This is a failure, so it's ok to not check the magic */
-        xQueueSendToBackFromISR( __complete, &msg, &ignore );
+        os_queue_send_to_back_ISR( __complete, &msg, NULL );
     }
 }
 
@@ -429,16 +431,15 @@ static void __block_isr_state_machine( void )
 {
     uint32_t magic_insert_number;
     bool interrupts;
-    portBASE_TYPE rv;
-    portBASE_TYPE ignore;
+    bool rv;
     block_message_t *msg;
 
     interrupts = interrupts_save_and_disable();
     magic_insert_number = mc_get_magic_insert_number();
-    rv = xQueueReceiveFromISR( __pending, &msg, &ignore );
+    rv = os_queue_receive_ISR( __pending, &msg, NULL );
     interrupts_restore( interrupts );
 
-    if( pdTRUE == rv ) {
+    if( true == rv ) {
         bool send_to_pending = true;
         mc_card_status_t card_status = mc_get_status();
 
@@ -573,9 +574,9 @@ static void __block_isr_state_machine( void )
             goto timeout_failure;
         }
         if( true == send_to_pending ) {
-            xQueueSendToFrontFromISR( __pending, &msg, &ignore );
+            os_queue_send_to_front_ISR( __pending, &msg, NULL );
         } else {
-            xQueueSendToBackFromISR( __complete, &msg, &ignore );
+            os_queue_send_to_back_ISR( __complete, &msg, NULL );
         }
         interrupts_restore( interrupts );
     }
@@ -592,7 +593,7 @@ error:
     __block_isr_disable_transfer();
 
     /* This is a failure, so it's ok to not check the magic */
-    xQueueSendToBackFromISR( __complete, &msg, &ignore );
+    os_queue_send_to_back_ISR( __complete, &msg, NULL );
 }
 
 /**

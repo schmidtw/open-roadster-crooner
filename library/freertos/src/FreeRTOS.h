@@ -1,52 +1,60 @@
 /*
-	FreeRTOS.org V5.2.0 - Copyright (C) 2003-2009 Richard Barry.
+    FreeRTOS V7.0.0 - Copyright (C) 2011 Real Time Engineers Ltd.
+	
 
-	This file is part of the FreeRTOS.org distribution.
+	FreeRTOS supports many tools and architectures. V7.0.0 is sponsored by:
+	Atollic AB - Atollic provides professional embedded systems development 
+	tools for C/C++ development, code analysis and test automation.  
+	See http://www.atollic.com
+	
 
-	FreeRTOS.org is free software; you can redistribute it and/or modify it 
-	under the terms of the GNU General Public License (version 2) as published
-	by the Free Software Foundation and modified by the FreeRTOS exception.
+    ***************************************************************************
+     *                                                                       *
+     *    FreeRTOS tutorial books are available in pdf and paperback.        *
+     *    Complete, revised, and edited pdf reference manuals are also       *
+     *    available.                                                         *
+     *                                                                       *
+     *    Purchasing FreeRTOS documentation will not only help you, by       *
+     *    ensuring you get running as quickly as possible and with an        *
+     *    in-depth knowledge of how to use FreeRTOS, it will also help       *
+     *    the FreeRTOS project to continue with its mission of providing     *
+     *    professional grade, cross platform, de facto standard solutions    *
+     *    for microcontrollers - completely free of charge!                  *
+     *                                                                       *
+     *    >>> See http://www.FreeRTOS.org/Documentation for details. <<<     *
+     *                                                                       *
+     *    Thank you for using FreeRTOS, and thank you for your support!      *
+     *                                                                       *
+    ***************************************************************************
 
-	FreeRTOS.org is distributed in the hope that it will be useful,	but WITHOUT
-	ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or 
-	FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for 
-	more details.
 
-	You should have received a copy of the GNU General Public License along 
-	with FreeRTOS.org; if not, write to the Free Software Foundation, Inc., 59 
-	Temple Place, Suite 330, Boston, MA  02111-1307  USA.
+    This file is part of the FreeRTOS distribution.
 
-	A special exception to the GPL is included to allow you to distribute a 
-	combined work that includes FreeRTOS.org without being obliged to provide
-	the source code for any proprietary components.  See the licensing section
-	of http://www.FreeRTOS.org for full details.
+    FreeRTOS is free software; you can redistribute it and/or modify it under
+    the terms of the GNU General Public License (version 2) as published by the
+    Free Software Foundation AND MODIFIED BY the FreeRTOS exception.
+    >>>NOTE<<< The modification to the GPL is included to allow you to
+    distribute a combined work that includes FreeRTOS without being obliged to
+    provide the source code for proprietary components outside of the FreeRTOS
+    kernel.  FreeRTOS is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+    more details. You should have received a copy of the GNU General Public
+    License and the FreeRTOS license exception along with FreeRTOS; if not it
+    can be viewed here: http://www.freertos.org/a00114.html and also obtained
+    by writing to Richard Barry, contact details for whom are available on the
+    FreeRTOS WEB site.
 
+    1 tab == 4 spaces!
 
-	***************************************************************************
-	*                                                                         *
-	* Get the FreeRTOS eBook!  See http://www.FreeRTOS.org/Documentation      *
-	*                                                                         *
-	* This is a concise, step by step, 'hands on' guide that describes both   *
-	* general multitasking concepts and FreeRTOS specifics. It presents and   *
-	* explains numerous examples that are written using the FreeRTOS API.     *
-	* Full source code for all the examples is provided in an accompanying    *
-	* .zip file.                                                              *
-	*                                                                         *
-	***************************************************************************
+    http://www.FreeRTOS.org - Documentation, latest information, license and
+    contact details.
 
-	1 tab == 4 spaces!
+    http://www.SafeRTOS.com - A version that is certified for use in safety
+    critical systems.
 
-	Please ensure to read the configuration and relevant port sections of the
-	online documentation.
-
-	http://www.FreeRTOS.org - Documentation, latest information, license and
-	contact details.
-
-	http://www.SafeRTOS.com - A version that is certified for use in safety
-	critical systems.
-
-	http://www.OpenRTOS.com - Commercial support, development, porting,
-	licensing and training services.
+    http://www.OpenRTOS.com - Commercial support, development, porting,
+    licensing and training services.
 */
 
 #ifndef INC_FREERTOS_H
@@ -66,6 +74,14 @@
 
 /* Definitions specific to the port being used. */
 #include "portable.h"
+
+
+/* Defines the prototype to which the application task hook function must
+conform. */
+typedef portBASE_TYPE (*pdTASK_HOOK_CODE)( void * );
+
+
+
 
 
 /*
@@ -138,6 +154,10 @@
 	#define configUSE_MUTEXES 0
 #endif
 
+#ifndef configUSE_TIMERS
+	#define configUSE_TIMERS 0
+#endif
+
 #ifndef configUSE_COUNTING_SEMAPHORES
 	#define configUSE_COUNTING_SEMAPHORES 0
 #endif
@@ -159,27 +179,40 @@
 #endif
 
 #if configMAX_TASK_NAME_LEN < 1
-	#undef configMAX_TASK_NAME_LEN
-	#define configMAX_TASK_NAME_LEN 1
+	#error configMAX_TASK_NAME_LEN must be set to a minimum of 1 in FreeRTOSConfig.h
 #endif
 
 #ifndef INCLUDE_xTaskResumeFromISR
 	#define INCLUDE_xTaskResumeFromISR 1
 #endif
 
+#ifndef configASSERT
+	#define configASSERT( x )
+#endif
+
+/* The timers module relies on xTaskGetSchedulerState(). */
+#if configUSE_TIMERS == 1
+
+	#ifndef configTIMER_TASK_PRIORITY
+		#error If configUSE_TIMERS is set to 1 then configTIMER_TASK_PRIORITY must also be defined.
+	#endif /* configTIMER_TASK_PRIORITY */
+
+	#ifndef configTIMER_QUEUE_LENGTH
+		#error If configUSE_TIMERS is set to 1 then configTIMER_QUEUE_LENGTH must also be defined.
+	#endif /* configTIMER_QUEUE_LENGTH */
+
+	#ifndef configTIMER_TASK_STACK_DEPTH
+		#error If configUSE_TIMERS is set to 1 then configTIMER_TASK_STACK_DEPTH must also be defined.
+	#endif /* configTIMER_TASK_STACK_DEPTH */
+
+#endif /* configUSE_TIMERS */
+
 #ifndef INCLUDE_xTaskGetSchedulerState
 	#define INCLUDE_xTaskGetSchedulerState 0
 #endif
 
-#if ( configUSE_MUTEXES == 1 )
-	/* xTaskGetCurrentTaskHandle is used by the priority inheritance mechanism
-	within the mutex implementation so must be available if mutexes are used. */
-	#undef INCLUDE_xTaskGetCurrentTaskHandle
-	#define INCLUDE_xTaskGetCurrentTaskHandle 1
-#else
-	#ifndef INCLUDE_xTaskGetCurrentTaskHandle
-		#define INCLUDE_xTaskGetCurrentTaskHandle 0
-	#endif
+#ifndef INCLUDE_xTaskGetCurrentTaskHandle
+	#define INCLUDE_xTaskGetCurrentTaskHandle 0
 #endif
 
 
@@ -193,11 +226,10 @@
 
 
 #ifndef configQUEUE_REGISTRY_SIZE
-	#define configQUEUE_REGISTRY_SIZE 0
+	#define configQUEUE_REGISTRY_SIZE 0U
 #endif
 
-#if configQUEUE_REGISTRY_SIZE < 1
-	#define configQUEUE_REGISTRY_SIZE 0
+#if ( configQUEUE_REGISTRY_SIZE < 1U )
 	#define vQueueAddToRegistry( xQueue, pcName )
 	#define vQueueUnregisterQueue( xQueue )
 #endif
@@ -229,17 +261,17 @@
 #endif
 
 #ifndef traceBLOCKING_ON_QUEUE_RECEIVE
-	/* Task is about to block because it cannot read from a 
+	/* Task is about to block because it cannot read from a
 	queue/mutex/semaphore.  pxQueue is a pointer to the queue/mutex/semaphore
-	upon which the read was attempted.  pxCurrentTCB points to the TCB of the 
+	upon which the read was attempted.  pxCurrentTCB points to the TCB of the
 	task that attempted the read. */
 	#define traceBLOCKING_ON_QUEUE_RECEIVE( pxQueue )
 #endif
 
 #ifndef traceBLOCKING_ON_QUEUE_SEND
-	/* Task is about to block because it cannot write to a 
+	/* Task is about to block because it cannot write to a
 	queue/mutex/semaphore.  pxQueue is a pointer to the queue/mutex/semaphore
-	upon which the write was attempted.  pxCurrentTCB points to the TCB of the 
+	upon which the write was attempted.  pxCurrentTCB points to the TCB of the
 	task that attempted the write. */
 	#define traceBLOCKING_ON_QUEUE_SEND( pxQueue )
 #endif
@@ -276,6 +308,10 @@
 
 #ifndef traceTAKE_MUTEX_RECURSIVE
 	#define traceTAKE_MUTEX_RECURSIVE( pxMutex )
+#endif
+
+#ifndef traceTAKE_MUTEX_RECURSIVE_FAILED
+	#define traceTAKE_MUTEX_RECURSIVE_FAILED( pxMutex )
 #endif
 
 #ifndef traceCREATE_COUNTING_SEMAPHORE
@@ -331,7 +367,7 @@
 #endif
 
 #ifndef traceTASK_CREATE_FAILED
-	#define traceTASK_CREATE_FAILED( pxNewTCB )
+	#define traceTASK_CREATE_FAILED()
 #endif
 
 #ifndef traceTASK_DELETE
@@ -364,6 +400,68 @@
 
 #ifndef traceTASK_INCREMENT_TICK
 	#define traceTASK_INCREMENT_TICK( xTickCount )
+#endif
+
+#ifndef traceTIMER_CREATE
+	#define traceTIMER_CREATE( pxNewTimer )
+#endif
+
+#ifndef traceTIMER_CREATE_FAILED
+	#define traceTIMER_CREATE_FAILED()
+#endif
+
+#ifndef traceTIMER_COMMAND_SEND
+	#define traceTIMER_COMMAND_SEND( xTimer, xMessageID, xMessageValueValue, xReturn )
+#endif
+
+#ifndef traceTIMER_EXPIRED
+	#define traceTIMER_EXPIRED( pxTimer )
+#endif
+
+#ifndef traceTIMER_COMMAND_RECEIVED
+	#define traceTIMER_COMMAND_RECEIVED( pxTimer, xMessageID, xMessageValue )
+#endif
+
+#ifndef configGENERATE_RUN_TIME_STATS
+	#define configGENERATE_RUN_TIME_STATS 0
+#endif
+
+#if ( configGENERATE_RUN_TIME_STATS == 1 )
+
+	#ifndef portCONFIGURE_TIMER_FOR_RUN_TIME_STATS
+		#error If configGENERATE_RUN_TIME_STATS is defined then portCONFIGURE_TIMER_FOR_RUN_TIME_STATS must also be defined.  portCONFIGURE_TIMER_FOR_RUN_TIME_STATS should call a port layer function to setup a peripheral timer/counter that can then be used as the run time counter time base.
+	#endif /* portCONFIGURE_TIMER_FOR_RUN_TIME_STATS */
+
+	#ifndef portGET_RUN_TIME_COUNTER_VALUE
+		#ifndef portALT_GET_RUN_TIME_COUNTER_VALUE
+			#error If configGENERATE_RUN_TIME_STATS is defined then either portGET_RUN_TIME_COUNTER_VALUE or portALT_GET_RUN_TIME_COUNTER_VALUE must also be defined.  See the examples provided and the FreeRTOS web site for more information.
+		#endif /* portALT_GET_RUN_TIME_COUNTER_VALUE */
+	#endif /* portGET_RUN_TIME_COUNTER_VALUE */
+
+#endif /* configGENERATE_RUN_TIME_STATS */
+
+#ifndef portCONFIGURE_TIMER_FOR_RUN_TIME_STATS
+	#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
+#endif
+
+#ifndef configUSE_MALLOC_FAILED_HOOK
+	#define configUSE_MALLOC_FAILED_HOOK 0
+#endif
+
+#ifndef portPRIVILEGE_BIT
+	#define portPRIVILEGE_BIT ( ( unsigned portBASE_TYPE ) 0x00 )
+#endif
+
+#ifndef portYIELD_WITHIN_API
+	#define portYIELD_WITHIN_API portYIELD
+#endif
+
+#ifndef pvPortMallocAligned
+	#define pvPortMallocAligned( x, puxStackBuffer ) ( ( ( puxStackBuffer ) == NULL ) ? ( pvPortMalloc( ( x ) ) ) : ( puxStackBuffer ) )
+#endif
+
+#ifndef vPortFreeAligned
+	#define vPortFreeAligned( pvBlockToFree ) vPortFree( pvBlockToFree )
 #endif
 
 #endif /* INC_FREERTOS_H */

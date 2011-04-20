@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "freertos/portmacro.h"
+#include "freertos/os.h"
 
 typedef enum {
     DRV_NOT_INITIALIZED,
@@ -49,9 +49,9 @@ typedef size_t (*text_print_fct)(char *string);
  *         code.
  */
 DRV_t display_init(text_print_fct text_print_fn,
-        portTickType scroll_speed,
-        portTickType pause_at_beginning_of_text,
-        portTickType pause_at_end_of_text,
+        uint32_t scroll_speed,
+        uint32_t pause_at_beginning_of_text,
+        uint32_t pause_at_end_of_text,
         size_t num_characters_to_shift,
         bool repeat_text);
 
