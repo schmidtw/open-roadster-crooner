@@ -21,6 +21,7 @@
 #include <sys/reent.h>
 #include <sys/time.h>
 
+#include <bsp/boards/boards.h>
 #include <bsp/cpu.h>
 #include <bsp/pm.h>
 
@@ -46,6 +47,7 @@
 /*----------------------------------------------------------------------------*/
 static xSemaphoreHandle __lock;
 static uint64_t __time_in_ns;
+static uint32_t __last_cpu_time;
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -61,7 +63,8 @@ systime_status_t system_time_init( const uint32_t priority )
     portBASE_TYPE status;
 
     vSemaphoreCreateBinary( __lock );
-    __time_in_ns = 0;//1302854109000000000ULL;
+    __time_in_ns = 0;
+    __last_cpu_time = 0;
 
     if( NULL == __lock ) {
         goto failure;
@@ -86,7 +89,7 @@ failure:
 int _gettimeofday( struct timeval *tv, struct timezone *tz )
 {
     uint64_t offset;
-    uint32_t now;
+    uint32_t now, delta;
 
     if( (NULL == tv) || (NULL == tz) ) {
         return -1;
@@ -98,10 +101,15 @@ int _gettimeofday( struct timeval *tv, struct timezone *tz )
 
     xSemaphoreTake( __lock, portMAX_DELAY );
     now = cpu_get_sys_count();
+    if( __last_cpu_time < now ) {
+        delta = now - __last_cpu_time;
+    } else {
+        delta = 0xffffffffu - __last_cpu_time + now + 1;
+    }
     offset = __time_in_ns;
     xSemaphoreGive( __lock );
 
-    offset += __clock_time_to_ns( now );
+    offset += __clock_time_to_ns( delta );
     offset /= 1000;
     tv->tv_sec = (uint32_t) (offset / 1000000ULL);
     tv->tv_usec = (uint32_t) (offset % 1000000ULL);
@@ -118,15 +126,20 @@ int _gettimeofday( struct timeval *tv, struct timezone *tz )
  */
 static void __sys_time_task( void *params )
 {
-    uint32_t now;
+    uint32_t now, delta;
 
     while( 1 ) {
         vTaskDelay( 1000 / portTICK_RATE_MS );
 
         xSemaphoreTake( __lock, portMAX_DELAY );
         now = cpu_get_sys_count();
-        cpu_set_sys_count( 0 );
-        __time_in_ns += __clock_time_to_ns( now );
+        if( __last_cpu_time < now ) {
+            delta = now - __last_cpu_time;
+        } else {
+            delta = 0xffffffffu - __last_cpu_time + now + 1;
+        }
+        __last_cpu_time = now;
+        __time_in_ns += __clock_time_to_ns( delta );
         xSemaphoreGive( __lock );
     }
 }
