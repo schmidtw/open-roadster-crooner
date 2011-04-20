@@ -21,6 +21,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include <bsp/boards/boards.h>
 #include <bsp/intc.h>
@@ -39,7 +41,9 @@
 #define TX_TASK_PRIORITY    (1)
 #define TX_DELAY            (10)
 
-#define IBUS_PHYSICAL_DEBUG 0
+#define IBUS_PHYSICAL_DEBUG     0
+#define IBUS_LOG_FLAG           0
+#define IBUS_LOG_MSGS_PER_WRITE 5
 
 #define _D1(...)
 #define _D2(...)
@@ -52,6 +56,12 @@
 #if (defined(IBUS_PHYSICAL_DEBUG) && (1 < IBUS_PHYSICAL_DEBUG))
 #undef  _D2
 #define _D2(...) printf( __VA_ARGS__ )
+#endif
+
+#define _IBUS_LOG(x)
+#if (0 < IBUS_LOG_FLAG)
+#undef _IBUS_LOG
+#define _IBUS_LOG(x) __out( x )
 #endif
 
 /*----------------------------------------------------------------------------*/
@@ -72,6 +82,7 @@ static semaphore_handle_t __tx_done;
 static ibus_io_msg_t __rx_messages[IBUS_PHYSICAL_RX_MSG_MAX];
 static ibus_io_msg_t __tx_messages[IBUS_PHYSICAL_TX_MSG_MAX];
 static volatile bool __tx_successfully_sent;
+static void __out( ibus_io_msg_t *msg );
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -210,6 +221,8 @@ ibus_io_msg_t* ibus_physical_get_message( void )
 
     os_queue_receive( __rx_pending, &msg, WAIT_FOREVER );
 
+    _IBUS_LOG( msg );
+
     return msg;
 }
 
@@ -260,6 +273,8 @@ bool ibus_physical_send_message( const ibus_device_t src,
     memcpy( &ibus_msg->buffer[3], payload, payload_length );
 
     ibus_msg->buffer[payload_length + 3] = (uint8_t) checksum;
+
+    _IBUS_LOG( ibus_msg );
 
     os_queue_send_to_back( __tx_pending, &ibus_msg, WAIT_FOREVER );
     os_semaphore_give( __wake_up_tx_task );
@@ -362,4 +377,43 @@ static void __tx_msg_sent( void )
 
     __tx_successfully_sent = true;
     os_semaphore_give_ISR( __tx_done, NULL );
+}
+
+static void __out( ibus_io_msg_t *msg )
+{
+    struct timeval tv;
+    struct timezone tz;
+    static FILE *__file = NULL;
+    static char tmp[255];
+    int offset;
+    int i;
+    static int count = 0;
+
+    gettimeofday( &tv, &tz );
+    offset = sprintf( tmp, "[%u.%06u] Status: %s Length: %u [%02x|%02x|%02x]",
+             (unsigned int) tv.tv_sec, (unsigned int) tv.tv_usec, (IBUS_IO_STATUS__OK == msg->status) ? "OK" : (IBUS_IO_STATUS__PARITY_ERROR == msg->status) ? "PE" : "BOR", (unsigned int) msg->size, msg->buffer[0], msg->buffer[1], msg->buffer[2] );
+    for( i = 3; i < msg->size; i++ ) {
+        offset += sprintf( &tmp[offset], " %02x", msg->buffer[i] );
+    }
+    tmp[offset] = '\0';
+
+    puts( tmp );
+
+    tmp[offset++] = '\n';
+    tmp[offset] = '\0';
+
+    if( NULL == __file ) {
+        __file = fopen( "/ibus-log.txt", "a" );
+    }
+
+    if( NULL != __file ) {
+        fputs( tmp, __file );
+        count++;
+        if( IBUS_LOG_MSGS_PER_WRITE <= count ) {
+            fflush( __file );
+            fclose( __file );
+            __file = NULL;
+            count = 0;
+        }
+    }
 }
