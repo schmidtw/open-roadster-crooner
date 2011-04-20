@@ -78,41 +78,29 @@ db_status_t next_song( song_node_t ** current_song,
 
     switch( operation ) {
         case DT_NEXT:
-            if( GNT_GROUP == generic_n->type ) {
-                if( NULL == generic_n->node.next ) {
+            if( NULL == generic_n->node.next ) {
+                if( GNT_GROUP == generic_n->type ) {
                     generic_n = (generic_node_t*)rdn.groups.head->data;
-                    rv = DS_END_OF_LIST;
                 } else {
-                    generic_n = (generic_node_t*)generic_n->node.next->data;
-                    rv = DS_SUCCESS;
-                }
-            } else {
-                if( NULL == generic_n->node.next ) {
                     generic_n = (generic_node_t*)generic_n->parent->children.head->data;
-                    rv = DS_END_OF_LIST;
-                } else {
-                    generic_n = (generic_node_t*)generic_n->node.next->data;
-                    rv = DS_SUCCESS;
                 }
+                rv = DS_END_OF_LIST;
+            } else {
+                generic_n = (generic_node_t*)generic_n->node.next->data;
+                rv = DS_SUCCESS;
             }
             break;
         case DT_PREVIOUS:
-            if( GNT_GROUP == generic_n->type ) {
-                if( NULL == generic_n->node.prev ) {
+            if( NULL == generic_n->node.prev ) {
+                if( GNT_GROUP == generic_n->type ) {
                     generic_n = (generic_node_t*)rdn.groups.tail->data;
-                    rv = DS_END_OF_LIST;
                 } else {
-                    generic_n = (generic_node_t*)generic_n->node.prev->data;
-                    rv = DS_SUCCESS;
+                    generic_n = (generic_node_t*)generic_n->parent->children.tail->data;
                 }
+                rv = DS_END_OF_LIST;
             } else {
-                if( NULL == generic_n->node.prev ) {
-                    generic_n = (song_node_t*)generic_n->parent->children.tail->data;
-                    rv = DS_END_OF_LIST;
-                } else {
-                    generic_n = (song_node_t*)generic_n->node.prev->data;
-                    rv = DS_SUCCESS;
-                }
+                generic_n = (generic_node_t*)generic_n->node.prev->data;
+                rv = DS_SUCCESS;
             }
             break;
         default:
