@@ -22,7 +22,6 @@ SOURCES = \
     glue.c \
     dirent.c \
     fatfs/ff.c \
-    fatfs/ccsbcs.c \
     fatfs/avr32.c
 
 include ../../make/Makefile.common

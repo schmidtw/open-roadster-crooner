@@ -182,8 +182,6 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
     msg->state = BRS_COMMAND_SENT;
     os_queue_send_to_back( __pending, &msg, WAIT_FOREVER );
 
-    //__block_until_not_busy();
-
     __block_isr_send_command( msg->command, msg->command,
                               MC_COMMAND_BUFFER_SIZE, true );
 

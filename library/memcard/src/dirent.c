@@ -69,7 +69,7 @@ struct dirent* readdir( DIR *dirp, struct dirent *_user_provided )
     if( NULL != dirp ) {
         FILINFO file_info;
 
-        if( TRUE == dirp->end ) {
+        if( 0 != dirp->end ) {
             return NULL;
         }
 
@@ -77,7 +77,7 @@ struct dirent* readdir( DIR *dirp, struct dirent *_user_provided )
             case FR_OK:
                 if( '\0' == file_info.fname[0] ) {
                     /* Last entry. */
-                    dirp->end = TRUE;
+                    dirp->end = 1;
                     return NULL;
                 }
 
@@ -113,7 +113,7 @@ void rewinddir( DIR *dirp )
     }
 
     f_readdir( dirp, NULL );
-    dirp->end = FALSE;
+    dirp->end = 0;
 }
 
 void seekdir( DIR *dirp, long loc )
@@ -122,7 +122,7 @@ void seekdir( DIR *dirp, long loc )
         return;
     }
 
-    while( (FALSE == dirp->end) && (dirp->index < loc) ) {
+    while( (0 == dirp->end) && (dirp->index < loc) ) {
         struct dirent ignore;
         readdir( dirp, &ignore );
     }
@@ -199,7 +199,7 @@ static DIR* _opendir_r( struct _reent *reent, const char *dirname )
     switch( f_opendir(dir, dirname) ) {
         case FR_OK:
             r->active[fd] = true;
-            dir->end = FALSE;
+            dir->end = 0;
             return dir;
 
         case FR_NO_PATH:

@@ -69,12 +69,12 @@ void glue_init( void )
  *  @param vol the volume being mounted
  *  @param sobj the sychronization object for the volume
  *
- *  @return TRUE on success, FALSE otherwise
+ *  @return 1 on success, 0 otherwise
  */
-BOOL ff_cre_syncobj( BYTE vol, _SYNC_t *sobj )
+int ff_cre_syncobj( BYTE vol, _SYNC_t *sobj )
 {
     *sobj = mc_get_magic_insert_number();
-    return TRUE;
+    return 1;
 }
 
 
@@ -83,11 +83,11 @@ BOOL ff_cre_syncobj( BYTE vol, _SYNC_t *sobj )
  *
  *  @param sobj the sychronization object
  *
- *  @return TRUE on success, FALSE otherwise
+ *  @return 1 on success, 0 otherwise
  */
-BOOL ff_del_syncobj( _SYNC_t sobj )
+int ff_del_syncobj( _SYNC_t sobj )
 {
-    return TRUE;
+    return 1;
 }
 
 /**
@@ -95,17 +95,17 @@ BOOL ff_del_syncobj( _SYNC_t sobj )
  *
  *  @param sobj the synchronization object
  *
- *  @return TRUE granted access, FALSE otherwise
+ *  @return 1 granted access, 0 otherwise
  */
-BOOL ff_req_grant( _SYNC_t sobj )
+int ff_req_grant( _SYNC_t sobj )
 {
     os_semaphore_take( __ff_mutex, WAIT_FOREVER );
     if( sobj != mc_get_magic_insert_number() ) {
         os_semaphore_give( __ff_mutex );
-        return FALSE;
+        return 0;
     }
 
-    return TRUE;
+    return 1;
 }
 
 /**
