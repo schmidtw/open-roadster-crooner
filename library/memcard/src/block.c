@@ -268,8 +268,6 @@ mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
     msg->state = BRS_COMMAND_SENT;
     os_queue_send_to_back( __pending, &msg, WAIT_FOREVER );
 
-    __block_until_not_busy();
-
     __block_isr_send_command( msg->command, msg->command,
                               MC_COMMAND_BUFFER_SIZE, true );
 
@@ -281,7 +279,7 @@ mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
     if( BRS_SUCCESS == msg->state ) {
         status = MC_RETURN_OK;
     }
-    //__block_until_not_busy();
+    __block_until_not_busy();
 
     os_queue_send_to_back( __idle, &msg, WAIT_FOREVER );
     _D1( "Got response: 0x%04x\n", status );
