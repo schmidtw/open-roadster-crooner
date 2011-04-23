@@ -67,7 +67,6 @@ task.h is included from an application file. */
 
 #include "FreeRTOS.h"
 #include "task.h"
-#include "croutine.h"
 
 #undef MPU_WRAPPERS_INCLUDED_FROM_API_FILE
 
