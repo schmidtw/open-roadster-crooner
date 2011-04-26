@@ -38,7 +38,7 @@
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-#ifdef CRC_FAST
+#if( 1 == CRC_FAST )
 /* Table for CRC-7 (polynomial x^7 + x^3 + 1) */
 const uint8_t crc7_syndrome_table[256] = {
     0x00, 0x09, 0x12, 0x1b, 0x24, 0x2d, 0x36, 0x3f,
@@ -116,7 +116,7 @@ const uint16_t crc_itu_t_table[256] = {
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
-#ifdef CRC_FAST
+#if( 1 == CRC_FAST )
 static inline uint8_t crc7_byte( uint8_t crc, uint8_t data );
 static inline uint16_t crc_itu_t_byte( uint16_t crc, const uint8_t data );
 #endif
@@ -128,7 +128,7 @@ static inline uint16_t crc_itu_t_byte( uint16_t crc, const uint8_t data );
 /* See crc.h for details. */
 uint8_t crc7( const uint8_t *message, const size_t length )
 {
-#ifdef CRC_FAST
+#if( 1 == CRC_FAST )
     size_t i = length;
     uint8_t crc = 0;
 
@@ -170,7 +170,7 @@ uint8_t crc7( const uint8_t *message, const size_t length )
 /* See crc.h for details. */
 uint16_t crc16( const uint8_t *message, const size_t length )
 {
-#ifdef CRC_FAST
+#if( 1 == CRC_FAST )
     size_t i = length;
     uint16_t crc = 0;
 
@@ -217,7 +217,7 @@ uint16_t crc16( const uint8_t *message, const size_t length )
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
-#ifdef CRC_FAST
+#if( 1 == CRC_FAST )
 static inline uint8_t crc7_byte( uint8_t crc, uint8_t data )
 {
     return crc7_syndrome_table[(crc << 1) ^ data];
