@@ -118,7 +118,7 @@ static const led_state_t __normal[] = {
     { .red = 0x00, .green = 0x13, .blue = 0x00, .duration = 31  }
 };
 
-static semaphore_handle_t __mutex;
+static mutex_handle_t __mutex;
 static device_status_t __current;
 
 
@@ -133,7 +133,7 @@ static device_status_t __current;
 /* See device-status.h for details. */
 void device_status_init( void )
 {
-     __mutex = os_semaphore_create_binary();
+     __mutex = os_mutex_create();
 
     __current = DS__NORMAL;
     device_status_set( DS__NO_RADIO_CONNECTION );
@@ -146,9 +146,9 @@ void device_status_set( const device_status_t status )
     const led_state_t *cmd;
 
     /* Don't send the same status that we currently are. */
-    os_semaphore_take( __mutex, WAIT_FOREVER );
+    os_mutex_take( __mutex, WAIT_FOREVER );
     if( __current == status ) {
-        os_semaphore_give( __mutex );
+        os_mutex_give( __mutex );
         return;
     }
 
@@ -174,13 +174,13 @@ void device_status_set( const device_status_t status )
             break;
 
         default:
-            os_semaphore_give( __mutex );
+            os_mutex_give( __mutex );
             return;
     }
 
     __current = status;
     led_set_state( (led_state_t *) cmd, size, true, NULL );
-    os_semaphore_give( __mutex );
+    os_mutex_give( __mutex );
 }
 
 /* See device-status.h for details. */
