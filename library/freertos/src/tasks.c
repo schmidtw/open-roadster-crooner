@@ -1478,7 +1478,7 @@ unsigned portBASE_TYPE uxTaskGetNumberOfTasks( void )
  *----------------------------------------------------------*/
 
 
-void vTaskIncrementTick( void )
+inline void vTaskIncrementTick( void )
 {
 tskTCB * pxTCB;
 
