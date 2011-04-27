@@ -93,6 +93,7 @@ typedef enum {
 static mc_card_type_t __mc_type;
 static uint64_t __mc_size;
 static uint32_t __mc_Nac_read;
+static uint32_t __mc_Nac_write;
 static uint32_t __mc_block_size;  /**< In bytes. */
 static volatile uint32_t __magic_insert_number;
 
@@ -217,6 +218,12 @@ uint32_t mc_get_Nac_read( void )
 }
 
 /* See memcard-private.h for details. */
+uint32_t mc_get_Nac_write( void )
+{
+    return __mc_Nac_write;
+}
+
+/* See memcard-private.h for details. */
 uint32_t mc_get_magic_insert_number( void )
 {
     return __magic_insert_number;
@@ -268,6 +275,7 @@ static mc_status_t __determine_metrics( void )
     __mc_block_size = csd.block_size;
     __mc_size = csd.total_size;
     __mc_Nac_read = csd.nac_read;
+    __mc_Nac_write = csd.nac_write;
 
     spi_set_baudrate( MC_SPI, MC_CS, baud_rate );
     spi_get_baudrate( MC_SPI, MC_CS, &baud_rate );

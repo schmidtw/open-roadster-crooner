@@ -43,6 +43,13 @@ mc_card_type_t mc_get_type( void );
 uint32_t mc_get_Nac_read( void );
 
 /**
+ *  Used to get the current Nac write value.
+ *
+ *  @return the current Nac write value
+ */
+uint32_t mc_get_Nac_write( void );
+
+/**
  *  Used to get the current magic insert number.
  *  This number increments each time a card is inserted
  *  or removed from the slot.  It will roll over.

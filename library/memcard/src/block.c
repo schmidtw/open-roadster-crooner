@@ -106,7 +106,6 @@ static void __block_isr_state_machine( void );
 static void __block_isr_disable_transfer( void );
 __attribute__((__interrupt__))
 static void __block_handler( void );
-static bool __block_until_not_busy( void );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -279,7 +278,6 @@ mc_status_t block_write( const uint32_t lba, const uint8_t *buffer )
     if( BRS_SUCCESS == msg->state ) {
         status = MC_RETURN_OK;
     }
-    __block_until_not_busy();
 
     os_queue_send_to_back( __idle, &msg, WAIT_FOREVER );
     _D1( "Got response: 0x%04x\n", status );
@@ -508,12 +506,10 @@ static void __block_isr_state_machine( void )
                 send_to_pending = false;
             }
         } else {
-            static uint32_t write_max_recovery_delay;
-
             if( BRS_COMMAND_SENT == msg->state ) {
                 uint8_t *r1, *end;
 
-                write_max_recovery_delay = 10000;
+                msg->nac = 0;
 
                 end = &msg->command[MC_COMMAND_BUFFER_SIZE];
 
@@ -539,20 +535,20 @@ static void __block_isr_state_machine( void )
                 }
 
                 /* Send data to get the response (success/failure) */
-                memset( msg->data, 0xff, 20 );
-                __block_isr_send_command( msg->data, msg->data, 20, false );
+                memset( msg->data, 0xff, 512 );
+                __block_isr_send_command( msg->data, msg->data, 512, false );
                 msg->state = BRS_WAITING_UNTIL_NOT_BUSY;
             } else if( BRS_WAITING_UNTIL_NOT_BUSY == msg->state ) {
                 uint8_t *result;
 
-                result = memchr( msg->data, 0, 20 );
+                result = memchr( msg->data, 0xff, 512 );
 
                 if( NULL == result ) {
-                    write_max_recovery_delay--;
-                    if( 0 < write_max_recovery_delay ) {
-                        memset( msg->data, 0xff, 20 );
+                    msg->nac += 512;
+                    if( (msg->nac >> 3) < mc_get_Nac_write() ) {
+                        memset( msg->data, 0xff, 512 );
                         __block_isr_send_command( msg->data, msg->data,
-                                                  20, false );
+                                                  512, false );
                     } else {
                         goto timeout_failure;
                     }
@@ -628,21 +624,4 @@ static void __block_handler( void )
 {
     __block_isr_disable_transfer();
     __block_isr_state_machine();
-}
-
-static bool __block_until_not_busy( void )
-{
-    int max = 100;
-    uint8_t in;
-
-    while( 0 < max ) {
-        io_read( &in );
-        if( 0 == in ) {
-            max--;
-        } else {
-            return true;
-        }
-    }
-
-    return false;
 }
