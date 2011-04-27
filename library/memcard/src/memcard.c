@@ -126,7 +126,7 @@ mc_status_t mc_init( void* (*fast_malloc_fn)(size_t) )
 
     __card_status = MC_CARD__REMOVED;
     __card_state_change = os_semaphore_create_binary();
-    os_semaphore_take( __card_state_change, 0 );
+    os_semaphore_take( __card_state_change, NO_WAIT );
 
     for( i = 0; i < AUTOMOUNT_CALLBACK_MAX; i++ ) {
         __callback_fns[i] = NULL;
