@@ -44,7 +44,7 @@
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
-static unsigned long __ms_to_ticks( uint32_t ms );
+static inline unsigned long __ms_to_ticks( uint32_t ms );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -167,7 +167,7 @@ bool os_queue_send_to_back_ISR( queue_handle_t queue, const void *buffer, bool *
     unsigned long rv;
 
     was_taken = 0;
-    rv = xQueueSendToFrontFromISR( (xQueueHandle) queue, buffer, &was_taken );
+    rv = xQueueSendToBackFromISR( (xQueueHandle) queue, buffer, &was_taken );
 
     if( NULL != hp_task_woke ) {
         *hp_task_woke = (0 == was_taken) ? false : true;
@@ -230,11 +230,47 @@ bool os_semaphore_give_ISR( semaphore_handle_t semaphore, bool *hp_task_woke )
     return (pdFALSE == rv) ? false : true;
 }
 
+mutex_handle_t os_mutex_create( void )
+{
+    xSemaphoreHandle rv;
+
+    rv = xSemaphoreCreateMutex();
+
+    return (mutex_handle_t) rv;
+}
+
+bool os_mutex_take( mutex_handle_t mutex, uint32_t ms )
+{
+    return (pdFALSE == xSemaphoreTake((xSemaphoreHandle) mutex, ms)) ? false : true;
+}
+
+bool os_mutex_give( mutex_handle_t mutex )
+{
+    return (pdFALSE == xSemaphoreGive((xSemaphoreHandle) mutex)) ? false : true;
+}
+
+bool os_mutex_give_ISR( mutex_handle_t mutex, bool *hp_task_woke )
+{
+    long was_taken;
+    unsigned long rv;
+
+    was_taken = 0;
+    rv = xSemaphoreGiveFromISR( (xSemaphoreHandle) mutex, &was_taken );
+
+    if( NULL != hp_task_woke ) {
+        *hp_task_woke = (0 == was_taken) ? false : true;
+    }
+
+    return (pdFALSE == rv) ? false : true;
+}
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
-static unsigned long __ms_to_ticks( uint32_t ms )
+static inline unsigned long __ms_to_ticks( uint32_t ms )
 {
+#if (1000 == configTICK_RATE_HZ)
+    return ms;
+#else
     if( (NO_WAIT == ms) || (WAIT_FOREVER == ms) ) {
         return ms;
     } else if( ms < portTICK_RATE_MS ) {
@@ -242,4 +278,5 @@ static unsigned long __ms_to_ticks( uint32_t ms )
     }
 
     return (ms / portTICK_RATE_MS);
+#endif
 }

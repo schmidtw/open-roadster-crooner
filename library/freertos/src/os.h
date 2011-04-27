@@ -26,6 +26,7 @@
 typedef void* task_handle_t;
 typedef void* queue_handle_t;
 typedef void* semaphore_handle_t;
+typedef void* mutex_handle_t;
 
 typedef void (*task_fn_t)( void *);
 
@@ -69,4 +70,12 @@ semaphore_handle_t os_semaphore_create_binary( void );
 bool os_semaphore_take( semaphore_handle_t semaphore, uint32_t ms );
 bool os_semaphore_give( semaphore_handle_t semaphore );
 bool os_semaphore_give_ISR( semaphore_handle_t semaphore, bool *hp_task_woke );
+
+/*----------------------------------------------------------------------------*/
+/*                           Mutex Related Functions                          */
+/*----------------------------------------------------------------------------*/
+mutex_handle_t os_mutex_create( void );
+bool os_mutex_take( mutex_handle_t mutex, uint32_t ms );
+bool os_mutex_give( mutex_handle_t mutex );
+bool os_mutex_give_ISR( mutex_handle_t mutex, bool *hp_task_woke );
 #endif
