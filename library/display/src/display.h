@@ -39,7 +39,7 @@ typedef size_t (*text_print_fct)(char *string);
  *        is shown.
  * @param num_characters_to_shift When the text is to be shifted, the
  *        number of characters which we want to shift off the display is
- *        specified by this value.  A value of 0 (Zero) is not valid as is
+ *        specified by this value.  A value of 0 (Zero) is not valid and
  *        and will be interpreted as shift as many characters as possible
  *        without skipping characters.
  * @param repeat_text True if the string should be displayed over and over

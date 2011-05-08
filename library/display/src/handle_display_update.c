@@ -22,27 +22,28 @@
 
 
 /* See handle_display_update.h  for documentation */
-void handle_display_update( uint32_t * ticks_to_wait_before_looping,
-                            char * text,
-                            struct display_globals * ref )
+void handle_display_update( struct display_globals * ref )
 {
     bool is_scrolling_message = false;
     size_t nchars_disp = 0;
-    switch( ref->text_info.state ) {
+    char * text = ref->text_state.text_info.text;
+    ref->text_state.next_draw_time = ref->scroll_speed;
+
+    switch( ref->text_state.state ) {
         case SOD_NOT_DISPLAYING:
             break;
         case SOD_BEGINNING_OF_TEXT:
             nchars_disp = ref->text_print_fn( text );
-            ref->text_info.display_offset = 0;
+            ref->text_state.display_offset = 0;
             is_scrolling_message = true;
             break;
         case SOD_END_OF_TEXT:
-            ref->text_info.display_offset = ref->text_print_fn( text );
-            ref->text_info.state = SOD_BEGINNING_OF_TEXT;
-            *ticks_to_wait_before_looping = ref->pause_at_beginning_of_text;
+            ref->text_state.display_offset = ref->text_print_fn( text );
+            ref->text_state.state = SOD_BEGINNING_OF_TEXT;
+            ref->text_state.next_draw_time = ref->pause_at_beginning_of_text;
             break;
         case SOD_MIDDLE_OF_TEXT:
-            nchars_disp = ref->text_print_fn( &(text[ref->text_info.display_offset]) );
+            nchars_disp = ref->text_print_fn( &(text[ref->text_state.display_offset]) );
             is_scrolling_message = true;
             break;
         case SOD_NO_SCROLLING_NEEDED:
@@ -52,20 +53,18 @@ void handle_display_update( uint32_t * ticks_to_wait_before_looping,
              * the user can see the display again
              */
             ref->text_print_fn( text );
-            *ticks_to_wait_before_looping = ref->scroll_speed;
             break;
     }
     if( true == is_scrolling_message ) {
-        if( ref->text_info.length == (ref->text_info.display_offset + nchars_disp) ) {
-            ref->text_info.state = SOD_END_OF_TEXT;
-            *ticks_to_wait_before_looping = ref->pause_at_end_of_text;
+        if( ref->text_state.length == (ref->text_state.display_offset + nchars_disp) ) {
+            ref->text_state.state = SOD_END_OF_TEXT;
+            ref->text_state.next_draw_time = ref->pause_at_end_of_text;
         } else {
-            ref->text_info.state = SOD_MIDDLE_OF_TEXT;
-            *ticks_to_wait_before_looping = ref->scroll_speed;
+            ref->text_state.state = SOD_MIDDLE_OF_TEXT;
             if( ref->num_characters_to_shift < nchars_disp ) {
-                ref->text_info.display_offset += ref->num_characters_to_shift;
+                ref->text_state.display_offset += ref->num_characters_to_shift;
             } else {
-                ref->text_info.display_offset += nchars_disp;
+                ref->text_state.display_offset += nchars_disp;
             }
         }
     }

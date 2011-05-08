@@ -14,8 +14,6 @@
 
 struct display_globals gld;
 struct display_message msg;
-portTickType ticks_to_wait_for_msg;
-portTickType ticks_to_wait_before_looping;
 char buffer[MAX_LENGTH];
 
 size_t fake_print( char * string)
@@ -33,88 +31,74 @@ size_t fake_print( char * string)
 
 void setup_gld_struct( char * string )
 {
-    gld.text_info.length = strlen(string);
-    gld.text_info.display_offset = 0;
+    gld.text_state.length = strlen(string);
+    gld.text_state.display_offset = 0;
     gld.pause_at_beginning_of_text = PAUSE_BEGIN;
     gld.pause_at_end_of_text = PAUSE_END;
     gld.scroll_speed = SCROLL_SPD;
     gld.num_characters_to_shift = LED_LENGTH;
-    strcpy( gld.text_info.text, string );
+    gld.text_state.text_info.text = string;
 }
 
 
 void test_unknown_action( void )
 {
-    ticks_to_wait_before_looping = 0;
-    ticks_to_wait_for_msg = 0;
-    memset(&gld, 0, sizeof(gld));
-    memset(&msg, 0, sizeof(msg));
+    bzero(&gld, sizeof(gld));
+    bzero(&msg, sizeof(msg));
     msg.action = 100;
-    CU_ASSERT( false == handle_msg_action(&msg, &ticks_to_wait_for_msg, &ticks_to_wait_before_looping, "", &gld) );
-    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_info.state );
-    CU_ASSERT( 0 == ticks_to_wait_before_looping );
-    CU_ASSERT( portMAX_DELAY == ticks_to_wait_for_msg );
+    handle_msg_action(&msg, &gld);
+    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_state.state );
 }
 
 void test_stop_action( void )
 {
-    ticks_to_wait_before_looping = 0;
-    ticks_to_wait_for_msg = 0;
-    memset(&gld, 0, sizeof(gld));
-    memset(&msg, 0, sizeof(msg));
+    bzero(&gld, sizeof(gld));
+    bzero(&msg, sizeof(msg));
     msg.action = DA_STOP;
-    CU_ASSERT( false == handle_msg_action(&msg, &ticks_to_wait_for_msg, &ticks_to_wait_before_looping, "", &gld) );
-    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_info.state );
-    CU_ASSERT( 0 == ticks_to_wait_before_looping );
-    CU_ASSERT( portMAX_DELAY == ticks_to_wait_for_msg );
+    handle_msg_action(&msg, &gld);
+    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_state.state );
 }
 
 void test_start_action( void )
 {
-    ticks_to_wait_before_looping = 0;
-    ticks_to_wait_for_msg = 0;
-    memset(&gld, 0, sizeof(gld));
-    memset(&msg, 0, sizeof(msg));
-    setup_gld_struct("Normal String Length");
+    char * String = "Normal String Length";
+    bzero(&gld, sizeof(gld));
+    bzero(&msg, sizeof(msg));
+    setup_gld_struct(String);
     msg.action = DA_START;
     gld.text_print_fn = fake_print;
-    CU_ASSERT( true == handle_msg_action(&msg, &ticks_to_wait_for_msg, &ticks_to_wait_before_looping, gld.text_info.text, &gld) );
-    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
-    CU_ASSERT( PAUSE_BEGIN == ticks_to_wait_before_looping );
-    CU_ASSERT( 0 == ticks_to_wait_for_msg );
-    CU_ASSERT( gld.num_characters_to_shift == gld.text_info.display_offset );
+    handle_msg_action(&msg,  &gld);
+    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_state.state );
+    CU_ASSERT( PAUSE_BEGIN == gld.text_state.next_draw_time );
+    CU_ASSERT( gld.num_characters_to_shift == gld.text_state.display_offset );
 }
 
 void test_start_action_short_string( void )
 {
-    ticks_to_wait_before_looping = 0;
-    ticks_to_wait_for_msg = 0;
-    memset(&gld, 0, sizeof(gld));
-    memset(&msg, 0, sizeof(msg));
-    setup_gld_struct("Short");
+    char * String = "Short";
+    bzero(&gld, sizeof(gld));
+    bzero(&msg, sizeof(msg));
+    setup_gld_struct( String );
     msg.action = DA_START;
     gld.text_print_fn = fake_print;
-    CU_ASSERT( true == handle_msg_action(&msg, &ticks_to_wait_for_msg, &ticks_to_wait_before_looping, gld.text_info.text, &gld) );
-    CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_info.state );
-    CU_ASSERT( SCROLL_SPD == ticks_to_wait_before_looping );
-    CU_ASSERT( 0 == ticks_to_wait_for_msg );
+    handle_msg_action(&msg, &gld);
+    CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_state.state );
+    CU_ASSERT( SCROLL_SPD == gld.text_state.next_draw_time );
 }
 
 void test_start_action_slow_scroll( void )
 {
-    ticks_to_wait_before_looping = 0;
-    ticks_to_wait_for_msg = 0;
-    memset(&gld, 0, sizeof(gld));
-    memset(&msg, 0, sizeof(msg));
-    setup_gld_struct("Normal String Length");
+    char * String = "Normal String Length";
+    bzero(&gld, sizeof(gld));
+    bzero(&msg, sizeof(msg));
+    setup_gld_struct(String);
     gld.num_characters_to_shift = 1;
     msg.action = DA_START;
     gld.text_print_fn = fake_print;
-    CU_ASSERT( true == handle_msg_action(&msg, &ticks_to_wait_for_msg, &ticks_to_wait_before_looping, gld.text_info.text, &gld) );
-    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
-    CU_ASSERT( PAUSE_BEGIN == ticks_to_wait_before_looping );
-    CU_ASSERT( 0 == ticks_to_wait_for_msg );
-    CU_ASSERT( gld.num_characters_to_shift == gld.text_info.display_offset );
+    handle_msg_action(&msg, &gld);
+    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_state.state );
+    CU_ASSERT( PAUSE_BEGIN == gld.text_state.next_draw_time );
+    CU_ASSERT( gld.num_characters_to_shift == gld.text_state.display_offset );
 }
 
 void add_suites( CU_pSuite *suite )

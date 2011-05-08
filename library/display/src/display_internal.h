@@ -1,6 +1,8 @@
 #ifndef DISPLAY_INTERNAL_H_
 #define DISPLAY_INTERNAL_H_
 
+#include <time.h>
+
 #include "freertos/os.h"
 
 #include "display.h"
@@ -21,11 +23,18 @@ typedef enum {
 } display_action_t;
 
 struct text_display_info {
+    char * text;
+    uint16_t identifier;
+};
+
+struct text_display_state {
     size_t length;
     size_t display_offset;
     state_of_display_t state;
-    char text[MAX_DISPLAY_LENGTH];
+    uint32_t next_draw_time;
+    struct text_display_info text_info;
 };
+
 
 struct display_globals {
     text_print_fct text_print_fn;
@@ -34,19 +43,18 @@ struct display_globals {
     uint32_t pause_at_end_of_text;
     size_t maximum_number_characters_to_display;
     size_t num_characters_to_shift;
-    struct text_display_info text_info;
-    int32_t valid;
+    struct text_display_state text_state;
+    bool valid;
     struct {
         queue_handle_t queue_handle;
         semaphore_handle_t mutex_handle;
         task_handle_t task_handle;
-        uint16_t identifier;
     } os;
     bool repeat;
 };
 
 struct display_message {
-    uint16_t identifier;
+    struct text_display_info text_info;
     display_action_t action;
 };
 

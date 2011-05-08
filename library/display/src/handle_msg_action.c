@@ -22,44 +22,38 @@
 
 
 /* See handle_msg_action.h for documentation */
-bool handle_msg_action( struct display_message * msg,
-                        uint32_t * ticks_to_wait_for_message,
-                        uint32_t * ticks_to_wait_before_looping,
-                        char * text,
+void handle_msg_action( struct display_message * msg,
                         struct display_globals * ref )
 {
+    char * text = ref->text_state.text_info.text;
     size_t nchars_disp;
     switch( msg->action ) {
         case DA_START:
-            *ticks_to_wait_for_message = 0;
-            ref->text_info.length = strlen( text );
+            ref->text_state.length = strlen( text );
             nchars_disp = ref->text_print_fn( text );
-            if( nchars_disp == ref->text_info.length ) {
+            if( nchars_disp == ref->text_state.length ) {
                 /* The entire text displays on the screen.  No need for
                  * scrolling.
                  */
-                ref->text_info.state = SOD_NO_SCROLLING_NEEDED;
+                ref->text_state.state = SOD_NO_SCROLLING_NEEDED;
                 /* Because some user interactions dismiss the text,
                  * the redraw period will be the same as the scroll
                  * speed
                  */
-                *ticks_to_wait_before_looping = ref->scroll_speed;
+                ref->text_state.next_draw_time = ref->scroll_speed;
             } else {
-                ref->text_info.state = SOD_MIDDLE_OF_TEXT;
+                ref->text_state.state = SOD_MIDDLE_OF_TEXT;
                 if( ref->num_characters_to_shift < nchars_disp ) {
-                    ref->text_info.display_offset += ref->num_characters_to_shift;
+                    ref->text_state.display_offset += ref->num_characters_to_shift;
                 } else {
-                    ref->text_info.display_offset += nchars_disp;
+                    ref->text_state.display_offset += nchars_disp;
                 }
-                *ticks_to_wait_before_looping = ref->pause_at_beginning_of_text;
+                ref->text_state.next_draw_time = ref->pause_at_beginning_of_text;
             }
-            return true;
+            break;
         case DA_STOP:
         default:
             /* DA_STOP */
-            ref->text_info.state = SOD_NOT_DISPLAYING;
-            *ticks_to_wait_for_message = WAIT_FOREVER;
-            *ticks_to_wait_before_looping = 0;
+            ref->text_state.state = SOD_NOT_DISPLAYING;
     }
-    return false;
 }

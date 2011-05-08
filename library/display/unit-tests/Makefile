@@ -3,7 +3,7 @@ BASE = ../../..
 
 TESTS = \
         hma_test \
-        hdu_test
+        hdu_test \
 #        display_test \
 
 display_test__INCLUDES = ../src .

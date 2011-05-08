@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 #include "freertos/os.h"
 
@@ -46,6 +47,7 @@ static struct display_globals gld;
  * Internal function prototypes
  */
 void display_main( void * parameters );
+uint32_t __get_time_delta( struct timeval * v1, struct timeval * v2 );
 
 /**
  * Public function prototypes
@@ -58,46 +60,34 @@ DRV_t display_init(text_print_fct text_print_fn,
         size_t num_characters_to_shift,
         bool repeat_text)
 {
-    memset(&gld, '\0', sizeof(struct display_globals));
-    if(NULL == text_print_fn) {
-        goto failure0;
-    }
+    bzero(&gld, sizeof(struct display_globals));
+    if(NULL != text_print_fn) {
+        gld.text_print_fn = text_print_fn;
+        gld.scroll_speed = scroll_speed;
+        gld.pause_at_beginning_of_text = pause_at_beginning_of_text;
+        gld.pause_at_end_of_text = pause_at_end_of_text;
+        if( 0 == num_characters_to_shift ) {
+            gld.num_characters_to_shift = SIZE_MAX;
+        } else {
+            gld.num_characters_to_shift = num_characters_to_shift;
+        }
+        gld.repeat = repeat_text;
     
-    gld.text_print_fn = text_print_fn;
-    gld.scroll_speed = scroll_speed;
-    gld.pause_at_beginning_of_text = pause_at_beginning_of_text;
-    gld.pause_at_end_of_text = pause_at_end_of_text;
-    if( 0 == num_characters_to_shift ) {
-        gld.num_characters_to_shift = 0xFFFFFFFF;
-    } else {
-        gld.num_characters_to_shift = num_characters_to_shift;
-    }
-    gld.repeat = repeat_text;
-    
-    gld.os.queue_handle = os_queue_create(DISPLAY_QUEUE_LENGTH, sizeof(struct display_message));
-    if( 0 == gld.os.queue_handle ) {
-        /* An error occurred */
-        goto failure1;
-    }
-    gld.os.mutex_handle = os_semaphore_create_binary();
-    if( NULL == gld.os.mutex_handle ) {
-        goto failure2;
-    }
-    
-    if( true != os_task_create( display_main, "DISPLAY", DISPLAY_TASK_DEPTH,
+        gld.os.queue_handle = os_queue_create(DISPLAY_QUEUE_LENGTH, sizeof(struct display_message));
+        if( 0 != gld.os.queue_handle ) {
+            gld.os.mutex_handle = os_semaphore_create_binary();
+            if( NULL != gld.os.mutex_handle ) {
+                if( true == os_task_create( display_main, "DISPLAY", DISPLAY_TASK_DEPTH,
                                 NULL, DISPLAY_TASK_PRIORITY, &(gld.os.task_handle) ) )
-    {
-        goto failure3;
+                {
+                    gld.valid = true;
+                    _D1("%s:%d -- %s -- success\n", "display.c", __LINE__, "init()");
+                    return DRV_SUCCESS;
+                }
+                os_queue_delete( gld.os.queue_handle );
+            }
+        }
     }
-    
-    gld.valid = true;
-    _D1("%s:%d -- %s -- success\n", "display.c", __LINE__, "init()");
-    return DRV_SUCCESS;
-failure3:
-failure2:
-    os_queue_delete( gld.os.queue_handle );
-failure1:
-failure0:
     _D1("%s:%d -- %s -- failure", "display.c", __LINE__, "init()");
     return DRV_NOT_INITIALIZED;
 }
@@ -105,25 +95,7 @@ failure0:
 /* See display.h for more info */
 DRV_t display_stop_text( void )
 {
-    struct display_message msg;
-    
-    if( false == gld.valid ) {
-        _D1("%s:%d -- %s -- not initialized\n", "display.c", __LINE__, "stop_text()");
-        return DRV_NOT_INITIALIZED;
-    }
-    msg.action = DA_STOP;
-    GRAB_MUTEX();
-    msg.identifier = ++gld.os.identifier;
-    RELEASE_MUTEX();
-    while( true != os_queue_send_to_back( gld.os.queue_handle, &msg, DISPLAY_MSG_POST_DELAY ) ) {
-        /* The queue is full, we should continue to try to post this message */
-        /* TODO : revisit this idea.  We probably don't want to loop forever,
-         * but don't want to fail silently.
-         */
-        ;
-    }
-    _D1("%s:%d -- %s -- success\n", "display.c", __LINE__, "stop_text()");
-    return DRV_SUCCESS;
+    return display_start_text( NULL );
 }
 
 /* See display.h for more info */
@@ -135,17 +107,20 @@ DRV_t display_start_text( const char *text_to_display )
         _D1("%s:%d -- %s -- not initialized\n", "display.c", __LINE__, "start_text()");
         return DRV_NOT_INITIALIZED;
     }
-    display_stop_text();
     
-    if( MAX_DISPLAY_LENGTH < strlen(text_to_display) ) {
-        _D1("%s:%d -- %s -- string too long\n", "display.c", __LINE__, "start_text()");
-        return DRV_STRING_TO_LONG;
+    if( NULL == text_to_display ) {
+        msg.action = DA_STOP;
+    } else {
+        msg.action = DA_START;
     }
-    msg.action = DA_START;
+
     GRAB_MUTEX();
-    strcpy( gld.text_info.text, text_to_display );
-    msg.identifier = ++gld.os.identifier;
+    gld.text_state.state = SOD_NOT_DISPLAYING;
+    msg.text_info.identifier = ++gld.text_state.text_info.identifier;
     RELEASE_MUTEX();
+    msg.text_info.text = text_to_display;
+
+
     while( true != os_queue_send_to_back( gld.os.queue_handle, &msg, DISPLAY_MSG_POST_DELAY ) ) {
         /* The queue is full, we should continue to try to post this message */
         /* TODO : revisit this idea.  We probably don't want to loop forever,
@@ -160,43 +135,42 @@ DRV_t display_start_text( const char *text_to_display )
 /* See display.h for more info */
 void display_main( void * parameters )
 {
-    uint32_t ticks_to_wait_for_message = WAIT_FOREVER;
-    uint32_t ticks_to_wait_before_looping = NO_WAIT;
-    char local_text[MAX_DISPLAY_LENGTH];
+    struct timeval tv;
+    struct timezone tz;
     struct display_message msg;
     bool recieved_message;
-    bool is_message_stale;
     
+    bzero( &tv, sizeof(struct timeval) );
+    gettimeofday( &tv, &tz );
+
     while(1) {
-        is_message_stale = false;
-        recieved_message = os_queue_receive( gld.os.queue_handle, &msg, ticks_to_wait_for_message );
+        struct timeval now;
+        recieved_message = os_queue_receive( gld.os.queue_handle, &msg, gld.scroll_speed );
         
+        if( 0 != gettimeofday(&now, &tz) ) {
+            /* We didn't get a valid time, so use the time we have in tv */
+            memcpy(&now, &tv, sizeof(struct timeval));
+        }
+
         if( true == recieved_message ) {
-            _D1("msg:\n\taction = %d\n\tidentifier = %d\n", msg.action, msg.identifier);
+            bool is_message_stale;
+            _D1("msg:\n\taction = %d\n\tidentifier = %d\n", msg.action, msg.text_info.identifier);
             GRAB_MUTEX();
-            is_message_stale = (gld.os.identifier==msg.identifier?false:true);
-            if(    ( false == is_message_stale )
-                && ( DA_START == msg.action ))
-            {
-                strcpy( local_text, gld.text_info.text );
+            is_message_stale = (gld.text_state.text_info.identifier==msg.text_info.identifier?false:true);
+            if( !is_message_stale ) {
+                handle_msg_action( &msg, &gld );
             }
             RELEASE_MUTEX();
-        }
-        if( true == is_message_stale ) {
-            continue;
-        }
-        if( true == recieved_message ) {
-            if( true == handle_msg_action( &msg,
-                            &ticks_to_wait_for_message,
-                            &ticks_to_wait_before_looping,
-                            local_text,
-                            &gld) )
-            {
-                continue;
+        } else {
+            uint32_t delta = __get_time_delta(&now, &tv);
+
+            if( delta <= gld.text_state.next_draw_time ) {
+                handle_display_update( &gld );
+            } else {
+                gld.text_state.next_draw_time -= delta;
             }
         }
-        handle_display_update( &ticks_to_wait_before_looping, local_text, &gld );    
-        os_task_delay_ticks( ticks_to_wait_before_looping );
+        memcpy(&tv, &now, sizeof(struct timeval));
     }
 }
 
@@ -208,4 +182,24 @@ void display_destroy( void )
         os_task_delete( gld.os.task_handle );
         os_queue_delete( gld.os.queue_handle );
     }
+}
+
+/**
+ * Gets the delta between v1 and v2.
+ *
+ * @return delta in milliseconds
+ */
+uint32_t __get_time_delta( struct timeval * v1, struct timeval * v2 )
+{
+    uint32_t delta;
+    struct timeval *larger = v1;
+    struct timeval *smaller = v2;
+    if( (v1->tv_sec == v2->tv_sec)?
+            (v1->tv_usec < v2->tv_usec):
+            (v1->tv_sec  < v2->tv_sec) ) {
+        larger = v2;
+        smaller = v1;
+    }
+    delta = (larger->tv_sec - smaller->tv_sec) * 1000 + (larger->tv_usec - smaller->tv_usec) / 1000;
+    return delta;
 }

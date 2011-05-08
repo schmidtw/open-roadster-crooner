@@ -9,14 +9,13 @@
 #include <freertos/task.h>
 
 #include "display.h"
+#include "display_internal.h"
 
 #define NUM_CHARS_ON_LCD 13
 
 static char test_string[500];
 static char comparison_string[NUM_CHARS_ON_LCD+1];
 static char local_string[NUM_CHARS_ON_LCD+1];
-
-static bool handle_msg_action_rv = false;
 
 size_t wrapper_printf(char *string)
 {
@@ -30,20 +29,15 @@ size_t wrapper_printf(char *string)
     return 0;
 }
 
-void handle_display_update( portTickType * ticks_to_wait_before_looping,
-                            char * text,
-                            struct display_globals * ref )
+void handle_display_update( struct display_globals * ref )
 {
     return;
 }
 
-bool handle_msg_action( struct display_message * msg,
-                        portTickType * ticks_to_wait_for_message,
-                        portTickType * ticks_to_wait_before_looping,
-                        char * text,
+void handle_msg_action( struct display_message * msg,
                         struct display_globals * ref )
 {
-    return handle_msg_action_rv;
+    return;
 }
 
 size_t broken_printf(char *string)
