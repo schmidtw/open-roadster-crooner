@@ -614,13 +614,13 @@ static void __update_song_display_info( song_node_t *song, const uint8_t disc )
 #ifdef SUPPORT_TEXT
     switch( disc ) {
         case DM_SONG:
-            display_start_text(song->title);
+            display_start_text(song->d.name.song);
             break;
         case DM_ALBUM:
-            display_start_text( (char*) &song->album->name);
+            display_start_text(song->d.parent->name.album);
             break;
         case DM_ARTIST:
-            display_start_text((char *) &song->album->artist->name);
+            display_start_text(song->d.parent->parent->name.artist);
             break;
         case DM_TEXT_DISPLAY:
             display_start_text( "Text Enabled\0" );
