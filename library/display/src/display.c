@@ -153,7 +153,7 @@ void display_main( void * parameters )
 
     while(1) {
         struct timeval now;
-        wait_period = gld.next_draw_time;
+        wait_period = gld.text_info.next_draw_time;
         if( 0 == wait_period ) {
             wait_period = WAIT_FOREVER;
         }
@@ -182,7 +182,7 @@ void display_main( void * parameters )
             if( delta >= gld.text_info.next_draw_time ) {
                 handle_display_update( &gld );
             } else {
-                gld.next_draw_time -= delta;
+                gld.text_info.next_draw_time -= delta;
             }
         }
         memcpy(&tv, &now, sizeof(struct timeval));
