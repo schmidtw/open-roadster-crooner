@@ -42,6 +42,7 @@ typedef enum {
     IBUS_DEVICE__AB             = 0xa4, /* Airbag */
     IBUS_DEVICE__AHL            = 0x66, /* Adaptive headlight control unit */
     IBUS_DEVICE__ANZV           = 0xe7, /* Display group */
+    IBUS_DEVICE__ASC            = 0x56, /* Anti-lock braking system with ASC */
     IBUS_DEVICE__BMBT           = 0xf0, /* On-board monitor control panel */
     IBUS_DEVICE__CCM            = 0x30, /* Check control module */
     IBUS_DEVICE__CDC            = 0x18, /* CD changer */
@@ -49,19 +50,24 @@ typedef enum {
     IBUS_DEVICE__CID            = 0x46, /* Central information display */
     IBUS_DEVICE__CSU            = 0xf5, /* Center switch control unit */
     IBUS_DEVICE__CVM            = 0x9c, /* Convertible top module */
+    IBUS_DEVICE__DIA            = 0x3f, /* Diagnostic */
     IBUS_DEVICE__DME            = 0x12, /* Digital motor electronics (ECU) */
     IBUS_DEVICE__DIS            = 0x3f, /* Display */
     IBUS_DEVICE__DSP            = 0x6a, /* Digital sound processor / amplifier */
     IBUS_DEVICE__DSPC           = 0xea, /* Digital signal processor controller */
+    IBUS_DEVICE__EGS            = 0x32, /* Electronic transmission control */
     IBUS_DEVICE__EHC            = 0xac, /* Electronic height control */
     IBUS_DEVICE__EKM            = 0x02, /* Body electronics module */
+    IBUS_DEVICE__EKP            = 0x65, /* Electronically controlled fuel pump control unit */
     IBUS_DEVICE__EWS            = 0x44, /* Immobiliser control unit */
     IBUS_DEVICE__FBZV           = 0x40, /* Remote central locking */
     IBUS_DEVICE__FHK            = 0xa7, /* Rear climate control */
     IBUS_DEVICE__FID            = 0xa0, /* Rear multi-information display */
     IBUS_DEVICE__FMBT           = 0x47, /* Rear monitor controls */
     IBUS_DEVICE__FUM            = 0x28, /* Radio clock control module */
+    IBUS_DEVICE__GLO            = 0xbf, /* Global broadcast address */
     IBUS_DEVICE__GM             = 0x00, /* Body module */
+    IBUS_DEVICE__GR             = 0xa6, /* Cruise control */
     IBUS_DEVICE__GT             = 0x3b, /* Graphics driver */
     IBUS_DEVICE__GTF            = 0x43, /* Rear graphics driver */
     IBUS_DEVICE__HAC            = 0x9a, /* Headlight aim control */
@@ -71,6 +77,8 @@ typedef enum {
     IBUS_DEVICE__IRIS           = 0xe0, /* Integrated radio information system */
     IBUS_DEVICE__ISP            = 0xe8, /* Intelligent side protection */
     IBUS_DEVICE__LCM            = 0xd0, /* Light check module */
+    IBUS_DEVICE__LOC            = 0xff, /* Local group broadcast address */
+    IBUS_DEVICE__LWS            = 0x57, /* Steering angle sensor */
     IBUS_DEVICE__MFL            = 0x50, /* Multi-function steering wheel */
     IBUS_DEVICE__MID            = 0xc0, /* Multi-information display */
     IBUS_DEVICE__MID1           = 0x01, /* Multi-information display (1st generation) */
@@ -81,20 +89,26 @@ typedef enum {
     IBUS_DEVICE__NAV            = 0x7f, /* Navigation system (Europe) */
     IBUS_DEVICE__ONL            = 0x67, /* Unknown */
     IBUS_DEVICE__PDC            = 0x60, /* Park distance control */
+    IBUS_DEVICE__PIC            = 0xf1, /* Programmable Controller (custom device) */
     IBUS_DEVICE__RAD            = 0x68, /* Radio */
+    IBUS_DEVICE__RCSC           = 0x81, /* Revolution counter/steering column */
     IBUS_DEVICE__RDC            = 0x70, /* Tire pressure monitoring system */
+    IBUS_DEVICE__RLS            = 0xe8, /* Rain and headlight sensor */
     IBUS_DEVICE__SDRS           = 0x73, /* Satelite digital radio */
     IBUS_DEVICE__SES            = 0xb0, /* Voice recognition unit */
     IBUS_DEVICE__SHD            = 0x08, /* Sunroof */
     IBUS_DEVICE__SM             = 0x72, /* Seat memory */
     IBUS_DEVICE__SMAD           = 0xda, /* Passenger seat memory */
+    IBUS_DEVICE__SOR            = 0x74, /* Seat occupancy recognition unit */
+    IBUS_DEVICE__STH            = 0x6b, /* Park heating */
+    IBUS_DEVICE__TCU            = 0xca, /* Telematics Control Unit */
     IBUS_DEVICE__TEL            = 0xc8, /* Telephone */
     IBUS_DEVICE__VID            = 0xed, /* Video module */
     IBUS_DEVICE__ZKE            = 0x09, /* Central body electronics */
-    IBUS_DEVICE__DEBUG          = 0xfe,
-    IBUS_DEVICE__BROADCAST_LOW  = 0x00,
-    IBUS_DEVICE__BROADCAST_MID  = 0xbf,
-    IBUS_DEVICE__BROADCAST_HIGH = 0xff
+    IBUS_DEVICE__DEBUG          = 0xfe, /* Crooner debug to the iBus loggers */
+    IBUS_DEVICE__BROADCAST_LOW  = 0x00, /* Will be removed in the future */
+    IBUS_DEVICE__BROADCAST_MID  = 0xbf, /* Will be removed in the future */
+    IBUS_DEVICE__BROADCAST_HIGH = 0xff  /* Will be removed in the future */
 } ibus_device_t;
 
 /**
