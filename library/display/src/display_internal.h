@@ -36,6 +36,7 @@ struct display_globals {
     uint32_t scroll_speed;
     uint32_t pause_at_beginning_of_text;
     uint32_t pause_at_end_of_text;
+    uint32_t redraw_no_scrolling;
     size_t maximum_number_characters_to_display;
     size_t num_characters_to_shift;
     struct text_display_state text_info;

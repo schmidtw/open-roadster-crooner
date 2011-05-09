@@ -37,6 +37,8 @@ typedef size_t (*text_print_fct)(char *string);
  *        text is shown.
  * @param pause_at_end_of_text The delay when the last part of the text
  *        is shown.
+ * @param redraw_no_scrolling The delay before the text should be redrawn
+ *        if the entire message fits on the display
  * @param num_characters_to_shift When the text is to be shifted, the
  *        number of characters which we want to shift off the display is
  *        specified by this value.  A value of 0 (Zero) is not valid and
@@ -52,6 +54,7 @@ DRV_t display_init(text_print_fct text_print_fn,
         uint32_t scroll_speed,
         uint32_t pause_at_beginning_of_text,
         uint32_t pause_at_end_of_text,
+        uint32_t redraw_no_scrolling,
         size_t num_characters_to_shift,
         bool repeat_text);
 

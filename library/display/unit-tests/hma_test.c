@@ -11,6 +11,7 @@
 #define SCROLL_SPD   5
 #define PAUSE_BEGIN  10
 #define PAUSE_END    15
+#define REDRAW_SPD   17
 
 struct display_globals gld;
 struct display_message msg;
@@ -36,6 +37,7 @@ void setup_gld_struct()
     gld.pause_at_beginning_of_text = PAUSE_BEGIN;
     gld.pause_at_end_of_text = PAUSE_END;
     gld.scroll_speed = SCROLL_SPD;
+    gld.redraw_no_scrolling = REDRAW_SPD;
     gld.num_characters_to_shift = LED_LENGTH;
     gld.text_info.text = "";
 }
@@ -86,7 +88,7 @@ void test_start_action_short_string( void )
     gld.text_print_fn = fake_print;
     handle_msg_action(&msg, &gld);
     CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_info.state );
-    CU_ASSERT( SCROLL_SPD == gld.text_info.next_draw_time );
+    CU_ASSERT( REDRAW_SPD == gld.text_info.next_draw_time );
 }
 
 void test_start_action_slow_scroll( void )
@@ -107,7 +109,7 @@ void test_start_action_slow_scroll( void )
 
 void add_suites( CU_pSuite *suite )
 {
-    *suite = CU_add_suite( "Handle Display Update", NULL, NULL );
+    *suite = CU_add_suite( "Handle Message Action", NULL, NULL );
     CU_add_test( *suite, "Unkown Action ", test_unknown_action);
     CU_add_test( *suite, "Stop Action ", test_stop_action);
     CU_add_test( *suite, "Start Action, Longer Title", test_start_action);

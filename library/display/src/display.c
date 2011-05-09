@@ -57,6 +57,7 @@ DRV_t display_init(text_print_fct text_print_fn,
         uint32_t scroll_speed,
         uint32_t pause_at_beginning_of_text,
         uint32_t pause_at_end_of_text,
+        uint32_t redraw_no_scrolling,
         size_t num_characters_to_shift,
         bool repeat_text)
 {
@@ -65,12 +66,14 @@ DRV_t display_init(text_print_fct text_print_fn,
         _D1("%s:%d -- Scroll Speed                %ld\n", __FILE__, __LINE__, scroll_speed);
         _D1("%s:%d -- Pause at Beginning of Text  %ld\n", __FILE__, __LINE__, pause_at_beginning_of_text);
         _D1("%s:%d -- Pause at End of Text        %ld\n", __FILE__, __LINE__, pause_at_end_of_text);
+        _D1("%s:%d -- Redraw no scrolling case    %ld\n", __FILE__, __LINE__, redraw_no_scrolling);
         _D1("%s:%d -- Number of Chars to shift    %ld\n", __FILE__, __LINE__, num_characters_to_shift);
         _D1("%s:%d -- Text should %s\n", __FILE__, __LINE__, repeat_text?"Repeat":"Not Repeat");
         gld.text_print_fn = text_print_fn;
         gld.scroll_speed = scroll_speed;
         gld.pause_at_beginning_of_text = pause_at_beginning_of_text;
         gld.pause_at_end_of_text = pause_at_end_of_text;
+        gld.redraw_no_scrolling = redraw_no_scrolling;
         if( 0 == num_characters_to_shift ) {
             gld.num_characters_to_shift = SIZE_MAX;
         } else {
@@ -163,7 +166,7 @@ void display_main( void * parameters )
             /* We didn't get a valid time, so use the time we have in tv */
             memcpy(&now, &tv, sizeof(struct timeval));
         }
-        _D1("%s:%d -- now(%d) vs tv(%d)\n", __FILE__, __LINE__, now.tv_sec, tv.tv_sec);
+        _D1("%s:%d -- now(%ld) vs tv(%ld)\n", __FILE__, __LINE__, now.tv_sec, tv.tv_sec);
 
         if( true == recieved_message ) {
             _D1("%s:%d -- msg: action = %d -- identifier = %d\n",

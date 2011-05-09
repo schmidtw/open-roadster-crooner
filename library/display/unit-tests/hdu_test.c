@@ -11,6 +11,7 @@
 #define SCROLL_SPD   5
 #define PAUSE_BEGIN  10
 #define PAUSE_END    15
+#define REDRAW_SPD   17
 
 struct display_globals gld;
 
@@ -34,6 +35,7 @@ void setup_gld_struct( char * string )
     gld.pause_at_beginning_of_text = PAUSE_BEGIN;
     gld.pause_at_end_of_text = PAUSE_END;
     gld.scroll_speed = SCROLL_SPD;
+    gld.redraw_no_scrolling = REDRAW_SPD;
     gld.num_characters_to_shift = LED_LENGTH;
     gld.text_info.text = string;
 }
@@ -110,7 +112,7 @@ void test_no_scrolling_text( void )
     gld.text_print_fn = fake_print;
     setup_gld_struct(String);
     handle_display_update( &gld );
-    CU_ASSERT( SCROLL_SPD == gld.text_info.next_draw_time );
+    CU_ASSERT( REDRAW_SPD == gld.text_info.next_draw_time );
     CU_ASSERT( 0 == gld.text_info.display_offset );
     CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_info.state );
 }

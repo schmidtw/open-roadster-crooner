@@ -66,6 +66,7 @@ void handle_display_update( struct display_globals * ref )
              */
             _D1("%s:%d -- SOD_NO_SCROLLING_NEEDED\n", __FILE__, __LINE__);
             ref->text_print_fn( text );
+            ref->text_info.next_draw_time = ref->redraw_no_scrolling;
             break;
     }
     if( true == is_scrolling_message ) {

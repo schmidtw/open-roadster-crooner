@@ -20,6 +20,7 @@
 #include <media-mp3/media-mp3.h>
 #include <playback/playback.h>
 #include <ibus-phone-protocol/ibus-phone-protocol.h>
+#include <system-time/system-time.h>
 
 #include "radio-interface.h"
 #include "device-status.h"
@@ -171,8 +172,9 @@ int main( void )
     playback_init( 1 );
     init_database( mi_list );
     fstream_init( 2, malloc, free );
+    system_time_init(1);
 #ifdef SUPPORT_TEXT
-    display_init( ibus_phone_display , 5000, 15000, 10000, 1, true);
+    display_init( ibus_phone_display, 1000, 4000, 2000, 5000, 1, true);
 #endif
 
     /* Start the RTOS - never returns. */
