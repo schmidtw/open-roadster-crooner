@@ -33,7 +33,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define DSP_TASK_STACK_SIZE (0)
+#define DSP_TASK_STACK_SIZE 50
 #define DSP_OUT_MSG_MAX     20
 #define DSP_IN_MSG_MAX      10
 #define DSP_BUFFER_SIZE     441
@@ -441,7 +441,7 @@ static void __mono_to_stereo_out( const int32_t *in, int16_t *out,
         register int32_t data;
 
         /* Apply gain */
-        data = (((int64_t) *in++) * gain_scale_factor) >> GAIN_SCALE;
+        data = (((int64_t) *in++) * (int64_t) gain_scale_factor) >> GAIN_SCALE;
 
         /* Convert from 32 bit to 16 bit */
         if( 0 < data ) {
@@ -487,7 +487,7 @@ static void __stereo_to_stereo_out( const int32_t *l, const int32_t *r,
         /* Left sample ---------------------- */
 
         /* Apply gain */
-        data = (((int64_t) *l++) * gain_scale_factor) >> GAIN_SCALE;
+        data = (((int64_t) *l++) * (int64_t) gain_scale_factor) >> GAIN_SCALE;
 
         /* Convert from 32 bit to 16 bit */
         if( 0 < data ) {
@@ -511,7 +511,7 @@ static void __stereo_to_stereo_out( const int32_t *l, const int32_t *r,
         /* Right sample --------------------- */
 
         /* Apply gain */
-        data = (((int64_t) *r++) * gain_scale_factor) >> GAIN_SCALE;
+        data = (((int64_t) *r++) * (int64_t) gain_scale_factor) >> GAIN_SCALE;
 
         /* Convert from 32 bit to 16 bit */
         if( 0 < data ) {
