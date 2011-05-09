@@ -62,6 +62,11 @@ DRV_t display_init(text_print_fct text_print_fn,
 {
     bzero(&gld, sizeof(struct display_globals));
     if(NULL != text_print_fn) {
+        _D1("%s:%d -- Scroll Speed                %ld\n", "display.c", __LINE__, scroll_speed);
+        _D1("%s:%d -- Pause at Beginning of Text  %ld\n", "display.c", __LINE__, pause_at_beginning_of_text);
+        _D1("%s:%d -- Pause at End of Text        %ld\n", "display.c", __LINE__, pause_at_end_of_text);
+        _D1("%s:%d -- Number of Chars to shift    %ld\n", "display.c", __LINE__, num_characters_to_shift);
+        _D1("%s:%d -- Text should %s\n", "display.c", __LINE__, repeat_text?"Repeat":"Not Repeat");
         gld.text_print_fn = text_print_fn;
         gld.scroll_speed = scroll_speed;
         gld.pause_at_beginning_of_text = pause_at_beginning_of_text;
@@ -140,6 +145,8 @@ void display_main( void * parameters )
     struct display_message msg;
     bool recieved_message;
     
+    _D1("%s:%d -- display_main() thread started\n", "display.c", __LINE__);
+
     bzero( &tv, sizeof(struct timeval) );
     gettimeofday( &tv, &tz );
 
@@ -154,7 +161,8 @@ void display_main( void * parameters )
 
         if( true == recieved_message ) {
             bool is_message_stale;
-            _D1("msg:\n\taction = %d\n\tidentifier = %d\n", msg.action, msg.text_info.identifier);
+            _D1("%s:%d -- msg:  taction = %d  -- identifier = %d\n",
+                    "display.c", __LINE__, msg.action, msg.text_info.identifier);
             GRAB_MUTEX();
             is_message_stale = (gld.text_state.text_info.identifier==msg.text_info.identifier?false:true);
             if( !is_message_stale ) {
@@ -164,6 +172,7 @@ void display_main( void * parameters )
         } else {
             uint32_t delta = __get_time_delta(&now, &tv);
 
+            _D1("%s:%d --no msg received\n", "display.c", __LINE__);
             if( delta <= gld.text_state.next_draw_time ) {
                 handle_display_update( &gld );
             } else {
