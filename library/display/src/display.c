@@ -120,10 +120,10 @@ DRV_t display_start_text( const char *text_to_display )
     }
 
     GRAB_MUTEX();
-    gld.text_state.state = SOD_NOT_DISPLAYING;
-    msg.text_info.identifier = ++gld.text_state.text_info.identifier;
+    gld.text_info.state = SOD_NOT_DISPLAYING;
+    msg.identifier = ++gld.identifier;
     RELEASE_MUTEX();
-    msg.text_info.text = text_to_display;
+    msg.text = text_to_display;
 
 
     while( true != os_queue_send_to_back( gld.os.queue_handle, &msg, DISPLAY_MSG_POST_DELAY ) ) {
@@ -162,22 +162,22 @@ void display_main( void * parameters )
 
         if( true == recieved_message ) {
             _D1("%s:%d -- msg: action = %d -- identifier = %d\n",
-                    __FILE__, __LINE__, msg.action, msg.text_info.identifier);
+                    __FILE__, __LINE__, msg.action, msg.identifier);
             GRAB_MUTEX();
             _D1("%s:%d -- id match: %s\n", __FILE__, __LINE__,
-                    ( gld.text_state.text_info.identifier == msg.text_info.identifier )?"true":"false");
-            if( gld.text_state.text_info.identifier == msg.text_info.identifier ) {
+                    ( gld.identifier == msg.identifier )?"true":"false");
+            if( gld.identifier == msg.identifier ) {
                 handle_msg_action( &msg, &gld );
             }
             RELEASE_MUTEX();
         } else {
             uint32_t delta = __get_time_delta(&now, &tv);
 
-            _D1("%s:%d --no msg received -- delta %ld -- next draw time %ld\n", __FILE__, __LINE__, delta, gld.text_state.next_draw_time);
-            if( delta >= gld.text_state.next_draw_time ) {
+            _D1("%s:%d --no msg received -- delta %ld -- next draw time %ld\n", __FILE__, __LINE__, delta, gld.next_draw_time);
+            if( delta >= gld.next_draw_time ) {
                 handle_display_update( &gld );
             } else {
-                gld.text_state.next_draw_time -= delta;
+                gld.next_draw_time -= delta;
             }
         }
         memcpy(&tv, &now, sizeof(struct timeval));

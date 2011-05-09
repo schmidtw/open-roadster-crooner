@@ -29,15 +29,15 @@ size_t fake_print( char * string)
     return 0;
 }
 
-void setup_gld_struct( char * string )
+void setup_gld_struct()
 {
-    gld.text_state.length = strlen(string);
-    gld.text_state.display_offset = 0;
+    gld.text_info.length = 0;
+    gld.text_info.display_offset = 0;
     gld.pause_at_beginning_of_text = PAUSE_BEGIN;
     gld.pause_at_end_of_text = PAUSE_END;
     gld.scroll_speed = SCROLL_SPD;
     gld.num_characters_to_shift = LED_LENGTH;
-    gld.text_state.text_info.text = string;
+    gld.text_info.text = "";
 }
 
 
@@ -47,7 +47,7 @@ void test_unknown_action( void )
     bzero(&msg, sizeof(msg));
     msg.action = 100;
     handle_msg_action(&msg, &gld);
-    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_state.state );
+    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_info.state );
 }
 
 void test_stop_action( void )
@@ -56,7 +56,7 @@ void test_stop_action( void )
     bzero(&msg, sizeof(msg));
     msg.action = DA_STOP;
     handle_msg_action(&msg, &gld);
-    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_state.state );
+    CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_info.state );
 }
 
 void test_start_action( void )
@@ -64,13 +64,14 @@ void test_start_action( void )
     char * String = "Normal String Length";
     bzero(&gld, sizeof(gld));
     bzero(&msg, sizeof(msg));
-    setup_gld_struct(String);
+    setup_gld_struct();
     msg.action = DA_START;
+    msg.text = String;
     gld.text_print_fn = fake_print;
     handle_msg_action(&msg,  &gld);
-    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_state.state );
-    CU_ASSERT( PAUSE_BEGIN == gld.text_state.next_draw_time );
-    CU_ASSERT( gld.num_characters_to_shift == gld.text_state.display_offset );
+    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
+    CU_ASSERT( PAUSE_BEGIN == gld.next_draw_time );
+    CU_ASSERT( gld.num_characters_to_shift == gld.text_info.display_offset );
 }
 
 void test_start_action_short_string( void )
@@ -80,10 +81,11 @@ void test_start_action_short_string( void )
     bzero(&msg, sizeof(msg));
     setup_gld_struct( String );
     msg.action = DA_START;
+    msg.text = String;
     gld.text_print_fn = fake_print;
     handle_msg_action(&msg, &gld);
-    CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_state.state );
-    CU_ASSERT( SCROLL_SPD == gld.text_state.next_draw_time );
+    CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_info.state );
+    CU_ASSERT( SCROLL_SPD == gld.next_draw_time );
 }
 
 void test_start_action_slow_scroll( void )
@@ -91,14 +93,15 @@ void test_start_action_slow_scroll( void )
     char * String = "Normal String Length";
     bzero(&gld, sizeof(gld));
     bzero(&msg, sizeof(msg));
-    setup_gld_struct(String);
-    gld.num_characters_to_shift = 1;
+    setup_gld_struct();
     msg.action = DA_START;
+    msg.text = String;
+    gld.num_characters_to_shift = 1;
     gld.text_print_fn = fake_print;
     handle_msg_action(&msg, &gld);
-    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_state.state );
-    CU_ASSERT( PAUSE_BEGIN == gld.text_state.next_draw_time );
-    CU_ASSERT( gld.num_characters_to_shift == gld.text_state.display_offset );
+    CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
+    CU_ASSERT( PAUSE_BEGIN == gld.next_draw_time );
+    CU_ASSERT( gld.num_characters_to_shift == gld.text_info.display_offset );
 }
 
 void add_suites( CU_pSuite *suite )

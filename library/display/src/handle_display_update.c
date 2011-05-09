@@ -33,28 +33,28 @@ void handle_display_update( struct display_globals * ref )
 {
     bool is_scrolling_message = false;
     size_t nchars_disp = 0;
-    char * text = ref->text_state.text_info.text;
-    ref->text_state.next_draw_time = ref->scroll_speed;
+    char * text = ref->text_info.text;
+    ref->next_draw_time = ref->scroll_speed;
 
-    switch( ref->text_state.state ) {
+    switch( ref->text_info.state ) {
         case SOD_NOT_DISPLAYING:
             _D1("%s:%d -- SOD_NOT_DISPLAYING\n", __FILE__, __LINE__);
             break;
         case SOD_BEGINNING_OF_TEXT:
             _D1("%s:%d -- SOD_BEGINNING_OF_TEXT\n", __FILE__, __LINE__);
             nchars_disp = ref->text_print_fn( text );
-            ref->text_state.display_offset = 0;
+            ref->text_info.display_offset = 0;
             is_scrolling_message = true;
             break;
         case SOD_END_OF_TEXT:
             _D1("%s:%d -- SOD_END_OF_TEXT\n", __FILE__, __LINE__);
-            ref->text_state.display_offset = ref->text_print_fn( text );
-            ref->text_state.state = SOD_BEGINNING_OF_TEXT;
-            ref->text_state.next_draw_time = ref->pause_at_beginning_of_text;
+            ref->text_info.display_offset = ref->text_print_fn( text );
+            ref->text_info.state = SOD_BEGINNING_OF_TEXT;
+            ref->next_draw_time = ref->pause_at_beginning_of_text;
             break;
         case SOD_MIDDLE_OF_TEXT:
             _D1("%s:%d -- SOD_MIDDLE_OF_TEXT\n", __FILE__, __LINE__);
-            nchars_disp = ref->text_print_fn( &(text[ref->text_state.display_offset]) );
+            nchars_disp = ref->text_print_fn( &(text[ref->text_info.display_offset]) );
             is_scrolling_message = true;
             break;
         case SOD_NO_SCROLLING_NEEDED:
@@ -68,15 +68,15 @@ void handle_display_update( struct display_globals * ref )
             break;
     }
     if( true == is_scrolling_message ) {
-        if( ref->text_state.length == (ref->text_state.display_offset + nchars_disp) ) {
-            ref->text_state.state = SOD_END_OF_TEXT;
-            ref->text_state.next_draw_time = ref->pause_at_end_of_text;
+        if( ref->text_info.length == (ref->text_info.display_offset + nchars_disp) ) {
+            ref->text_info.state = SOD_END_OF_TEXT;
+            ref->next_draw_time = ref->pause_at_end_of_text;
         } else {
-            ref->text_state.state = SOD_MIDDLE_OF_TEXT;
+            ref->text_info.state = SOD_MIDDLE_OF_TEXT;
             if( ref->num_characters_to_shift < nchars_disp ) {
-                ref->text_state.display_offset += ref->num_characters_to_shift;
+                ref->text_info.display_offset += ref->num_characters_to_shift;
             } else {
-                ref->text_state.display_offset += nchars_disp;
+                ref->text_info.display_offset += nchars_disp;
             }
         }
     }

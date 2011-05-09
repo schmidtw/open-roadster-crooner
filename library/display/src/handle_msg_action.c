@@ -32,33 +32,34 @@ void handle_msg_action( struct display_message * msg,
                         struct display_globals * ref )
 {
     size_t nchars_disp;
+    bzero(&ref->text_info, sizeof(struct text_display_state));
     switch( msg->action ) {
         case DA_START:
         {
             char * text;
-            ref->text_state.text_info.text = msg->text_info.text;
-            text = ref->text_state.text_info.text;
+            ref->text_info.text = msg->text;
+            text = ref->text_info.text;
             _D1("%s:%d -- handle_msg_action -- DA_START - '%s'\n", __FILE__, __LINE__, text);
-            ref->text_state.length = strlen( text );
+            ref->text_info.length = strlen( text );
             nchars_disp = ref->text_print_fn( text );
-            if( nchars_disp == ref->text_state.length ) {
+            if( nchars_disp == ref->text_info.length ) {
                 /* The entire text displays on the screen.  No need for
                  * scrolling.
                  */
-                ref->text_state.state = SOD_NO_SCROLLING_NEEDED;
+                ref->text_info.state = SOD_NO_SCROLLING_NEEDED;
                 /* Because some user interactions dismiss the text,
                  * the redraw period will be the same as the scroll
                  * speed
                  */
-                ref->text_state.next_draw_time = ref->scroll_speed;
+                ref->next_draw_time = ref->scroll_speed;
             } else {
-                ref->text_state.state = SOD_MIDDLE_OF_TEXT;
+                ref->text_info.state = SOD_MIDDLE_OF_TEXT;
                 if( ref->num_characters_to_shift < nchars_disp ) {
-                    ref->text_state.display_offset += ref->num_characters_to_shift;
+                    ref->text_info.display_offset = ref->num_characters_to_shift;
                 } else {
-                    ref->text_state.display_offset += nchars_disp;
+                    ref->text_info.display_offset = nchars_disp;
                 }
-                ref->text_state.next_draw_time = ref->pause_at_beginning_of_text;
+                ref->next_draw_time = ref->pause_at_beginning_of_text;
             }
             break;
         }
@@ -66,6 +67,6 @@ void handle_msg_action( struct display_message * msg,
         default:
             /* DA_STOP */
             _D1("%s:%d -- handle_msg_action -- DA_STOP\n", __FILE__, __LINE__);
-            ref->text_state.state = SOD_NOT_DISPLAYING;
+            ref->text_info.state = SOD_NOT_DISPLAYING;
     }
 }

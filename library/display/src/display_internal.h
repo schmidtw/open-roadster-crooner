@@ -22,17 +22,11 @@ typedef enum {
     DA_STOP
 } display_action_t;
 
-struct text_display_info {
-    char * text;
-    uint16_t identifier;
-};
-
 struct text_display_state {
     size_t length;
     size_t display_offset;
     state_of_display_t state;
-    uint32_t next_draw_time;
-    struct text_display_info text_info;
+    char * text;
 };
 
 
@@ -43,18 +37,21 @@ struct display_globals {
     uint32_t pause_at_end_of_text;
     size_t maximum_number_characters_to_display;
     size_t num_characters_to_shift;
-    struct text_display_state text_state;
-    bool valid;
+    struct text_display_state text_info;
     struct {
         queue_handle_t queue_handle;
         semaphore_handle_t mutex_handle;
         task_handle_t task_handle;
     } os;
+    uint32_t next_draw_time;
+    uint16_t identifier;
+    bool valid;
     bool repeat;
 };
 
 struct display_message {
-    struct text_display_info text_info;
+    char * text;
+    uint16_t identifier;
     display_action_t action;
 };
 
