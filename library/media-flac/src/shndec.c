@@ -57,17 +57,10 @@
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
 #define MKTAG(a,b,c,d) (a | (b << 8) | (c << 16) | (d << 24))
 
-#define get_le16(gb) bswap_16(get_bits_long(gb, 16))
-#define get_le32(gb) bswap_32(get_bits_long(gb, 32))
-
-static uint32_t bswap_32(uint32_t x){
-    x= ((x<<8)&0xFF00FF00) | ((x>>8)&0x00FF00FF);
-    return (x>>16) | (x<<16);
-}
-
-static uint16_t bswap_16(uint16_t x){
-    return (x>>8) | (x<<8);
-}
+#define get_le16(gb) __builtin_bswap_16(get_bits_long(gb, 16))
+#define get_le32(gb) __builtin_bswap_32(get_bits_long(gb, 32))
+#define bswap_32(x) __builtin_bswap_32((x))
+#define bswap_16(x) __builtin_bswap_16((x))
 
 /* converts fourcc string to int */
 static int ff_get_fourcc(const char *s){
