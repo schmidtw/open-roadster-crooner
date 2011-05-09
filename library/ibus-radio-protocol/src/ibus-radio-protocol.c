@@ -67,7 +67,7 @@ typedef enum {
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
-/* none */
+void _irp_send_device_status_ready( void );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -103,21 +103,13 @@ irp_status_t irp_get_message( irp_rx_msg_t *msg )
 /* See ibus-radio-protocol.h for details. */
 void irp_send_announce( void )
 {
-    static const uint8_t payload[] = { 0x02, 0x01 };
-
-    ibus_physical_send_message( IBUS_DEVICE__CDC,
-                                IBUS_DEVICE__BROADCAST_HIGH,
-                                payload, sizeof(payload) );
+    _irp_send_device_status_ready();
 }
 
 /* See ibus-radio-protocol.h for details. */
 void irp_send_poll_response( void )
 {
-    static const uint8_t payload[] = { 0x02, 0x00 };
-
-    ibus_physical_send_message( IBUS_DEVICE__CDC,
-                                IBUS_DEVICE__BROADCAST_HIGH,
-                                payload, sizeof(payload) );
+    _irp_send_device_status_ready();
 }
 
 /* See ibus-radio-protocol.h for details. */
@@ -288,4 +280,25 @@ irp_status_t irp_completed_disc_check( const uint8_t disc,
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
-/* none */
+
+/**
+ *  Used to send the Ready after reset the first time we send this message,
+ *  just ready every other time.
+ */
+void _irp_send_device_status_ready( void )
+{
+    static bool sent_after_reset = false;
+
+    uint8_t payload[2];
+
+    payload[0] = 0x02;
+    payload[1] = 0x00;
+    if( false == sent_after_reset ) {
+        payload[1] = 0x01;
+        sent_after_reset = true;
+    }
+
+    ibus_physical_send_message( IBUS_DEVICE__CDC,
+                                IBUS_DEVICE__BROADCAST_HIGH,
+                                payload, sizeof(payload) );
+}
