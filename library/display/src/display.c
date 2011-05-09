@@ -62,11 +62,11 @@ DRV_t display_init(text_print_fct text_print_fn,
 {
     bzero(&gld, sizeof(struct display_globals));
     if(NULL != text_print_fn) {
-        _D1("%s:%d -- Scroll Speed                %ld\n", "display.c", __LINE__, scroll_speed);
-        _D1("%s:%d -- Pause at Beginning of Text  %ld\n", "display.c", __LINE__, pause_at_beginning_of_text);
-        _D1("%s:%d -- Pause at End of Text        %ld\n", "display.c", __LINE__, pause_at_end_of_text);
-        _D1("%s:%d -- Number of Chars to shift    %ld\n", "display.c", __LINE__, num_characters_to_shift);
-        _D1("%s:%d -- Text should %s\n", "display.c", __LINE__, repeat_text?"Repeat":"Not Repeat");
+        _D1("%s:%d -- Scroll Speed                %ld\n", __FILE__, __LINE__, scroll_speed);
+        _D1("%s:%d -- Pause at Beginning of Text  %ld\n", __FILE__, __LINE__, pause_at_beginning_of_text);
+        _D1("%s:%d -- Pause at End of Text        %ld\n", __FILE__, __LINE__, pause_at_end_of_text);
+        _D1("%s:%d -- Number of Chars to shift    %ld\n", __FILE__, __LINE__, num_characters_to_shift);
+        _D1("%s:%d -- Text should %s\n", __FILE__, __LINE__, repeat_text?"Repeat":"Not Repeat");
         gld.text_print_fn = text_print_fn;
         gld.scroll_speed = scroll_speed;
         gld.pause_at_beginning_of_text = pause_at_beginning_of_text;
@@ -86,14 +86,14 @@ DRV_t display_init(text_print_fct text_print_fn,
                                 NULL, DISPLAY_TASK_PRIORITY, &(gld.os.task_handle) ) )
                 {
                     gld.valid = true;
-                    _D1("%s:%d -- %s -- success\n", "display.c", __LINE__, "init()");
+                    _D1("%s:%d -- %s -- success\n", __FILE__, __LINE__, "init()");
                     return DRV_SUCCESS;
                 }
                 os_queue_delete( gld.os.queue_handle );
             }
         }
     }
-    _D1("%s:%d -- %s -- failure", "display.c", __LINE__, "init()");
+    _D1("%s:%d -- %s -- failure", __FILE__, __LINE__, "init()");
     return DRV_NOT_INITIALIZED;
 }
 
@@ -109,7 +109,7 @@ DRV_t display_start_text( const char *text_to_display )
     struct display_message msg;
     
     if( false == gld.valid ) {
-        _D1("%s:%d -- %s -- not initialized\n", "display.c", __LINE__, "start_text()");
+        _D1("%s:%d -- %s -- not initialized\n", __FILE__, __LINE__, "start_text()");
         return DRV_NOT_INITIALIZED;
     }
     
@@ -133,7 +133,7 @@ DRV_t display_start_text( const char *text_to_display )
          */
         ;
     }
-    _D1("%s:%d -- %s -- success - `%s`\n", "display.c", __LINE__, "start_text()", text_to_display);
+    _D1("%s:%d -- %s -- success - `%s`\n", __FILE__, __LINE__, "start_text()", text_to_display);
     return DRV_SUCCESS;
 }
 
@@ -145,7 +145,7 @@ void display_main( void * parameters )
     struct display_message msg;
     bool recieved_message;
     
-    _D1("%s:%d -- display_main() thread started\n", "display.c", __LINE__);
+    _D1("%s:%d -- display_main() thread started\n", __FILE__, __LINE__);
 
     bzero( &tv, sizeof(struct timeval) );
     gettimeofday( &tv, &tz );
@@ -158,22 +158,23 @@ void display_main( void * parameters )
             /* We didn't get a valid time, so use the time we have in tv */
             memcpy(&now, &tv, sizeof(struct timeval));
         }
+        _D1("%s:%d -- now(%d) vs tv(%d)\n", __FILE__, __LINE__, now.tv_sec, tv.tv_sec);
 
         if( true == recieved_message ) {
-            bool is_message_stale;
-            _D1("%s:%d -- msg:  taction = %d  -- identifier = %d\n",
-                    "display.c", __LINE__, msg.action, msg.text_info.identifier);
+            _D1("%s:%d -- msg: action = %d -- identifier = %d\n",
+                    __FILE__, __LINE__, msg.action, msg.text_info.identifier);
             GRAB_MUTEX();
-            is_message_stale = (gld.text_state.text_info.identifier==msg.text_info.identifier?false:true);
-            if( !is_message_stale ) {
+            _D1("%s:%d -- id match: %s\n", __FILE__, __LINE__,
+                    ( gld.text_state.text_info.identifier == msg.text_info.identifier )?"true":"false");
+            if( gld.text_state.text_info.identifier == msg.text_info.identifier ) {
                 handle_msg_action( &msg, &gld );
             }
             RELEASE_MUTEX();
         } else {
             uint32_t delta = __get_time_delta(&now, &tv);
 
-            _D1("%s:%d --no msg received\n", "display.c", __LINE__);
-            if( delta <= gld.text_state.next_draw_time ) {
+            _D1("%s:%d --no msg received -- delta %ld -- next draw time %ld\n", __FILE__, __LINE__, delta, gld.text_state.next_draw_time);
+            if( delta >= gld.text_state.next_draw_time ) {
                 handle_display_update( &gld );
             } else {
                 gld.text_state.next_draw_time -= delta;

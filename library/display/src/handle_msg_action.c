@@ -20,15 +20,25 @@
 #include "freertos/os.h"
 #include "display_internal.h"
 
+#if (0 < DEBUG)
+#include <stdio.h>
+#define _D1(...) printf(__VA_ARGS__)
+#else
+#define _D1(...)
+#endif
 
 /* See handle_msg_action.h for documentation */
 void handle_msg_action( struct display_message * msg,
                         struct display_globals * ref )
 {
-    char * text = ref->text_state.text_info.text;
     size_t nchars_disp;
     switch( msg->action ) {
         case DA_START:
+        {
+            char * text;
+            ref->text_state.text_info.text = msg->text_info.text;
+            text = ref->text_state.text_info.text;
+            _D1("%s:%d -- handle_msg_action -- DA_START - '%s'\n", __FILE__, __LINE__, text);
             ref->text_state.length = strlen( text );
             nchars_disp = ref->text_print_fn( text );
             if( nchars_disp == ref->text_state.length ) {
@@ -51,9 +61,11 @@ void handle_msg_action( struct display_message * msg,
                 ref->text_state.next_draw_time = ref->pause_at_beginning_of_text;
             }
             break;
+        }
         case DA_STOP:
         default:
             /* DA_STOP */
+            _D1("%s:%d -- handle_msg_action -- DA_STOP\n", __FILE__, __LINE__);
             ref->text_state.state = SOD_NOT_DISPLAYING;
     }
 }

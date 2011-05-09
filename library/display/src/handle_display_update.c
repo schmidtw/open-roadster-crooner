@@ -20,6 +20,13 @@
 
 #include "handle_display_update.h"
 
+#if (0 < DEBUG)
+#include <stdio.h>
+#define _D1(...) printf(__VA_ARGS__)
+#else
+#define _D1(...)
+#endif
+
 
 /* See handle_display_update.h  for documentation */
 void handle_display_update( struct display_globals * ref )
@@ -31,18 +38,22 @@ void handle_display_update( struct display_globals * ref )
 
     switch( ref->text_state.state ) {
         case SOD_NOT_DISPLAYING:
+            _D1("%s:%d -- SOD_NOT_DISPLAYING\n", __FILE__, __LINE__);
             break;
         case SOD_BEGINNING_OF_TEXT:
+            _D1("%s:%d -- SOD_BEGINNING_OF_TEXT\n", __FILE__, __LINE__);
             nchars_disp = ref->text_print_fn( text );
             ref->text_state.display_offset = 0;
             is_scrolling_message = true;
             break;
         case SOD_END_OF_TEXT:
+            _D1("%s:%d -- SOD_END_OF_TEXT\n", __FILE__, __LINE__);
             ref->text_state.display_offset = ref->text_print_fn( text );
             ref->text_state.state = SOD_BEGINNING_OF_TEXT;
             ref->text_state.next_draw_time = ref->pause_at_beginning_of_text;
             break;
         case SOD_MIDDLE_OF_TEXT:
+            _D1("%s:%d -- SOD_MIDDLE_OF_TEXT\n", __FILE__, __LINE__);
             nchars_disp = ref->text_print_fn( &(text[ref->text_state.display_offset]) );
             is_scrolling_message = true;
             break;
@@ -52,6 +63,7 @@ void handle_display_update( struct display_globals * ref )
              * this part of the loop will redraw the text so
              * the user can see the display again
              */
+            _D1("%s:%d -- SOD_NO_SCROLLING_NEEDED\n", __FILE__, __LINE__);
             ref->text_print_fn( text );
             break;
     }
