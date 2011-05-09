@@ -31,7 +31,7 @@ static inline int av_log2(unsigned int v)
     n = 0;
     if (v & 0xffff0000) {
         v >>= 16;
-        n += 16;
+        n = 16;
     }
     if (v & 0xff00) {
         v >>= 8;
