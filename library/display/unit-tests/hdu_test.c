@@ -46,7 +46,7 @@ void test_not_displaying( void )
     gld.text_info.state = SOD_NOT_DISPLAYING;
     handle_display_update(&gld);
     CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_info.state );
-    CU_ASSERT( SCROLL_SPD == gld.next_draw_time );
+    CU_ASSERT( 0 == gld.text_info.next_draw_time );
 }
 
 void test_beginning_text( void )
@@ -57,7 +57,7 @@ void test_beginning_text( void )
     gld.text_print_fn = fake_print;
     setup_gld_struct(String);
     handle_display_update( &gld );
-    CU_ASSERT( SCROLL_SPD == gld.next_draw_time );
+    CU_ASSERT( SCROLL_SPD == gld.text_info.next_draw_time );
     CU_ASSERT( LED_LENGTH == gld.text_info.display_offset );
     CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
 }
@@ -71,7 +71,7 @@ void test_middle_text( void )
     setup_gld_struct(String);
     gld.text_info.display_offset = 1;
     handle_display_update( &gld );
-    CU_ASSERT( SCROLL_SPD == gld.next_draw_time );
+    CU_ASSERT( SCROLL_SPD == gld.text_info.next_draw_time );
     CU_ASSERT( (LED_LENGTH+1) == gld.text_info.display_offset );
     CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
 }
@@ -85,7 +85,7 @@ void test_end_text( void )
     setup_gld_struct(String);
     gld.text_info.display_offset = LED_LENGTH;
     handle_display_update( &gld );
-    CU_ASSERT( PAUSE_END == gld.next_draw_time );
+    CU_ASSERT( PAUSE_END == gld.text_info.next_draw_time );
     CU_ASSERT( SOD_END_OF_TEXT == gld.text_info.state );
 }
 
@@ -98,7 +98,7 @@ void test_restart_text( void )
     setup_gld_struct(String);
     gld.text_info.display_offset = gld.text_info.length;
     handle_display_update( &gld );
-    CU_ASSERT( PAUSE_BEGIN == gld.next_draw_time );
+    CU_ASSERT( PAUSE_BEGIN == gld.text_info.next_draw_time );
     CU_ASSERT( SOD_BEGINNING_OF_TEXT == gld.text_info.state );
 }
 
@@ -110,7 +110,7 @@ void test_no_scrolling_text( void )
     gld.text_print_fn = fake_print;
     setup_gld_struct(String);
     handle_display_update( &gld );
-    CU_ASSERT( SCROLL_SPD == gld.next_draw_time );
+    CU_ASSERT( SCROLL_SPD == gld.text_info.next_draw_time );
     CU_ASSERT( 0 == gld.text_info.display_offset );
     CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_info.state );
 }
@@ -125,7 +125,7 @@ void test_normal_scrolling_middle( void )
     gld.num_characters_to_shift = 1;
     gld.text_info.display_offset = 1;
     handle_display_update( &gld );
-    CU_ASSERT( SCROLL_SPD == gld.next_draw_time );
+    CU_ASSERT( SCROLL_SPD == gld.text_info.next_draw_time );
     CU_ASSERT( 2 == gld.text_info.display_offset );
     CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
 }

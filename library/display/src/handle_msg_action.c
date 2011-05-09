@@ -51,7 +51,7 @@ void handle_msg_action( struct display_message * msg,
                  * the redraw period will be the same as the scroll
                  * speed
                  */
-                ref->next_draw_time = ref->scroll_speed;
+                ref->text_info.next_draw_time = ref->scroll_speed;
             } else {
                 ref->text_info.state = SOD_MIDDLE_OF_TEXT;
                 if( ref->num_characters_to_shift < nchars_disp ) {
@@ -59,7 +59,7 @@ void handle_msg_action( struct display_message * msg,
                 } else {
                     ref->text_info.display_offset = nchars_disp;
                 }
-                ref->next_draw_time = ref->pause_at_beginning_of_text;
+                ref->text_info.next_draw_time = ref->pause_at_beginning_of_text;
             }
             break;
         }

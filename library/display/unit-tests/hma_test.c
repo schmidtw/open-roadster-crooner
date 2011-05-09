@@ -57,6 +57,7 @@ void test_stop_action( void )
     msg.action = DA_STOP;
     handle_msg_action(&msg, &gld);
     CU_ASSERT( SOD_NOT_DISPLAYING == gld.text_info.state );
+    CU_ASSERT( 0 == gld.text_info.next_draw_time );
 }
 
 void test_start_action( void )
@@ -70,7 +71,7 @@ void test_start_action( void )
     gld.text_print_fn = fake_print;
     handle_msg_action(&msg,  &gld);
     CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
-    CU_ASSERT( PAUSE_BEGIN == gld.next_draw_time );
+    CU_ASSERT( PAUSE_BEGIN == gld.text_info.next_draw_time );
     CU_ASSERT( gld.num_characters_to_shift == gld.text_info.display_offset );
 }
 
@@ -85,7 +86,7 @@ void test_start_action_short_string( void )
     gld.text_print_fn = fake_print;
     handle_msg_action(&msg, &gld);
     CU_ASSERT( SOD_NO_SCROLLING_NEEDED == gld.text_info.state );
-    CU_ASSERT( SCROLL_SPD == gld.next_draw_time );
+    CU_ASSERT( SCROLL_SPD == gld.text_info.next_draw_time );
 }
 
 void test_start_action_slow_scroll( void )
@@ -100,7 +101,7 @@ void test_start_action_slow_scroll( void )
     gld.text_print_fn = fake_print;
     handle_msg_action(&msg, &gld);
     CU_ASSERT( SOD_MIDDLE_OF_TEXT == gld.text_info.state );
-    CU_ASSERT( PAUSE_BEGIN == gld.next_draw_time );
+    CU_ASSERT( PAUSE_BEGIN == gld.text_info.next_draw_time );
     CU_ASSERT( gld.num_characters_to_shift == gld.text_info.display_offset );
 }
 

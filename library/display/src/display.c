@@ -143,6 +143,7 @@ void display_main( void * parameters )
     struct timeval tv;
     struct timezone tz;
     struct display_message msg;
+    uint32_t wait_period;
     bool recieved_message;
     
     _D1("%s:%d -- display_main() thread started\n", __FILE__, __LINE__);
@@ -152,7 +153,11 @@ void display_main( void * parameters )
 
     while(1) {
         struct timeval now;
-        recieved_message = os_queue_receive( gld.os.queue_handle, &msg, gld.scroll_speed );
+        wait_period = gld.next_draw_time;
+        if( 0 == wait_period ) {
+            wait_period = WAIT_FOREVER;
+        }
+        recieved_message = os_queue_receive( gld.os.queue_handle, &msg, wait_period );
         
         if( 0 != gettimeofday(&now, &tz) ) {
             /* We didn't get a valid time, so use the time we have in tv */
@@ -173,8 +178,8 @@ void display_main( void * parameters )
         } else {
             uint32_t delta = __get_time_delta(&now, &tv);
 
-            _D1("%s:%d --no msg received -- delta %ld -- next draw time %ld\n", __FILE__, __LINE__, delta, gld.next_draw_time);
-            if( delta >= gld.next_draw_time ) {
+            _D1("%s:%d --no msg received -- delta %ld -- next draw time %ld\n", __FILE__, __LINE__, delta, gld.text_info.next_draw_time);
+            if( delta >= gld.text_info.next_draw_time ) {
                 handle_display_update( &gld );
             } else {
                 gld.next_draw_time -= delta;

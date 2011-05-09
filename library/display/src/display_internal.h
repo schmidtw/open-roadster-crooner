@@ -26,6 +26,7 @@ struct text_display_state {
     size_t length;
     size_t display_offset;
     state_of_display_t state;
+    uint32_t next_draw_time;
     char * text;
 };
 
@@ -43,7 +44,6 @@ struct display_globals {
         semaphore_handle_t mutex_handle;
         task_handle_t task_handle;
     } os;
-    uint32_t next_draw_time;
     uint16_t identifier;
     bool valid;
     bool repeat;

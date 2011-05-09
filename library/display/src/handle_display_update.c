@@ -34,11 +34,12 @@ void handle_display_update( struct display_globals * ref )
     bool is_scrolling_message = false;
     size_t nchars_disp = 0;
     char * text = ref->text_info.text;
-    ref->next_draw_time = ref->scroll_speed;
+    ref->text_info.next_draw_time = ref->scroll_speed;
 
     switch( ref->text_info.state ) {
         case SOD_NOT_DISPLAYING:
             _D1("%s:%d -- SOD_NOT_DISPLAYING\n", __FILE__, __LINE__);
+            ref->text_info.next_draw_time = 0;
             break;
         case SOD_BEGINNING_OF_TEXT:
             _D1("%s:%d -- SOD_BEGINNING_OF_TEXT\n", __FILE__, __LINE__);
@@ -50,7 +51,7 @@ void handle_display_update( struct display_globals * ref )
             _D1("%s:%d -- SOD_END_OF_TEXT\n", __FILE__, __LINE__);
             ref->text_info.display_offset = ref->text_print_fn( text );
             ref->text_info.state = SOD_BEGINNING_OF_TEXT;
-            ref->next_draw_time = ref->pause_at_beginning_of_text;
+            ref->text_info.next_draw_time = ref->pause_at_beginning_of_text;
             break;
         case SOD_MIDDLE_OF_TEXT:
             _D1("%s:%d -- SOD_MIDDLE_OF_TEXT\n", __FILE__, __LINE__);
@@ -70,7 +71,7 @@ void handle_display_update( struct display_globals * ref )
     if( true == is_scrolling_message ) {
         if( ref->text_info.length == (ref->text_info.display_offset + nchars_disp) ) {
             ref->text_info.state = SOD_END_OF_TEXT;
-            ref->next_draw_time = ref->pause_at_end_of_text;
+            ref->text_info.next_draw_time = ref->pause_at_end_of_text;
         } else {
             ref->text_info.state = SOD_MIDDLE_OF_TEXT;
             if( ref->num_characters_to_shift < nchars_disp ) {
