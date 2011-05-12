@@ -45,18 +45,6 @@ typedef void* (*ui_user_data_init_fct)( void );
 typedef void (*ui_user_data_destroy_fct)( void *user_data );
 
 /**
- *  Used to get the directory map list for the database
- *
- *  @note Returned map must remain valid until the release function
- *        is called.
- *
- *  @param size the size of the array in entries
- *
- *  @return map array of directories to map to buttons
- */
-typedef const char** (*ui_dir_map_get_fct)( size_t *size );
-
-/**
  *  Used to release the directory map list.
  *
  *  @param map the array of directories to release
@@ -129,7 +117,6 @@ typedef struct {
     const char *name;
     const ui_user_data_init_fct     ui_user_data_init_fn;       /* Optional */
     const ui_user_data_destroy_fct  ui_user_data_destroy_fn;    /* Optional */
-    const ui_dir_map_get_fct        ui_dir_map_get_fn;
     const ui_dir_map_release_fct    ui_dir_map_release_fn;      /* Optional */
     const ui_get_disc_info_fct      ui_get_disc_info_fn;
     const ui_process_command_fct    ui_process_command_fn;
@@ -171,7 +158,6 @@ bool ui_select( const char *name );
 /*----------------------------------------------------------------------------*/
 void* ui_user_data_init( void );
 void ui_user_data_destroy( void *user_data );
-const char** ui_dir_map_get( size_t *size );
 void ui_dir_map_release( const char **map );
 void ui_get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
                        song_node_t **song, void *user_data );

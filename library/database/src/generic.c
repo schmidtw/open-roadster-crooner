@@ -147,9 +147,9 @@ ll_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
                 name_size = MAX_ARTIST_NAME;
                 name_loc = generic_n->name.artist;
                 break;
-            case GNT_GROUP:
-                name_size = MAX_GROUP_NAME;
-                name_loc = generic_n->name.group;
+            case GNT_ROOT:
+                name_size = MAX_ROOT_NAME;
+                name_loc = generic_n->name.root;
                 break;
             case GNT_SONG:
             default:

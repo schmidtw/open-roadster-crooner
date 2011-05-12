@@ -1,5 +1,6 @@
 #include <CUnit/Basic.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "database.h"
 #include "internal_database.h"
 #include "database_print.h"
@@ -9,14 +10,10 @@
 
 root_database_node_t rdn;
 
-media_status_t fake_play( const char *filename,
-                          const double gain,
-                          const double peak,
-                          xQueueHandle idle,
-                          const size_t queue_size,
-                          media_malloc_fn_t malloc_fn,
-                          media_free_fn_t free_fn,
-                          media_command_fn_t command_fn )
+media_status_t fake_play( generic_node_t * root,
+                          media_metadata_t * metadata,
+                          media_play_fn_t play_fn,
+                          char * file_location )
 {
     return MI_RETURN_OK;
 }
@@ -48,95 +45,73 @@ void create_simple_database( void )
     ll_node_t * node;
     media_metadata_t metadata;
     
-    node = get_new_generic_node(GNT_GROUP, "1");
+    node = get_new_generic_node(GNT_ROOT, "root");
     CU_ASSERT( NULL != node );
-    ll_append( &rdn.groups, node );
-    rdn.size_list++;
     rdn.initialized = true;
-    
-    group = (generic_node_t *)rdn.groups.head->data;
+    rdn.root = (generic_node_t*)node->data;
+    group = rdn.root;
     
     setup_metadata(&metadata, "A Me", "Brushfire Fairytales", "Inaudible Melodies", 1);
 
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here" );
     CU_ASSERT( NULL != so_n );
     
     setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Inaudible Melodies", 2);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
 
     setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Middle Man", 1);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
     
     setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Better Together", 1);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
     setup_metadata(&metadata, "Jack Johnson", "In between dreams", "Never Know", 2);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here");
-    CU_ASSERT( NULL != so_n );
-    index_groups( &rdn.groups );
-}
-
-void create_multi_group_database() {
-    generic_node_t * group;
-    song_node_t * so_n;
-    ll_node_t * node;
-    media_metadata_t metadata;
-    
-    database_purge();
-
-    node = get_new_generic_node(GNT_GROUP, "1");
-    CU_ASSERT( NULL != node );
-    ll_append( &rdn.groups, node );
-    rdn.size_list++;
-    node = get_new_generic_node(GNT_GROUP, "2");
-    CU_ASSERT( NULL != node );
-    ll_append( &rdn.groups, node );
-    rdn.size_list++;
-    node = get_new_generic_node(GNT_GROUP, "3");
-    CU_ASSERT( NULL != node );
-    ll_append( &rdn.groups, node );
-    rdn.size_list++;
-    rdn.initialized = true;
-    
-    group = (generic_node_t *)rdn.groups.head->data;
-    
-    setup_metadata(&metadata, "A Me", "Brushfire Fairytales", "Inaudible Melodies", 1);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
-    CU_ASSERT( NULL != so_n );
-    
-    setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Inaudible Melodies", 2);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
-    CU_ASSERT( NULL != so_n );
-    setup_metadata(&metadata, "Jack Johnson", "Brushfire Fairytales", "Middle Man", 1);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
-    CU_ASSERT( NULL != so_n );
-    /* Add the exact same song again */
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
-    CU_ASSERT( NULL != so_n );
-    
-    /* Add the same song with different gain */
-    metadata.track_gain = 1;
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
 
-    group = (generic_node_t *)group->node.next->data;
-    setup_metadata(&metadata, "Green Day", "In between dreams", "Better Together", 1);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
-    CU_ASSERT( NULL != so_n );
-    setup_metadata(&metadata, "Green Day", "In between dreams", "Never Know", 2);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "Frank Sinatra", 1);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
 
-    group = (generic_node_t *)group->node.next->data;
-    setup_metadata(&metadata, "Muse", "In between dreams", "Better Together", 1);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "The Distance", 2);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
-    setup_metadata(&metadata, "Muse", "In between dreams", "Never Know", 2);
-    so_n = add_song_to_group(group, &metadata, fake_play, "Here" );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "Friend is a Four Letter Word", 3);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
     CU_ASSERT( NULL != so_n );
-    index_groups( &rdn.groups );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "Open Book", 4);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "Daria", 5);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "Race Car Ya-Yas", 6);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "I Will Survive", 7);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "Stickshifts and Safetybelts", 8);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "Perhaps, Perhaps, Perhaps", 9);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+
+    setup_metadata(&metadata, "Cake", "Fashion Nugget", "It's Coming Down", 10);
+    so_n = add_song_to_root(group, &metadata, fake_play, "Here");
+    CU_ASSERT( NULL != so_n );
+
+    index_root( &(rdn.root->node) );
 }
 
 void print_song_info( song_node_t * node )
@@ -145,7 +120,7 @@ void print_song_info( song_node_t * node )
         printf("Oops, the song is NULL\n");
     } else {
         printf( "%s -> %s -> %s -> %s\n",
-                node->d.parent->parent->parent->name.group,
+                node->d.parent->parent->parent->name.root,
                 node->d.parent->parent->name.artist,
                 node->d.parent->name.album,
                 node->d.name.song );
@@ -157,43 +132,6 @@ void test_simple_test( void )
     database_purge();
     create_simple_database();
     database_print();
-    database_purge();
-    database_print();
-}
-
-void test_group_test( void )
-{
-    song_node_t * so_n = NULL;
-    create_multi_group_database();
-
-    database_print();
-
-    CU_ASSERT( DS_FAILURE == next_song(NULL, DT_NEXT, DL_GROUP) );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_GROUP) );
-    printf("First Group -- Song: ");
-    print_song_info( so_n );
-
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_GROUP) );
-    printf("Next Group -- Song: ");
-    print_song_info( so_n );
-
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_GROUP) );
-    printf("Next Group -- Song: ");
-    print_song_info( so_n );
-
-    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_NEXT, DL_GROUP) );
-    printf("Next Group -- Song: ");
-    print_song_info( so_n );
-
-    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_GROUP) );
-    printf("Prev Group -- Song: ");
-    print_song_info( so_n );
-
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_GROUP) );
-    printf("Prev Group -- Song: ");
-    print_song_info( so_n );
-
-
     database_purge();
     database_print();
 }
@@ -218,7 +156,7 @@ void test_next_song( void )
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_SONG) );
     printf("Next Song: ");
     print_song_info( so_n );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_ALBUM) );
+    CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_NEXT, DL_ALBUM) );
     printf("Next Album: ");
     print_song_info( so_n );
     database_purge();
@@ -250,22 +188,12 @@ void test_random_song( void )
 {
     int ii;
     song_node_t * so_n = NULL;
-    create_multi_group_database();
+    create_simple_database();
     printf("\n");
     CU_ASSERT( DS_FAILURE == next_song(NULL, DT_RANDOM, DL_SONG) );
     srand(11);
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_SONG) );
     printf("Random Song: ");
-    print_song_info( so_n );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
-    printf("Random Group: ");
-    print_song_info( so_n );
-    srand(2);
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
-    printf("Random Group: ");
-    print_song_info( so_n );
-    CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_GROUP) );
-    printf("Random Group: ");
     print_song_info( so_n );
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_ALBUM) );
     printf("Random Album: ");
@@ -283,7 +211,6 @@ void add_suites( CU_pSuite *suite )
 {
     *suite = CU_add_suite( "Print Test", NULL, NULL );
     CU_add_test( *suite, "Test Simple Print   ", test_simple_test );
-    CU_add_test( *suite, "Test Group Print    ", test_group_test );
     CU_add_test( *suite, "Test Next Song Print", test_next_song );
     CU_add_test( *suite, "Test Prev Song Print", test_previous_song );
     CU_add_test( *suite, "Test Rand Song Print", test_random_song );

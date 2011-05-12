@@ -71,7 +71,6 @@ bool ui_register( const ui_impl_t *impl )
     if( (NULL == impl) ||
         (NULL == impl->name) ||
         (0 == strlen(impl->name)) ||
-        (NULL == impl->ui_dir_map_get_fn) ||
         (NULL == impl->ui_get_disc_info_fn) ||
         (NULL == impl->ui_process_command_fn) )
     {
@@ -127,12 +126,6 @@ void ui_user_data_destroy( void *user_data )
     if( NULL != __current->ui_user_data_destroy_fn ) {
         (*__current->ui_user_data_destroy_fn)( user_data );
     }
-}
-
-/* See user-interface.h for details. */
-const char** ui_dir_map_get( size_t *size )
-{
-    return (*__current->ui_dir_map_get_fn)( size );
 }
 
 /* See user-interface.h for details. */

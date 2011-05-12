@@ -9,7 +9,7 @@
 
 static ll_ir_t scrubber(ll_node_t *node, volatile void *user_data);
 
-song_node_t * add_song_to_group( generic_node_t * group,
+song_node_t * add_song_to_root( generic_node_t * root,
         media_metadata_t * metadata,
         media_play_fn_t play_fn,
         char * file_location )
@@ -21,7 +21,7 @@ song_node_t * add_song_to_group( generic_node_t * group,
     bool album_created = false;
     
     if( NULL != metadata ) {
-        artist_n = find_or_create_generic( group, generic_compare,
+        artist_n = find_or_create_generic( root, generic_compare,
                 get_new_generic_node, (void*)metadata->artist,
                 &artist_created );
         if( NULL != artist_n ) {

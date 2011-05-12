@@ -22,7 +22,7 @@
  *        
  * @return pointer to the song on Success.  On failure NULL is returned.
  */
-song_node_t * add_song_to_group( generic_node_t * group,
+song_node_t * add_song_to_root( generic_node_t * group,
         media_metadata_t * metadata,
         media_play_fn_t play_fn,
         char * file_location );

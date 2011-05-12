@@ -13,10 +13,11 @@ typedef struct {
 ll_ir_t index_generic( ll_node_t *node, volatile void *user_data );
 
 
-void index_groups( ll_list_t * groups )
+void index_root( ll_node_t * root )
 {
     indexer_t indexer = {.song_index=0, .identifier_in_list=1};
-    ll_iterate(groups, index_generic, NULL, &indexer);
+    ll_iterate( &((generic_node_t*)root->data)->children, index_generic, NULL, &indexer);
+    ((generic_node_t*)root->data)->d.list.index_songs_stop = indexer.song_index -1;
 }
 
 ll_ir_t index_generic( ll_node_t *node, volatile void *user_data )

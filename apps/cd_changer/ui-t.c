@@ -79,7 +79,6 @@ typedef struct {
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static void* __get_user_data();
-static const char** __dir_map_get( size_t *size );
 static void __get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
                              song_node_t **song, void *user_data );
 static void __process_command( irp_state_t *device_status,
@@ -120,14 +119,13 @@ static const ui_impl_t __impl = {
     .name = "t",
     .ui_user_data_init_fn = __get_user_data,
     .ui_user_data_destroy_fn = NULL,
-    .ui_dir_map_get_fn = &__dir_map_get,
     .ui_dir_map_release_fn = NULL,
     .ui_get_disc_info_fn = &__get_disc_info,
     .ui_process_command_fn = &__process_command,
     .impl_free = NULL
 };
 
-static bool display_text_state;
+static bool display_text_state = true;
 static bool random_state;
 static bool scan_state;
 
@@ -151,15 +149,6 @@ static void* __get_user_data()
 
     h.valid = 0;
     return &h;
-}
-
-/* See user-interface.h for details. */
-static const char** __dir_map_get( size_t *size )
-{
-    _D2("__dir_map_get() - %d\n", __LINE__);
-    *size = DIR_MAP_SIZE;
-
-    return NULL;
 }
 
 /* See user-interface.h for details. */
@@ -255,7 +244,7 @@ static void __process_command( irp_state_t *device_status,
             case IRP_CMD__PLAY:
                 if( NULL == *song ) {
                     if( is_random_enabled() ) {
-                        next_song( song, DT_RANDOM, DL_GROUP );
+                        next_song( song, DT_RANDOM, DL_ARTIST );
                     } else {
                         /* Not in the random mode */
                         next_song( song, DT_NEXT, DL_SONG );
@@ -471,7 +460,7 @@ static uint8_t __map_get( void )
     map = 0x00;
     song = NULL;
     
-    if( DS_SUCCESS == next_song( &song, DT_NEXT, DL_GROUP ) ) {
+    if( DS_SUCCESS == next_song( &song, DT_NEXT, DL_ARTIST) ) {
         /* Generate the map file from the enum disc_mode_t */
         disc_mode_t dm = DM_ARTIST;
         _D2("__map_get - found database\n");

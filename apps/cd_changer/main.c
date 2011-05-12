@@ -25,7 +25,6 @@
 #include "radio-interface.h"
 #include "device-status.h"
 #include "user-interface.h"
-#include "ui-default.h"
 #include "ui-t.h"
 
 #define ENABLE_STATUS_TASK      0

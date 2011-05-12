@@ -43,14 +43,13 @@ db_status_t next_song( song_node_t ** current_song,
     
     if(    ( false == rdn.initialized )
         || ( NULL == current_song )
-        || ( NULL == rdn.groups.head )
-        || ( NULL == rdn.groups.tail ) )
+        || ( 0 == rdn.root->d.list.size ) )
     {
         return DS_FAILURE;
     }
     
     if( NULL == *current_song ) {
-        generic_n = (generic_node_t *)rdn.groups.head->data;
+        generic_n = (generic_node_t *)rdn.root->children.head->data;
         while( GNT_SONG != generic_n->type ) {
             if( NULL == generic_n->children.head ) {
                 return DS_FAILURE;
@@ -64,8 +63,6 @@ db_status_t next_song( song_node_t ** current_song,
     }
     generic_n = (generic_node_t*)*current_song;
     switch( level ) {
-        case DL_GROUP:
-            generic_n = (generic_node_t*)generic_n->parent;
         case DL_ARTIST:
             generic_n = (generic_node_t*)generic_n->parent;
         case DL_ALBUM:
@@ -79,11 +76,7 @@ db_status_t next_song( song_node_t ** current_song,
     switch( operation ) {
         case DT_NEXT:
             if( NULL == generic_n->node.next ) {
-                if( GNT_GROUP == generic_n->type ) {
-                    generic_n = (generic_node_t*)rdn.groups.head->data;
-                } else {
-                    generic_n = (generic_node_t*)generic_n->parent->children.head->data;
-                }
+                generic_n = (generic_node_t*)generic_n->parent->children.head->data;
                 rv = DS_END_OF_LIST;
             } else {
                 generic_n = (generic_node_t*)generic_n->node.next->data;
@@ -92,11 +85,7 @@ db_status_t next_song( song_node_t ** current_song,
             break;
         case DT_PREVIOUS:
             if( NULL == generic_n->node.prev ) {
-                if( GNT_GROUP == generic_n->type ) {
-                    generic_n = (generic_node_t*)rdn.groups.tail->data;
-                } else {
-                    generic_n = (generic_node_t*)generic_n->parent->children.tail->data;
-                }
+                generic_n = (generic_node_t*)generic_n->parent->children.tail->data;
                 rv = DS_END_OF_LIST;
             } else {
                 generic_n = (generic_node_t*)generic_n->node.prev->data;
@@ -107,21 +96,6 @@ db_status_t next_song( song_node_t ** current_song,
             /* DT_RANDOM */
             rv = DS_SUCCESS;
             switch( level ) {
-                case DL_GROUP:
-                {
-                    /* The group list is 1 larger than the random range 
-                     * function is expecting.
-                     */
-                    int ii;
-                    uint32_t random_number = random_number_in_range(0, (rdn.size_list-1));
-                    generic_n = (generic_node_t *) rdn.groups.head->data;
-                    
-                    for(ii = 0; ii < random_number; ii++) {
-                        generic_n = (generic_node_t *)generic_n->node.next->data;
-                    }
-                    generic_n = (generic_node_t*)generic_n->children.head->data;
-                }
-                    /* Break left out on purpose */
                 case DL_ARTIST:
                 case DL_ALBUM:
                 default: /* DL_SONG */
@@ -144,7 +118,7 @@ db_status_t next_song( song_node_t ** current_song,
     }
     if( NULL != generic_n ) {
         switch( generic_n->type ) {
-            case GNT_GROUP:
+            case GNT_ROOT:
                 generic_n = (generic_node_t*)generic_n->children.head->data;
             case GNT_ARTIST:
                 generic_n = (generic_node_t*)generic_n->children.head->data;
@@ -166,11 +140,6 @@ generic_node_t * find_random_song_from_generic( generic_node_t * generic, uint32
     uint32_t random_song_index = random_number_in_range(first_song_index, last_song_index);
 
     while( NULL != generic_n ) {
-        printf("Generic Type: %s\n",
-                generic_n->type==GNT_SONG?"SONG":
-                generic_n->type==GNT_ALBUM?"ALBUM":
-                generic_n->type==GNT_ARTIST?"ARTIST":
-                        "GROUP");
         if( GNT_SONG == generic_n->type ) {
             if( random_song_index == ((song_node_t*)generic_n)->index_songs_value ) {
                 return generic_n;

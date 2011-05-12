@@ -12,6 +12,7 @@ SOURCES = \
   database_populate.c \
   database_print.c \
   database_purge.c \
+  file_helper.c \
   file_os_wrapper.c \
   indexer.c \
   init_database.c \

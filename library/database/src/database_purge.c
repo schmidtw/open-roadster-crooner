@@ -21,6 +21,7 @@
 /* See database.h for information */
 void database_purge( void )
 {
-    ll_delete_list(&rdn.groups, delete_generic, NULL);
-    rdn.size_list = 0;
+    if( NULL != rdn.root ) {
+        delete_generic(&(rdn.root->node), NULL);
+    }
 }

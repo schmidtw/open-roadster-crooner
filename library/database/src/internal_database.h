@@ -5,11 +5,8 @@
 #include <linked-list/linked-list.h>
 #include "database.h"
 
-#define MAX_NUMBER_GROUPS 6
-
 typedef struct {
-    ll_list_t groups;
-    uint32_t size_list;
+    generic_node_t *root;
     bool initialized;
 } root_database_node_t;
 

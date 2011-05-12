@@ -368,11 +368,7 @@ static void __dbase_task( void *params )
         os_queue_receive( __ri_idle, &ri_msg, WAIT_FOREVER );
 
         if( DBASE__POPULATE == dbase_msg->cmd ) {
-            size_t size;
-            const char **map;
-
-            map = ui_dir_map_get( &size ); 
-            ri_msg->d.dbase.success = populate_database( map, size, "/" );
+            ri_msg->d.dbase.success = populate_database( "/" );
         } else {
             database_purge();
             ri_msg->d.dbase.success = true;

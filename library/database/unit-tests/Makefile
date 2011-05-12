@@ -3,7 +3,16 @@ QUIET = @
 
 TESTS = \
         print_test \
+        file_helper_test
 
+file_helper_test__INCLUDES = \
+  . \
+  ../src \
+  ../../../bins/include
+
+file_helper_test__SOURCES = \
+  ../src/file_helper.c
+  
 print_test__INCLUDES = . \
                          ../src \
                          ../../../bins/include

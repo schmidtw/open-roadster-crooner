@@ -22,7 +22,6 @@
 #include "database_print.h"
 
 #define DISPLAY_OFFSET          2
-#define MAX_DISPLAY_GROUP_LEN   12
 #define MAX_DISPLAY_ARTIST_LEN  20
 #define MAX_DISPLAY_ALBUM_LEN   20
 #define MAX_DISPLAY_SONG_LEN    30
@@ -35,41 +34,19 @@ void database_print( void )
     generic_node_t * gn;
     
     printf("==== Database ==========================\n");
-    if( NULL != rdn.groups.head ) {
-        gn = (generic_node_t *)rdn.groups.head->data;
+    if(    ( NULL != rdn.root )
+        && ( NULL != rdn.root->children.head ) )
+    {
+        printf(" root (%lu-%lu)\n", rdn.root->d.list.index_songs_start, rdn.root->d.list.index_songs_stop);
+        gn = (generic_node_t *)rdn.root->children.head->data;
         while( NULL != gn ) {
-            group_print( gn, DISPLAY_OFFSET );
+            artist_print( gn, DISPLAY_OFFSET );
             if( NULL != gn->node.next ) {
                 gn = (generic_node_t *)gn->node.next->data;
                 printf("------------------------------\n");
             } else {
                 break;
             }
-        }
-    }
-}
-
-void group_print( generic_node_t * group, int spaces )
-{
-    generic_node_t *ar_n;
-    
-    printf("%*.*s Group: %lu-(%lu-%lu) %-*.*s\n",
-            spaces, spaces, " ",
-            group->d.list.index,
-            group->d.list.index_songs_start,
-            group->d.list.index_songs_stop,
-            MAX_DISPLAY_GROUP_LEN, MAX_DISPLAY_GROUP_LEN, group->name.group );
-    if( NULL == group->children.head ) {
-        printf("%*.*s Why are the artists NULL?\n", spaces, spaces, " ");
-        return;
-    }
-    ar_n = (generic_node_t *)group->children.head->data;
-    while( NULL != ar_n ) {
-        artist_print( ar_n, (spaces + MAX_DISPLAY_GROUP_LEN + 8 ) );
-        if( NULL != ar_n->node.next ) {
-            ar_n = (generic_node_t *)ar_n->node.next->data;
-        } else {
-            break;
         }
     }
 }

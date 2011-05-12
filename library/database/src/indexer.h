@@ -3,6 +3,6 @@
 
 #include <linked-list/linked-list.h>
 
-void index_groups( ll_list_t * groups );
+void index_root( ll_node_t * root );
 
 #endif /* __INDEXER_H__ */

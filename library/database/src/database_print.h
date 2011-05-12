@@ -9,7 +9,6 @@ void database_print( void );
  * @param spaces Number of blank spaces to be printed before
  *        the name
  */
-void group_print( generic_node_t * group, int spaces );
 void artist_print( generic_node_t * artist, int spaces );
 void album_print( generic_node_t * album, int spaces );
 void song_print( generic_node_t * song, int spaces );

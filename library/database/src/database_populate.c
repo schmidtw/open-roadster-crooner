@@ -28,62 +28,46 @@
 #include "file_os_wrapper.h"
 #include "mi_interface.h"
 #include "generic.h"
+#include "file_helper.h"
 
 #define DEBUG_DUMP_LIST 0
 
 bool setup_group_name( const char * name );
-generic_node_t * find_group_node( const char * dir_name );
-bool place_songs_into_group( generic_node_t * gn, char * dir_name );
-bool get_last_dir_name( char * dest, char * src );
-void append_to_path( char * dest, const char * src );
 bool iterate_to_dir_entry( const char * dir_name );
-bool put_songs_into_groups( const char * RootDirectory );
-bool normalize_artists_in_unknown_group_to_unused_groups( void );
-ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data );
-ll_ir_t count_unused_nodes( ll_node_t *node, volatile void *user_data );
-ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data );
+bool put_songs_into_root( const char * RootDirectory );
 
 
 /**
  * The structure of the pools are:
- * Root[1] -> Groups[6] -> Artist[0-N] -> Albums[0-N] -> Song[1]
+ * Root[1] -> Artist[0-N] -> Albums[0-N] -> Song[1]
  * 
- * Root->Group[0]->Artist[0]->Album[0]->Song
- *                                    ->Song
- *                                    ->Song
- *                          ->Album[1]->Song
- *                                    ->Song
- *               ->Artist[1]->Album[0]->Song
- *                                    ->Song
- *     ->Group[1]->Artist[0]->Album[0]->Song
+ * Root->Artist[0]->Album[0]->Song
+ *                          ->Song
+ *                          ->Song
+ *                ->Album[1]->Song
+ *                          ->Song
+ *     ->Artist[1]->Album[0]->Song
+ *                          ->Song
+ *     ->Artist[0]->Album[0]->Song
  *     .
  *     .
  *     .
- *     ->Group[5]->Artist[0]->Album[0]->Song
+ *     ->Artist[0]->Album[0]->Song
  * 
  * Searches all directories for supported file types which can be played
  * and places the metadata of the files into the database.
  * 
  * ** WARNING ** this call will take a long time.
  * 
- * @param directory NULL terminated string which is the name of a root folder.
- *              If a root directory matches the string, then all music files
- *              in that folder and sub-folders will be placed in the
- *              corresponding group.  A NULL directory will allow that group
- *              to be assigned UNKNOWN root folders.
- * @param num_directories The number of char * pointers in the directory
- *              parameter.
  * @param RootDirectory the identifier which is the location of the root
  *        filesystem.  NULL terminated string.
  *        
  * @return true if the database was properly created and setup.  False
  *         otherwise.
  */
-bool populate_database( const char ** directory,
-                        const size_t num_directories,
-                        const char * RootDirectory )
+bool populate_database( const char * RootDirectory )
 {
-    size_t ii;
+    ll_node_t * root;
     
     database_purge();
     
@@ -91,29 +75,16 @@ bool populate_database( const char ** directory,
         goto failure;
     }
     
-    ll_init_list( &(rdn.groups) );
-    for(ii=0;ii<num_directories;ii++) {
-        if( NULL != directory[ii] ) {
-            if( false == setup_group_name(directory[ii]) ) {
-                goto failure;
-            }
-            rdn.size_list++;
-        }
-    }
-    /* Create an extra group which will be the tail of the list
-     * and will receive all of the unsorted media files
-     */
-    if( false == setup_group_name("Unknown Group") ) {
+    root = get_new_generic_node(GNT_ROOT, "root");
+    if( NULL == root ) {
         goto failure;
     }
-    rdn.size_list++;
-    if(    ( false == put_songs_into_groups(RootDirectory) )
-        || ( false == normalize_artists_in_unknown_group_to_unused_groups() ) )
-    {
+    rdn.root = (generic_node_t *)(root->data);
+
+    if( false == put_songs_into_root(RootDirectory) ) {
         goto failure;
     }
-    ll_iterate(&rdn.groups, remove_unused_group_nodes, delete_generic, NULL);
-    index_groups(&rdn.groups);
+    index_root(&(rdn.root->node));
     
 #if (0 != DEBUG_DUMP_LIST)
     database_print();
@@ -124,221 +95,27 @@ failure:
     return false;
 }
 
-bool normalize_artists_in_unknown_group_to_unused_groups( void )
+bool put_songs_into_root( const char * RootDirectory )
 {
-    generic_node_t * unknown_group;
-    uint8_t number_of_empty_groups = 0;
-    
-    if( NULL == rdn.groups.tail ) {
-        return false;
-    }
-    unknown_group = (generic_node_t *)rdn.groups.tail->data;
-    if( NULL == unknown_group ) {
-        return false;
-    }
-    ll_iterate(&rdn.groups, count_unused_nodes, NULL, &number_of_empty_groups );
-    ll_iterate(&rdn.groups, distribute_unknown_group, NULL, &number_of_empty_groups );
-    return true;
-}
-
-ll_ir_t distribute_unknown_group( ll_node_t *node, volatile void *user_data )
-{
-    generic_node_t * group_n = (generic_node_t *)node->data;
-    generic_node_t * group_unknown_n;
-    generic_node_t * artist_node;
-    uint8_t * count = (uint8_t *)user_data;
-    
-    if( NULL == rdn.groups.tail ) {
-        return LL_IR__STOP;
-    }
-    group_unknown_n = (generic_node_t *)rdn.groups.tail->data;
-    if(    ( NULL == group_unknown_n )
-        || ( 0 == *count ) )
-    {
-        return LL_IR__STOP;
-    }
-    if( 0 == group_n->d.list.size ) {
-        int ii;
-        if( (*count) > group_n->d.list.size ) {
-            ii = 1;
-        } else {
-            ii = group_unknown_n->d.list.size / (*count);
-            ii += (group_unknown_n->d.list.size % (*count)>0?1:0);
-        }
-        for( ; ii > 0 ; ii-- ) {
-            if( NULL == group_unknown_n->children.head ) {
-                return LL_IR__STOP;
-            }
-            artist_node = (generic_node_t *)group_unknown_n->children.head->data;
-            ll_remove( &group_unknown_n->children, &artist_node->node );
-            group_unknown_n->d.list.size--;
-            ll_append( &group_n->children, &artist_node->node );
-            group_n->d.list.size++;
-            artist_node->parent = group_n;
-        }
-        *count = *count - 1;
-    }
-    return LL_IR__CONTINUE;
-}
-
-ll_ir_t count_unused_nodes( ll_node_t *node, volatile void *user_data )
-{
-    generic_node_t * gn = (generic_node_t *)node->data;
-    generic_node_t * unknown_node;
-    uint8_t * count = (uint8_t *)user_data;
-    
-    if( NULL == rdn.groups.tail ) {
-        return LL_IR__STOP;
-    }
-    unknown_node = (generic_node_t *)rdn.groups.tail->data;
-    if( NULL == unknown_node ) {
-        return LL_IR__STOP;
-    }
-    if( gn == unknown_node ) {
-        return LL_IR__STOP;
-    }
-    if( 0 == gn->d.list.size ) {
-        *count = *count + 1;
-    }
-    return LL_IR__CONTINUE;
-}
-
-bool put_songs_into_groups( const char * RootDirectory )
-{
-    char base_dir[MAX_SHORT_FILENAME_PATH_W_NULL];
-    file_info_t file_info;
-    size_t num_chars_base_dir;
+    char last_dir[MAX_SHORT_FILENAME_PATH_W_NULL];
+    char full_path[MAX_SHORT_FILENAME_PATH_W_NULL];
     
     if( NULL == RootDirectory ) {
         return false;
     }
     
-    strcpy( base_dir, RootDirectory );
-    num_chars_base_dir = strlen( base_dir );
-    if( FRV_RETURN_GOOD != open_directory( base_dir ) ) {
-        return false;
-    }
-    
-    while( FRV_RETURN_GOOD == get_next_element_in_directory( &file_info ) ) {
-        /* append the file/dir name to the base dir.  This absolute path
-         * is critical in opening this file/dir for metadata or searching
-         * for more files.
-         */
-        append_to_path( base_dir, file_info.short_filename );
-        if( true == file_info.is_dir ) {
-            bool rv;
-            /* this is a directory, search for the group.  Once we have
-             * the group, call a subroutine which will place all files
-             * in this directory into the correct group.
-             */
-            rv = place_songs_into_group(
-                    find_group_node(file_info.short_filename),
-                    base_dir );
-            if( false == rv ) {
-                return false;
-            }
-            /* Reopen the root directory */
-            base_dir[num_chars_base_dir] = '\0';
-            if(    ( FRV_RETURN_GOOD != open_directory( base_dir ) )
-                || ( false == iterate_to_dir_entry( file_info.short_filename ) ) ) {
-                return false;
-            }
-        } else { /* This is a file */
-            media_status_t rv;
-            media_metadata_t metadata;
-            media_play_fn_t play_fn;
-            /* Place this file into the miscellaneous group */
-            rv = mi_get_information( base_dir, &metadata, &play_fn );
-            if( MI_RETURN_OK == rv ) {
-                if( 0 < metadata.disc_number ) {
-                    metadata.track_number += 1000 * (metadata.disc_number - 1);
-                }
-                add_song_to_group( (generic_node_t *)rdn.groups.tail->data,
-                        &metadata,
-                        play_fn, base_dir );
-            }
-            /* After sending the fully qualified path into add the song
-             * to the group, move the end of the string back to the
-             * proper location
-             */
-            base_dir[num_chars_base_dir] = '\0';
-        }
-    }
-    return true;
-}
-
-ll_ir_t remove_unused_group_nodes( ll_node_t *node, volatile void *user_data )
-{
-    generic_node_t *gn;
-    
-    gn = (generic_node_t *)node->data;
-    if( 0 == gn->d.list.size  ) {
-        return LL_IR__DELETE_AND_CONTINUE;
-    }
-    return LL_IR__CONTINUE;
-}
-
-bool setup_group_name( const char * name )
-{
-    ll_node_t *n;
-    n = get_new_generic_node( GNT_GROUP, (void*)name );
-    if( NULL == n ) {
-        return false;
-    }
-    ll_append(&rdn.groups, n);
-    return true;
-}
-
-generic_node_t * find_group_node( const char * dir_name )
-{
-    generic_node_t * group_n;
-    if( NULL == dir_name ) {
-        return NULL;
-    }
-    if( NULL != rdn.groups.head ) {
-        group_n = (generic_node_t *)rdn.groups.head->data;
-    }
-    while( NULL != group_n ) {
-        if( 0 == strcmp( dir_name, group_n->name.artist ) ) {
-            break;
-        }
-        if( NULL == group_n->node.next ) {
-            group_n = NULL;
-        } else {
-            group_n = (generic_node_t *)group_n->node.next->data;
-        }
-    }
-    
-    if( NULL == group_n ) {
-        if( NULL != rdn.groups.tail ) {
-            return ((generic_node_t *)rdn.groups.tail->data);
-        }
-    }
-    return group_n;
-}
-
-bool place_songs_into_group( generic_node_t * gn, char * dir_name )
-{
-    char last_dir[MAX_SHORT_FILENAME_W_NULL];
-    char full_path[MAX_SHORT_FILENAME_PATH_W_NULL];
-    
-    if( NULL == gn ) {
-        return false;
-    }
-    full_path[0] = '\0';
-    strcpy( full_path, dir_name );
-    /* Open the full_path directory for populating */
+    strcpy( full_path, RootDirectory );
     if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
         return false;
     }
     while( 1 ) {
         file_info_t file_info;
         /* Open the next element in this directory */
-        file_return_value rv = get_next_element_in_directory( &file_info ); 
+        file_return_value rv = get_next_element_in_directory( &file_info );
         if( FRV_END_OF_ENTRIES == rv ) {
             /* We don't have any more files in this directory.
              */
-            if( 0 == strcmp( full_path, dir_name ) ) {
+            if( 0 == strcmp( full_path, RootDirectory ) ) {
                 /* This is the base directory which was passed in.  We
                  * don't want to search folders below this.
                  */
@@ -363,7 +140,7 @@ bool place_songs_into_group( generic_node_t * gn, char * dir_name )
                  * the group, call a subroutine which will place all files
                  * in this directory into the correct group.
                  */
-                
+
                 /* open the found directory for searching */
                 if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
                     return false;
@@ -381,7 +158,7 @@ bool place_songs_into_group( generic_node_t * gn, char * dir_name )
                     if( 0 < metadata.disc_number ) {
                         adjusted_track_number += 1000 * (metadata.disc_number - 1);
                     }
-                    add_song_to_group( gn, &metadata,
+                    add_song_to_root( rdn.root, &metadata,
                             play_fn, full_path );
                 }
                 if( false == get_last_dir_name( junk_filename, full_path ) ) {
@@ -411,79 +188,3 @@ bool iterate_to_dir_entry( const char * dir_name )
     return false;
 }
 
-/**
- * Will remove the last directory from the src and place the
- * string onto the dest ptr.  The dest buff must be able to
- * support short name filesize of 8 characters plus the
- * terminating character.
- * 
- * ex: src * = /blue/black/green
- * result:
- *    dest * = green
- *     src * = /blue/black
- */
-bool get_last_dir_name( char * dest, char * src )
-{
-    char *i_src;
-    char *i_dst;
-    char *last_slash;
-    
-    if(    (NULL == dest)
-        || (NULL == src) ) {
-        return false;
-    }
-    
-    last_slash = NULL;
-    i_src = src;
-    i_dst = dest;
-    while( '\0' != *i_src ) {
-        if( '/' == *i_src ) {
-            last_slash = i_src;
-        }
-        i_src++;
-    }
-    i_src = last_slash;
-    *last_slash = '\0';
-    i_src++;
-    while( '\0' != *i_src ) {
-        *i_dst++ = *i_src++;
-    }
-    *i_dst = '\0';
-    if( last_slash+1 == i_src ) {
-        return false;
-    }
-    return true;
-}
-
-/**
- * Will place the src string plus a '/' onto
- * the end of the dest string.
- * 
- * ex: dest * = /blue/black
- *      src * = green
- * result:
- *     dest * = /blue/black/green
- *     
- * @param dest a buffer large enough to support max_characters+1 more
- *             characters
- * @param src buffer which contains the new string
- */
-void append_to_path( char * dest, const char * src )
-{
-    char *i_dst;
-    bool add_trailing_slash = true;
-    if(    (NULL == dest)
-        || (NULL == src) ) {
-        return;
-    }
-    
-    i_dst = dest;
-    while( '\0' != *i_dst ) {
-        add_trailing_slash = ( '/' != *i_dst );
-        i_dst++;
-    }
-    if( true == add_trailing_slash ) {
-        *i_dst++ = '/';
-    }
-    strcpy( i_dst, src );
-}

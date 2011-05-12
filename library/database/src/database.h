@@ -8,8 +8,8 @@
 #include <linked-list/linked-list.h>
 #include <media-interface/media-interface.h>
 
-#define MAX_GROUP_NAME           24
-#define MAX_GROUP_NAME_W_NULL    (MAX_GROUP_NAME + 1)
+#define MAX_ROOT_NAME            20
+#define MAX_ROOT_NAME_W_NULL     (MAX_ROOT_NAME + 1)
 #define MAX_ARTIST_NAME          MEDIA_ARTIST_LENGTH
 #define MAX_ARTIST_NAME_W_NULL   (MAX_ALBUM_TITLE + 1)
 #define MAX_ALBUM_TITLE          MEDIA_ALBUM_LENGTH
@@ -37,16 +37,16 @@ typedef struct {
 } gain_t;
 
 typedef enum {
-    GNT_GROUP,
+    GNT_ROOT,
     GNT_ARTIST,
     GNT_ALBUM,
     GNT_SONG
 } generic_node_types_t;
 
-typedef struct generic_node{
+typedef struct generic_node {
     generic_node_types_t type;
     union {
-        char group[MAX_GROUP_NAME_W_NULL];
+        char root[MAX_ROOT_NAME_W_NULL];
         char artist[MAX_ARTIST_NAME_W_NULL];
         char album[MAX_ALBUM_TITLE_W_NULL];
         char song[MAX_SONG_TITLE_W_NULL];
@@ -80,8 +80,7 @@ typedef enum {
 typedef enum {
     DL_SONG,
     DL_ALBUM,
-    DL_ARTIST,
-    DL_GROUP
+    DL_ARTIST
 } db_level_t;
 
 typedef enum {
@@ -110,29 +109,29 @@ bool init_database( media_interface_t *mi );
  * @param level The level we want to get the next song.
  * 
  * @note: next_song( NULL, DT_PREVIOUS, DL_SONG ) will result in --
- *        Group[0]->Artist[0]->Album[0]->Song <--- Song returned
- *                                     ->Song
- *                                     ->Song
- *                                     ->Song
- *                           ->Album[1]->Song
+ *  root->Artist[0]->Album[0]->Song <--- Song returned
+ *                           ->Song
+ *                           ->Song
+ *                           ->Song
+ *                 ->Album[1]->Song
  *                           
  * @note: next_song( *ptr, DT_PREVIOUS, DL_ALBUM ) will result in --
- *        Group[0]->Artist[0]->Album[0]->Song <--- Song passed in
- *                                     ->Song
- *                           ->Album[1]->Song
- *                                     ->Song
- *                           ->Album[2]->Song <--- Song returned
- *                                     ->Song
+ *  root->Artist[0]->Album[0]->Song <--- Song passed in
+ *                           ->Song
+ *                 ->Album[1]->Song
+ *                           ->Song
+ *                 ->Album[2]->Song <--- Song returned
+ *                           ->Song
  * 
  * @note  If the song passed in is the 2nd song in an album, the operation
  *        is DT_NEXT, and the level is DL_ALBUM, the new song will be the
  *        first song in the next album.
  *        
- * Root->Group[0]->Artist[0]->Album[0]->Song
- *                                    ->Song <--- Song passed in
- *                                    ->Song
- *                          ->Album[1]->Song <--- Song returned
- *                                    ->Song
+ * root->Artist[0]->Album[0]->Song
+ *                          ->Song <--- Song passed in
+ *                          ->Song
+ *                ->Album[1]->Song <--- Song returned
+ *                          ->Song
  *                                    
  * @return DS_SUCCESS when a new song is found and the current_song pointer
  *         is updated.  DS_END_OF_LIST will place the first song of the
@@ -149,42 +148,32 @@ void database_purge( void );
 
 /**
  * The structure of the pools are:
- * Root[1] -> Groups[6] -> Artist[0-N] -> Albums[0-N] -> Song[1]
+ * root -> Artist[0-N] -> Albums[0-N] -> Song[1]
  * 
- * Root->Group[0]->Artist[0]->Album[0]->Song
- *                                    ->Song
- *                                    ->Song
- *                          ->Album[1]->Song
- *                                    ->Song
- *               ->Artist[1]->Album[0]->Song
- *                                    ->Song
- *     ->Group[1]->Artist[0]->Album[0]->Song
+ * root->Artist[0]->Album[0]->Song
+ *                          ->Song
+ *                          ->Song
+ *                ->Album[1]->Song
+ *                          ->Song
+ *     ->Artist[1]->Album[0]->Song
+ *                          ->Song
+ *     ->Artist[0]->Album[0]->Song
  *     .
  *     .
  *     .
- *     ->Group[5]->Artist[0]->Album[0]->Song
+ *     ->Artist[0]->Album[0]->Song
  * 
  * Searches all directories for supported file types which can be played
  * and places the metadata of the files into the database.
  * 
  * ** WARNING ** this call will take a long time.
  * 
- * @param directory NULL terminated string which is the name of a root folder.
- *              If a root directory matches the string, then all music files
- *              in that folder and sub-folders will be placed in the
- *              corresponding group.  A NULL directory will allow that group
- *              to be assigned UNKOWN root folders.
- * @param num_directories The number of char * pointers in the directory
- *              parameter.
  * @param RootDirectory the identifier which is the location of the root
  *        filesystem.  NULL terminated string.
- * @param fs pointer to the Filesystem which has been opened.
  *        
  * @return true if the database was properly created and setup.  False
  *         otherwise.
  */
-bool populate_database( const char ** directory,
-                        const size_t num_directories,
-                        const char * RootDirectory );
+bool populate_database( const char * RootDirectory );
 
 #endif /* __DATABASE_H__ */
