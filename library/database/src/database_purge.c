@@ -23,5 +23,6 @@ void database_purge( void )
 {
     if( NULL != rdn.root ) {
         delete_generic(&(rdn.root->node), NULL);
+        rdn.root = NULL;
     }
 }
