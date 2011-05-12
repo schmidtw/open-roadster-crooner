@@ -32,7 +32,6 @@
 
 #define DEBUG_DUMP_LIST 0
 
-bool setup_group_name( const char * name );
 bool iterate_to_dir_entry( const char * dir_name );
 bool put_songs_into_root( const char * RootDirectory );
 
