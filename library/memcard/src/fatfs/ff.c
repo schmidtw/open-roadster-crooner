@@ -1780,7 +1780,7 @@ FRESULT create_name (
 			c = excvt[c-0x80];			/* Upper conversion (SBCS) */
 #else
 #if !_DF1S	/* ASCII only cfg */
-			return FR_INVALID_NAME;
+//			return FR_INVALID_NAME;
 #endif
 #endif
 		}
