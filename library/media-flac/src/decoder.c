@@ -275,6 +275,7 @@ static int decode_subframe_lpc(FLACContext *s, int32_t* slow_decoded, int pred_o
         #elif defined(CPU_AVR32)
         lpc_decode_avr32( (s->blocksize - pred_order), qlevel, pred_order,
                           (decoded + pred_order), coeffs, &slow_decoded[0] );
+        memcpy( slow_decoded, decoded, (s->blocksize*sizeof(int32_t)) );
         #else
         for (i = pred_order; i < s->blocksize; i++)
         {
