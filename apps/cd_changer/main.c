@@ -32,7 +32,7 @@
 
 #define ALLOW_USING_SLOW_MEMORY 1
 
-const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Crooner-1.0.7";
+const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Crooner-1.0.12";
 
 static int32_t __sram_offset = 0;
 static int32_t __sram_have = -1;
