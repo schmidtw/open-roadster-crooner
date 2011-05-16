@@ -273,13 +273,6 @@ static int32_t execute_flash_normal( dfu_device_t *device,
         }
     }
 
-    for( i = 0; i < args->flash_address_bottom; i++ ) {
-        if( -1 != hex_data[i] ) {
-            fprintf( stderr, "Attempted to write to illegal memory address.\n" );
-            goto error;
-        }
-    }
-
     DEBUG( "write %d/%d bytes\n", usage, memory_size );
 
     result = atmel_flash( device, hex_data, args->flash_address_bottom,
@@ -543,7 +536,7 @@ static int32_t execute_dump_normal( dfu_device_t *device,
     }
 
     if( false == args->bootloader_at_highmem ) {
-        for( i = 0; i < args->bootloader_top; i++ ) {
+        for( i = 0; i <= args->bootloader_top; i++ ) {
             fprintf( stdout, "%c", 0xff );
         }
     }
