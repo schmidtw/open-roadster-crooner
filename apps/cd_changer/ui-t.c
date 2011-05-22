@@ -163,6 +163,12 @@ static void __get_disc_info( uint8_t *map, uint8_t *disc, uint8_t *track,
     *song = NULL;
 }
 
+typedef enum {
+    NO_DISPLAY_UPDATE = 0,
+    DISPLAY_UPDATE = 1,
+    STOP_DISPLAY
+} display_action_t;
+
 /* See user-interface.h for details. */
 static void __process_command( irp_state_t *device_status,
                                irp_mode_t *device_mode,
@@ -174,7 +180,7 @@ static void __process_command( irp_state_t *device_status,
                                void *user_data )
 {
     irp_cmd_t last;
-    bool shouldSendText = false;
+    display_action_t shouldSendText = NO_DISPLAY_UPDATE;
     bool send_status = true;
     history_t *history = (history_t *) user_data;
 
@@ -326,7 +332,7 @@ static void __process_command( irp_state_t *device_status,
                 *current_disc = msg->d.ibus.disc;
                 *current_track = __find_display_number(*song, *current_disc);
                 *device_status = IRP_STATE__PLAYING;
-                shouldSendText = true;
+                shouldSendText = DISPLAY_UPDATE;
                 break;
 
             case IRP_CMD__GET_STATUS:   /* Never sent. */
@@ -345,7 +351,7 @@ static void __process_command( irp_state_t *device_status,
 
                 *current_track = __find_display_number( *song, *current_disc );
                 *device_status = IRP_STATE__PLAYING;
-                shouldSendText = true;
+                shouldSendText = DISPLAY_UPDATE;
                 break;
 
             case PB_STATUS__PAUSED:
@@ -355,6 +361,7 @@ static void __process_command( irp_state_t *device_status,
                 } else {
                     *device_status = IRP_STATE__STOPPED;
                 }
+                shouldSendText = STOP_DISPLAY;
                 break;
 
             case PB_STATUS__STOPPED:
@@ -365,6 +372,7 @@ static void __process_command( irp_state_t *device_status,
                     *device_status = IRP_STATE__STOPPED;
                 }
                 send_status = false;
+                shouldSendText = STOP_DISPLAY;
                 break;
 
             case PB_STATUS__ERROR:
@@ -389,7 +397,7 @@ static void __process_command( irp_state_t *device_status,
                     __find_song( song, IRP_CMD__SEEK__NEXT, (uint8_t)DM_SONG );
                 }
                 ri_playback_play( *song );
-                shouldSendText = true;
+                shouldSendText = DISPLAY_UPDATE;
                 break;
 //            case PB_STATUS__SCAN_NEXT_SONG:
 //                _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__SCAN_NEXT_SONG\n" );
@@ -397,15 +405,19 @@ static void __process_command( irp_state_t *device_status,
 //                ri_send_state( *device_status, *device_mode, disc_map, *current_disc, *current_track);
 //                __find_song( song, IRP_CMD__SEEK__NEXT, (uint8_t)DM_SONG );
 //                ri_playback_play( *song );
-//                shouldSendText = true;
+//                shouldSendText = DISPLAY_UPDATE;
 //                break;
         }
         if( true == send_status ) {
             ri_send_state( *device_status, *device_mode, disc_map, *current_disc, *current_track );
         }
     }
-    if( true == shouldSendText ) {
+    if( DISPLAY_UPDATE == shouldSendText ) {
         __update_song_display_info(*song, *current_disc);
+    } else if( STOP_DISPLAY == shouldSendText ) {
+#ifdef SUPPORT_TEXT
+        display_stop_text();
+#endif
     }
 
     history_push( history, msg );
@@ -597,6 +609,13 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
  */
 static void __update_song_display_info( song_node_t *song, const uint8_t disc )
 {
+#ifdef SUPPORT_TEXT
+    static char song_buffer[250];
+    uint8_t artist_size = 70;
+    uint8_t album_size = 73;
+    uint8_t song_size = 100;
+    uint16_t temp;
+#endif
     if( false == is_display_enabled() ) {
         return;
     }
@@ -609,7 +628,26 @@ static void __update_song_display_info( song_node_t *song, const uint8_t disc )
             display_start_text(song->d.parent->name.album);
             break;
         case DM_ARTIST:
-            display_start_text(song->d.parent->parent->name.artist);
+            temp = strlen(song->d.parent->parent->name.artist);
+            if( temp < artist_size ) {
+                artist_size = temp;
+            }
+
+            temp = strlen(song->d.parent->name.album);
+            if( temp < album_size ) {
+                album_size = temp;
+            }
+
+            temp = strlen(song->d.name.song);
+            if( temp < song_size ) {
+                song_size = temp;
+            }
+
+            sprintf(song_buffer, "%*s * %*s * %*s",
+                                artist_size, song->d.parent->parent->name.artist,
+                                album_size, song->d.parent->name.album,
+                                song_size, song->d.name.song );
+            display_start_text(song_buffer);
             break;
         case DM_TEXT_DISPLAY:
             display_start_text( "Text Enabled\0" );

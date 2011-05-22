@@ -26,8 +26,16 @@ LIBRARIES = \
             dsp \
             led \
             system-time \
+            display \
             bsp \
             util
+
+#ENABLE_DISPLAY = 1
+
+ifdef ENABLE_DISPLAY
+LIBRARIES += display
+CFLAGS += -DSUPPORT_TEXT=1
+endif
 
 OPTIMIZATIONS = -O0
 

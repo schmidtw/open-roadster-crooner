@@ -173,7 +173,7 @@ int main( void )
     fstream_init( 2, malloc, free );
     system_time_init(1);
 #ifdef SUPPORT_TEXT
-    display_init( ibus_phone_display, 1000, 4000, 2000, 5000, 1, true);
+    display_init( ibus_phone_display, 1000, 4000, 2000, 5000, 3, true);
 #endif
 
     /* Start the RTOS - never returns. */
