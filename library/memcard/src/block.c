@@ -25,6 +25,7 @@
 #include <bsp/pdca.h>
 #include <freertos/os.h>
 
+#include "config.h"
 #include "crc.h"
 #include "io.h"
 #include "memcard.h"
@@ -188,6 +189,7 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
     os_queue_receive( __complete, &msg, WAIT_FOREVER );
     status = (BRS_SUCCESS == msg->state) ? MC_RETURN_OK : MC_ERROR_TIMEOUT;
 
+#if (1 == MC_CHECK_CRCS)
     status = MC_ERROR_TIMEOUT;
     if( BRS_SUCCESS == msg->state ) {
         uint16_t crc, calc_crc;
@@ -198,6 +200,8 @@ mc_status_t block_read( const uint32_t lba, uint8_t *buffer )
             status = MC_RETURN_OK;
         }
     }
+#endif
+
     os_queue_send_to_back( __idle, &msg, WAIT_FOREVER );
 
     _D1( "Got response: 0x%04x\n", status );

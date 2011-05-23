@@ -22,6 +22,7 @@
 
 #define MC_VOLTAGE  3300
 
-#define MC_CHECK_CRCS   0
+#define MC_CHECK_CRCS   1
+#define CRC_FAST        1
 
 #endif

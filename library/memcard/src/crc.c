@@ -23,6 +23,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "config.h"
+
 #include "crc.h"
 
 /*----------------------------------------------------------------------------*/
