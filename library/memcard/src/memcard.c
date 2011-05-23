@@ -370,9 +370,11 @@ static void __automount_task( void *data )
                 __call_all( __card_status );
 
             } else if( MC_UNUSABLE == status ) {
+                _D1( "MC_CARD__UNUSABLE\n" );
                 __card_status = MC_CARD__UNUSABLE;
                 __call_all( __card_status );
             } else {
+                _D1( "Filesystem Unknown\n" );
                 /* The card may have been removed during initialization. */
                 if( true == __isr_card_present() ) {
                     /* Nope, just can't use the card. */
