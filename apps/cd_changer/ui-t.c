@@ -125,7 +125,7 @@ static const ui_impl_t __impl = {
     .impl_free = NULL
 };
 
-static bool display_text_state = true;
+static bool display_text_state = false;
 static bool random_state;
 static bool scan_state;
 

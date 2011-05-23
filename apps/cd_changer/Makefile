@@ -30,7 +30,7 @@ LIBRARIES = \
             bsp \
             util
 
-#ENABLE_DISPLAY = 1
+ENABLE_DISPLAY = 1
 
 ifdef ENABLE_DISPLAY
 LIBRARIES += display
