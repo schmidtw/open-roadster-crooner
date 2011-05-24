@@ -17,6 +17,8 @@
  */
 
 #include <stdint.h>
+#include <string.h>
+#include <time.h>
 
 #include "commands.h"
 #include "io.h"
@@ -32,6 +34,15 @@
 #define MC_R1_ERASE_SEQUENCE_ERROR  (1 << 4)
 #define MC_R1_ADDRESS_ERROR         (1 << 5)
 #define MC_R1_PARAMETER_ERROR       (1 << 6)
+
+#define MC_R2_CARD_IS_LOCKED        (1 << 0)
+#define MC_R2_WP_ERASE_SKIP         (1 << 1)
+#define MC_R2_ERROR                 (1 << 2)
+#define MC_R2_CC_ERROR              (1 << 3)
+#define MC_R2_CARD_ECC_FAILED       (1 << 4)
+#define MC_R2_WP_VIOLATION          (1 << 5)
+#define MC_R2_ERASE_PARAM           (1 << 6)
+#define MC_R2_OUT_OF_RANGE          (1 << 7)
 
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
@@ -239,6 +250,110 @@ mc_status_t mc_set_crc( const bool enable )
 
     return MC_ERROR_PARAMETER;
 }
+
+/** See commands.h for detail. */
+mc_status_t mc_get_cid( mc_cid_t *cid )
+{
+    mc_status_t status;
+    uint8_t buffer[MC_CSD_CID_BUFFER_SIZE];
+    uint8_t month;
+    uint32_t year;
+    struct tm then;
+
+    if( NULL == cid ) {
+        return MC_ERROR_PARAMETER;
+    }
+
+    status = mc_get_csd_cid_data( MCMD__SEND_CID, buffer );
+    if( MC_RETURN_OK != status ) {
+        return status;
+    }
+
+    memset( cid, 0, sizeof(mc_cid_t) );
+    cid->manufacturer_id = buffer[0];
+
+    cid->oem_id[0] = (char) buffer[1];
+    cid->oem_id[1] = (char) buffer[2];
+    /* trailing '\0' done by memset */
+
+    memcpy( cid->product_name, &buffer[3], 5 );
+    /* trailing '\0' done by memset */
+
+    cid->major_version = (0x0f & (buffer[8] >> 4));
+    cid->minor_version = (0x0f & buffer[8]);
+
+    cid->serial_number = (buffer[9] << 24) | (buffer[10] << 16) |
+                         (buffer[11] << 8) | buffer[12];
+
+    year = (buffer[13] << 8) | buffer[14];
+    month = (0x0f & year);
+    year >>= 4;
+    year += 2000;
+
+    memset( &then, 0, sizeof(struct tm) );
+    then.tm_mon = month;
+    then.tm_year = year;
+
+    strftime( cid->manufacture_date, 16, "%B %Y", &then );
+    /* trailing '\0' done by memset */
+
+    return MC_RETURN_OK;
+}
+
+/** See commands.h for detail. */
+mc_status_t mc_set_crc_mode( const bool enabled )
+{
+    mc_status_t status;
+    uint8_t r1;
+
+    status = mc_select_and_command( MCMD__CRC_ON_OFF, (true == enabled) ? 1 : 0, MRT_R1, &r1 );
+    if( MC_RETURN_OK != status ) {
+        return MC_ERROR_TIMEOUT;
+    }
+
+    if( (0 == r1) || (MC_R1_IN_IDLE_STATE == r1) ) {
+        return MC_RETURN_OK;
+    }
+
+    return MC_ERROR_PARAMETER;
+}
+
+/** See commands.h for detail. */
+mc_status_t mc_get_card_status( mc_cs_t *status )
+{
+    mc_status_t rv;
+    uint8_t r2[2];
+
+    if( NULL == status ) {
+        return MC_ERROR_PARAMETER;
+    }
+
+    rv = mc_select_and_command( MCMD__SEND_STATUS, 0, MRT_R2, r2 );
+    if( MC_RETURN_OK != rv ) {
+        return MC_ERROR_TIMEOUT;
+    }
+
+    status->parameter_error      = (r2[0] & MC_R1_PARAMETER_ERROR)      ? true : false;
+    status->address_error        = (r2[0] & MC_R1_ADDRESS_ERROR)        ? true : false;
+    status->erase_sequence_error = (r2[0] & MC_R1_ERASE_SEQUENCE_ERROR) ? true : false;
+    status->com_crc_error        = (r2[0] & MC_R1_COM_CRC_ERROR)        ? true : false;
+    status->illegal_command      = (r2[0] & MC_R1_ILLEGAL_COMMAND)      ? true : false;
+    status->erase_reset          = (r2[0] & MC_R1_ERASE_RESET)          ? true : false;
+    status->in_idle_state        = (r2[0] & MC_R1_IN_IDLE_STATE)        ? true : false;
+
+    status->card_is_locked       = (r2[1] & MC_R2_CARD_IS_LOCKED)       ? true : false;
+    status->wp_erase_skip        = (r2[1] & MC_R2_WP_ERASE_SKIP)        ? true : false;
+    status->error                = (r2[1] & MC_R2_ERROR)                ? true : false;
+    status->cc_error             = (r2[1] & MC_R2_CC_ERROR)             ? true : false;
+    status->card_ecc_failed      = (r2[1] & MC_R2_CARD_ECC_FAILED)      ? true : false;
+    status->wp_violation         = (r2[1] & MC_R2_WP_VIOLATION)         ? true : false;
+    status->erase_param          = (r2[1] & MC_R2_ERASE_PARAM)          ? true : false;
+    status->out_of_range         = (r2[1] & MC_R2_OUT_OF_RANGE)         ? true : false;
+
+    return MC_RETURN_OK;
+}
+
+
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/

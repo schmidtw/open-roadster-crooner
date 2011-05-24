@@ -40,11 +40,39 @@ typedef struct {
 } mc_csd_t;
 
 typedef struct {
+    uint8_t manufacturer_id;
+    char oem_id[3];
+    char product_name[6];
+    uint8_t major_version;
+    uint8_t minor_version;
+    uint32_t serial_number;
+    char manufacture_date[16];
+} mc_cid_t;
+
+typedef struct {
     bool busy;
     bool card_capacity_status;
     uint32_t voltage_window_max;    /** In mV */
     uint32_t voltage_window_min;    /** In mV */
 } mc_ocr_t;
+
+typedef struct {
+    bool card_is_locked;
+    bool wp_erase_skip;
+    bool error;
+    bool cc_error;
+    bool card_ecc_failed;
+    bool wp_violation;
+    bool erase_param;
+    bool out_of_range;
+    bool in_idle_state;
+    bool erase_reset;
+    bool illegal_command;
+    bool com_crc_error;
+    bool erase_sequence_error;
+    bool address_error;
+    bool parameter_error;
+} mc_cs_t;
 
 /**
  *  Used to send the GO_IDLE_STATE command to the card and process the
@@ -168,4 +196,50 @@ mc_status_t mc_get_csd( mc_csd_t *csd, const uint32_t clock );
  *      @retval MC_ERROR_TIMEOUT    Failure due to timeout
  */
 mc_status_t mc_set_crc( const bool enable );
+
+/**
+ *  Used to get the card identification values.
+ *
+ *  @note CMD10
+ *
+ *  @param cid The data structure to populate with the cid values on success.  Must
+ *             not be NULL.
+ *
+ *  @return Status
+ *      @retval MC_RETURN_OK        Success
+ *      @retval MC_ERROR_PARAMETER  Failure due to a bad parameter
+ *      @retval MC_ERROR_TIMEOUT    Failure due to timeout
+ *      @retval MC_ERROR_MODE       Failure due to bad card response
+ *      @retval MC_UNUSABLE         Failure due to unusable card
+ *      @retval MC_CRC_FAILURE      Failure due to CRC error
+ */
+mc_status_t mc_get_cid( mc_cid_t *cid );
+
+/**
+ *  Used to enable or disable CRC values.
+ *
+ *  @note CMD59
+ *
+ *  @param enabled If CRC mode is enabled (true) or not (false)
+ *
+ *  @return Status
+ *      @retval MC_RETURN_OK        Success
+ *      @retval MC_ERROR_PARAMETER  Failure due to a bad parameter
+ *      @retval MC_ERROR_TIMEOUT    Failure due to timeout
+ */
+mc_status_t mc_set_crc_mode( const bool enabled );
+
+/**
+ *  Used to get the card status
+ *
+ *  @note CMD13
+ *
+ *  @status The status data structure to populate with the card status.
+ *
+ *  @return Status
+ *      @retval MC_RETURN_OK        Success
+ *      @retval MC_ERROR_PARAMETER  Failure due to a bad parameter
+ *      @retval MC_ERROR_TIMEOUT    Failure due to timeout
+ */
+mc_status_t mc_get_card_status( mc_cs_t *status );
 #endif

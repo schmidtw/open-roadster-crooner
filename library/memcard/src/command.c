@@ -23,6 +23,7 @@
 #include "io.h"
 #include "crc.h"
 #include "memcard.h"
+#include "memcard-constants.h"
 #include "timing-parameters.h"
 
 /*----------------------------------------------------------------------------*/
@@ -107,6 +108,74 @@ mc_status_t mc_select_and_command( const mc_cmd_type_t command,
 
     return status;
 }
+
+/**
+ *  Used to get the data from the card.
+ *
+ *  @note buffer must be 15 bytes in length or more
+ *
+ *  @param buffer where to put the data
+ *
+ *  @return Status
+ *      @retval MC_ERROR_TIMEOUT
+ *      @retval MC_ERROR_MODE
+ *      @retval MC_CRC_FAILURE
+ */
+/* See command.h for details. */
+mc_status_t mc_get_csd_cid_data( const mc_cmd_type_t command, uint8_t *buffer )
+{
+    mc_status_t status;
+    uint8_t r1;
+    uint8_t crc;
+    int i;
+
+    io_clean_select();
+
+    status = mc_command( command, 0, &r1 );
+
+    if( MC_ERROR_TIMEOUT == status ) {
+        goto error;
+    }
+    
+    if( 0 != r1 ) {
+        status = MC_ERROR_MODE;
+        goto error;
+    }
+
+    for( i = 0; i < MC_Ncr; i++ ) {
+        io_send_read( 0xff, buffer );
+        if( MC_BLOCK_START == *buffer ) {
+            goto csd_start;
+        }
+    }
+    status = MC_ERROR_TIMEOUT;
+    goto error;
+
+csd_start:
+    status = MC_CRC_FAILURE;
+
+    for( i = 0; i < MC_CSD_CID_BUFFER_SIZE; i++ ) {
+        io_send_read( 0xff, &buffer[i] );
+    }
+    io_send_read( 0xff, &crc );
+
+    if( 1 != (0x01 & crc) ) {
+        goto error;
+    }
+
+#if (1 == MC_CHECK_CRCS)
+    crc >>= 1;
+    if( crc != crc7(buffer, MC_CSD_CID_BUFFER_SIZE) ) {
+        goto error;
+    }
+#endif
+    status = MC_RETURN_OK;
+
+error:
+    io_clean_unselect();
+    return status;
+}
+
 
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */

@@ -22,12 +22,16 @@
 #include <stdint.h>
 #include "memcard.h"
 
+#define MC_CSD_CID_BUFFER_SIZE  15
+
 /** See the SD/MMC definition for the source of these values. */
 typedef enum {
     MCMD__GO_IDLE_STATE     = 0,
     MCMD__SEND_OP_COND      = 1,
     MCMD__SEND_IF_COND      = 8,
     MCMD__SEND_CSD          = 9,
+    MCMD__SEND_CID          = 10,
+    MCMD__SEND_STATUS       = 13,
     MCMD__SET_BLOCKLEN      = 16,
     MCMD__SD_SEND_OP_COND   = 41,
     MCMD__APP_CMD           = 55,
@@ -40,6 +44,7 @@ typedef enum {
  *  like an error of 2 enumeration types with the value, it is correct. */
 typedef enum {
     MRT_R1 = 1,
+    MRT_R2 = 2,
     MRT_R3 = 5,
     MRT_R7 = 5
 } mc_response_type_t;
@@ -80,4 +85,20 @@ mc_status_t mc_select_and_command( const mc_cmd_type_t command,
                                    const uint32_t argument,
                                    const mc_response_type_t type,
                                    uint8_t *response );
+
+/**
+ *  Used to get the data from the card.
+ *
+ *  @note buffer must be 15 bytes in length or more
+ *
+ *  @param command the command to send to the card
+ *  @param buffer where to put the data
+ *
+ *  @return Status
+ *      @retval MC_ERROR_TIMEOUT
+ *      @retval MC_ERROR_MODE
+ *      @retval MC_CRC_FAILURE
+ */
+mc_status_t mc_get_csd_cid_data( const mc_cmd_type_t command, uint8_t *buffer );
+
 #endif

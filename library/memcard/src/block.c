@@ -453,7 +453,7 @@ static void __block_isr_state_machine( void )
 
                 end = &msg->command[MC_COMMAND_BUFFER_SIZE];
 
-                r1 = memchr( msg->command, 0, MC_COMMAND_BUFFER_SIZE );
+                r1 = memchr( &msg->command[7], 0, (MC_COMMAND_BUFFER_SIZE-7) );
                 if( NULL == r1 ) {
                     goto timeout_failure;
                 }

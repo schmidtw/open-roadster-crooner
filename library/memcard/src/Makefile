@@ -19,6 +19,7 @@ SOURCES = \
     block.c \
     glue.c \
     dirent.c \
+    debug-helpers.c \
     fatfs/ff.c \
     fatfs/avr32.c
 

@@ -32,6 +32,7 @@
 
 #include "config.h"
 #include "block.h"
+#include "debug-helpers.h"
 #include "memcard.h"
 #include "memcard-private.h"
 #include "memcard-constants.h"
@@ -83,6 +84,7 @@ typedef enum {
     MCS_MMC_CARD,
     MCS_DETERMINE_METRICS,
     MCS_SET_BLOCK_SIZE,
+    MCS_ENSURE_CARD_IS_READY,
     MCS_CARD_READY,
     MCS_CARD_UNUSABLE
 } mc_mount_state_t;
@@ -247,7 +249,17 @@ static mc_status_t __send_card_to_idle_state( void )
 
 static mc_status_t __is_card_voltage_compat( void )
 {
-    return MC_RETURN_OK;
+    mc_ocr_t ocr;
+
+    if( MC_RETURN_OK == mc_read_ocr(&ocr) ) {
+        if( (MC_VOLTAGE <= ocr.voltage_window_max) &&
+            (ocr.voltage_window_min <= MC_VOLTAGE) )
+        {
+            return MC_RETURN_OK;
+        }
+    }
+    
+    return MC_UNUSABLE;
 }
 
 static mc_status_t __determine_metrics( void )
@@ -288,10 +300,13 @@ static mc_status_t __determine_metrics( void )
 static mc_status_t __set_block_size( void )
 {
     mc_status_t status;
+    mc_card_type_t type;
+
+    type = mc_get_type();
 
     /* Only set this if we need to - some cards don't like
      * being set when they are already set to 512 byte blocks. */
-    if( 512 == __mc_block_size ) {
+    if( (MCT_SDHC == type) && (512 == __mc_block_size) ) {
         return MC_RETURN_OK;
     }
 
@@ -503,9 +518,21 @@ static mc_status_t __mc_mount( void )
 
             case MCS_SD10_COMPATIBLE_VOLTAGE:
             {
-                bool ready;
+                bool ready = false;
 
                 _D2( "MCS_SD10_COMPATIBLE_VOLTAGE:\n" );
+#if (1 == MC_CHECK_CRCS)
+                if( MC_RETURN_OK != mc_set_crc_mode(true) )
+#else
+                if( MC_RETURN_OK != mc_set_crc_mode(false) )
+#endif
+                {
+                    _D2( "MCS_SD10_CARD_READY (crc) -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                    break;
+                }
+
+
                 do {
                     if( MC_RETURN_OK != mc_send_sd_op_cond(false, &ready) ) {
                         _D2( "MCS_SD10_COMPATIBLE_VOLTAGE -> MCS_MMC_CARD\n" );
@@ -523,6 +550,18 @@ static mc_status_t __mc_mount( void )
                 bool ready;
 
                 _D2( "MCS_SD20_COMPATIBLE_VOLTAGE:\n" );
+#if (1 == MC_CHECK_CRCS)
+                if( MC_RETURN_OK != mc_set_crc_mode(true) )
+#else
+                if( MC_RETURN_OK != mc_set_crc_mode(false) )
+#endif
+                {
+                    _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_CARD_UNUSABLE\n" );
+                    mount_state = MCS_CARD_UNUSABLE;
+                    break;
+                }
+
+                mount_state = MCS_SD20_CARD_READY;
                 do {
                     if( MC_RETURN_OK != mc_send_sd_op_cond(true, &ready) ) {
                         _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_CARD_UNUSABLE\n" );
@@ -530,8 +569,9 @@ static mc_status_t __mc_mount( void )
                         break;
                     }
                 } while( false == ready );
-                _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_SD20_CARD_READY\n" );
-                mount_state = MCS_SD20_CARD_READY;
+                if( true == ready ) {
+                    _D2( "MCS_SD20_COMPATIBLE_VOLTAGE -> MCS_SD20_CARD_READY\n" );
+                }
                 break;
             }
 
@@ -587,13 +627,47 @@ static mc_status_t __mc_mount( void )
             case MCS_SET_BLOCK_SIZE:
                 _D2( "MCS_SET_BLOCK_SIZE:\n" );
                 if( MC_RETURN_OK == __set_block_size() ) {
-                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_READY\n" );
-                    mount_state = MCS_CARD_READY;
+                    _D2( "MCS_SET_BLOCK_SIZE -> MCS_ENSURE_CARD_IS_READY\n" );
+                    mount_state = MCS_ENSURE_CARD_IS_READY;
                 } else {
                     _D2( "MCS_SET_BLOCK_SIZE -> MCS_CARD_UNUSABLE\n" );
                     mount_state = MCS_CARD_UNUSABLE;
                 }
                 break;
+
+            /* Some older SD cards get to this state & are somehow in the
+             * idle state.  Basically, we need to return them back to the
+             * ready state to continue, or the block reads will fail later. */
+            case MCS_ENSURE_CARD_IS_READY:
+            {
+                bool ready;
+                mc_cs_t cs;
+
+                _D2( "MCS_ENSURE_CARD_IS_READY:\n" );
+                mount_state = MCS_CARD_READY;
+                if( MC_RETURN_OK != mc_get_card_status(&cs) ) {
+                    mount_state = MCS_CARD_UNUSABLE;
+                    break;
+                }
+
+                ready = true;
+                if( true == cs.in_idle_state ) {
+                    do {
+                        ready = false;
+                        if( MC_RETURN_OK != mc_send_sd_op_cond(true, &ready) ) {
+                            _D2( "MCS_ENSURE_CARD_IS_READY -> MCS_CARD_UNUSABLE\n" );
+                            mount_state = MCS_CARD_UNUSABLE;
+                            break;
+                        }
+                    } while( false == ready );
+                }
+
+                if( true == ready ) {
+                    _D2( "MCS_ENSURE_CARD_IS_READY -> MCS_CARD_READY\n" );
+                }
+
+                break;
+            }
 
             case MCS_CARD_READY:
                 _D2( "MCS_CARD_READY:\n" );

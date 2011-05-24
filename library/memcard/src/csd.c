@@ -24,6 +24,7 @@
 #include "io.h"
 #include "crc.h"
 #include "command.h"
+#include "memcard-constants.h"
 #include "timing-parameters.h"
 
 /*----------------------------------------------------------------------------*/
@@ -63,10 +64,6 @@
 #define SD_V1       0
 #define SD_V2       1
 #define MMC_V1_2    2
-
-#define MC_BLOCK_START  0xfe
-
-#define MC_CSD_BUFFER_SIZE  15
 
 #define _D1(...)
 #define _D2(...)
@@ -134,22 +131,21 @@ static uint32_t __csd_get_nac_write( const uint8_t *buffer,
 static uint32_t __csd_get_nac_erase( const uint8_t *buffer,
                                      const uint32_t clock );
 static uint32_t __get_csd_structure( const uint8_t *buffer );
-static mc_status_t __get_csd_data( uint8_t *buffer );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
-/* See csd.h for details. */
+/* See commands.h for details. */
 mc_status_t mc_get_csd( mc_csd_t *csd, const uint32_t clock )
 {
     mc_status_t status;
-    uint8_t buffer[MC_CSD_BUFFER_SIZE];
+    uint8_t buffer[MC_CSD_CID_BUFFER_SIZE];
 
     if( (NULL == csd) || (0 == clock) ) {
         return MC_ERROR_PARAMETER;
     }
 
-    status = __get_csd_data( buffer );
+    status = mc_get_csd_cid_data( MCMD__SEND_CSD, buffer );
     if( MC_RETURN_OK != status ) {
         return status;
     }
@@ -576,70 +572,6 @@ static uint32_t __csd_get_nac_erase( const uint8_t *buffer,
 static uint32_t __get_csd_structure( const uint8_t *buffer )
 {
     return ((CSD_STRUCTURE_MASK & buffer[0]) >> CSD_STRUCTURE_SHIFT);
-}
-
-/**
- *  Used to get the data from the card.
- *
- *  @param buffer where to put the data
- *
- *  @return Status
- *      @retval MC_ERROR_TIMEOUT
- *      @retval MC_ERROR_MODE
- *      @retval MC_CRC_FAILURE
- */
-static mc_status_t __get_csd_data( uint8_t *buffer )
-{
-    mc_status_t status;
-    uint8_t r1;
-    uint8_t crc;
-    int i;
-
-    io_clean_select();
-
-    status = mc_command( MCMD__SEND_CSD, 0, &r1 );
-
-    if( MC_ERROR_TIMEOUT == status ) {
-        goto error;
-    }
-    
-    if( 0 != r1 ) {
-        status = MC_ERROR_MODE;
-        goto error;
-    }
-
-    for( i = 0; i < MC_Ncr; i++ ) {
-        io_send_read( 0xff, buffer );
-        if( MC_BLOCK_START == *buffer ) {
-            goto csd_start;
-        }
-    }
-    status = MC_ERROR_TIMEOUT;
-    goto error;
-
-csd_start:
-    status = MC_CRC_FAILURE;
-
-    for( i = 0; i < MC_CSD_BUFFER_SIZE; i++ ) {
-        io_send_read( 0xff, &buffer[i] );
-    }
-    io_send_read( 0xff, &crc );
-
-    if( 1 != (0x01 & crc) ) {
-        goto error;
-    }
-
-#if (1 == MC_CHECK_CRCS)
-    crc >>= 1;
-    if( crc != crc7(buffer, MC_CSD_BUFFER_SIZE) ) {
-        goto error;
-    }
-#endif
-    status = MC_RETURN_OK;
-
-error:
-    io_clean_unselect();
-    return status;
 }
 
 /*----------------------------------------------------------------------------*/
