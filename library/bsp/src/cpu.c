@@ -21,6 +21,7 @@
 #include "boards/boards.h"
 #include "cpu.h"
 #include "wdt.h"
+#include "intc.h"
 
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -61,7 +62,9 @@ cpu_execution_mode_t cpu_get_mode( void )
 /* See cpu.h for details. */
 void cpu_reboot( void )
 {
-    wdt_start( WDT__17us );
+    disable_global_interrupts();
+
+    wdt_start( WDT__1ms );
 
     while( 1 ) { ; }
 }

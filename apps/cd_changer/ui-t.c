@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <bsp/boards/boards.h>
 #include <bsp/cpu.h>
@@ -199,6 +200,11 @@ static void __process_command( irp_state_t *device_status,
         switch( msg->d.ibus.command ) {
             case IRP_CMD__SCAN_DISC__ENABLE:
                 *device_mode = IRP_MODE__SCANNING;
+
+                if( DM_RANDOM == *current_disc ) {
+                    cpu_reboot();
+                }
+
                 enable_scan_state();
                 break;
             case IRP_CMD__SCAN_DISC__DISABLE:
