@@ -25,7 +25,9 @@
 #include <avr32/io.h>
 
 #include "boards/boards.h"
+#include "cpu.h"
 #include "intc.h"
+#include "reboot.h"
 #include "usart.h"
 
 /*----------------------------------------------------------------------------*/
@@ -108,6 +110,10 @@ static const __intc_handler_table_t __intc_handler_table[] = {
 static void __intc_init( void );
 __attribute__ ((__interrupt__))
 static void __unhandled_interrupt( void );
+
+extern reboot_trace_t *reboot_pointer_get( void );
+extern uint32_t reboot_calculate_checksum( reboot_trace_t *trace );
+
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -255,6 +261,7 @@ static void __unhandled_interrupt( void )
 
     fprintf( stderr, "\nunhandled interrupt\n" );
     fflush( stderr );
+
     while( 1 ) { ; }
 }
 
@@ -310,62 +317,44 @@ intc_handler_t __bsp_interrupt_handler( uint32_t index )
  *
  *  @param type the different exceptions defined in exceptions.S
  */
-void __bsp_exception_handler( uint32_t exception_cause, uint32_t return_address, uint32_t *sp )
+void __bsp_exception_handler( uint32_t exception_cause, uint32_t return_address,
+                              uint32_t *sp, uint32_t *r, uint32_t sr )
 {
-    uint32_t bear = __builtin_mfsr( AVR32_BEAR );
+    static reboot_trace_t *trace;
+    static int i;
 
-    static struct _reent reent;
+    trace = reboot_pointer_get();
 
-    _REENT_INIT_PTR( (&(reent)) );
-    _impure_ptr = &reent;
+    trace->cpu_count = cpu_get_sys_count();
+    trace->exception_cause = exception_cause;
+    trace->return_address = return_address;
+    trace->bear = __builtin_mfsr( AVR32_BEAR );
+    trace->config0 = __builtin_mfsr( AVR32_CONFIG0 );
 
-    fprintf( stderr, "\nException: " );
-    switch( exception_cause ) {
-        case 0x00: fprintf( stderr, "Unrecoverable exception\n" );               break;
-        case 0x04: fprintf( stderr, "TLB multiple hit\n" );                      break;
-        case 0x08: fprintf( stderr, "Bus error data fetch 0x%08lx\n", bear );    break;
-        case 0x0c: fprintf( stderr, "Bus error instruction fetch\n" );           break;
-        case 0x10: fprintf( stderr, "Non maskible interrupt\n" );                break;
-        case 0x14: fprintf( stderr, "Instruction address\n" );                   break;
-        case 0x18: fprintf( stderr, "ITLB protection\n" );                       break;
-        case 0x1c: fprintf( stderr, "Breakpoint\n" );                            break;
-        case 0x20: fprintf( stderr, "Illegal opcode\n" );                        break;
-        case 0x24: fprintf( stderr, "Unimplemented instruction\n" );             break;
-        case 0x28: fprintf( stderr, "Privilege violation\n" );                   break;
-        case 0x2c: fprintf( stderr, "Floating point\n" );                        break;
-        case 0x30: fprintf( stderr, "Copressor absent\n" );                      break;
-        case 0x34: fprintf( stderr, "Data address (read)\n" );                   break;
-        case 0x38: fprintf( stderr, "Data address (write)\n" );                  break;
-        case 0x3c: fprintf( stderr, "DTLB protection (read)\n" );                break;
-        case 0x40: fprintf( stderr, "DTLB protection (write)\n" );               break;
-        case 0x44: fprintf( stderr, "DTLB modified\n" );                         break;
-        case 0x50: fprintf( stderr, "ITLB miss\n" );                             break;
-        case 0x60: fprintf( stderr, "DTLB miss (read)\n" );                      break;
-        case 0x70: fprintf( stderr, "DTLB miss (write)\n" );                     break;
-        default:   fprintf( stderr, "Unknown '0x%08lx'\n", exception_cause );    break;
+    for( i = 0; i < 16; i++ ) {
+        trace->r[i] = r[15 - i];
     }
+    trace->r[13] = (uint32_t) sp;
+    trace->sr = sr;
 
-    switch( exception_cause ) {
-        case 0x08:
-        case 0x0c:
-        case 0x10:
-            fprintf( stderr, "First non-issued instruction: 0x%08lx\n", return_address );
-            break;
-
-        default:
-            fprintf( stderr, "Offending instruction: 0x%08lx\n", return_address );
-    }
-
+    i = 0;
     /* Walk the stack and print out any addresses that are in code space. */
     while( 0xdeadbeef != *sp ) {
-        if( 0x80000000 == (0xF0000000 & *sp) ) {
-            fprintf( stderr, "0x%08lx\n", *sp );
+        /* Ideally these come from the linker script... but they're bad. */
+        if( (0x80002200 <= *sp) && (*sp <= 0x80080000) ) {
+            if( i < MAX_STACK_DEPTH ) {
+                trace->stack[i++] = *sp;
+            }
         }
         sp++;
     }
 
-    fflush( stderr );
-    fflush( stdout );
+    /* Zero out any unused values */
+    while( i < MAX_STACK_DEPTH ) {
+        trace->stack[i++] = 0;
+    }
 
-    while( 1 ) { ; }
+    trace->checksum = reboot_calculate_checksum( trace );
+
+    cpu_reboot();
 }

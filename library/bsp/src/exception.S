@@ -100,13 +100,35 @@ isr_val:
                 (AVR32_INTC_INT3 << AVR32_INTC_IPR_INTLEVEL_OFFSET) | (_int3 - _evba)
 
 _handle_exception:
+        // Store/handle the registers and put them in the list
+        pushm   r0-r3
+        mov     r0, LO(__sp_stack_upper__)
+        orh     r0, HI(__sp_stack_upper__)
+        stm     --r0, r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, lr, sp, pc
+        ld.w    r0, sp[12]
+        mov     r1, LO(__sp_stack_upper__)
+        orh     r1, HI(__sp_stack_upper__)
+        stm     --r1, r0
+        popm    r0-r3
+        mustr   r8
+
+        // ECR
         mfsr    r12, AVR32_ECR
         lsl     r12, 2
-        lddsp   r11, sp[4]
+
+        // PC of first non-issued/completed instruction
+        lddsp   r11, sp[8]
+
+        // SR
+        lddsp   r8, sp[4]
 
         // Get the original stack pointer
         mov     r10, sp
         sub     r10, 4
+
+        // Fill out the registers to the pushed values make sense
+        mov     r9, LO(__sp_stack_lower__)
+        orh     r9, HI(__sp_stack_lower__)
 
         call    __bsp_exception_handler
         rjmp    $

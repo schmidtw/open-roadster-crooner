@@ -20,6 +20,7 @@ HEADERS = \
     flash.h \
     pwm.h \
     dac.h \
+    reboot.h \
     boards/boards.h \
     boards/evk1100.h \
     boards/crooner-1.0.h \
@@ -36,6 +37,7 @@ SOURCES = \
     pdca.c \
     spi.c \
     dac.c \
+    reboot.c \
     flash.c \
     pwm.c \
     wdt.c
