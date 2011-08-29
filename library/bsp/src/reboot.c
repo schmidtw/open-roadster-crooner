@@ -119,6 +119,11 @@ void reboot_output( FILE *out, reboot_trace_t *trace )
             fprintf( out, "First non-issued instruction: 0x%08lx\n", trace->return_address );
             break;
 
+        case 0x34:
+        case 0x38:
+            fprintf( out, "Invalid Memory Address: 0x%08lx\n", trace->return_address );
+            break;
+
         default:
             fprintf( out, "Offending instruction: 0x%08lx\n", trace->return_address );
     }
