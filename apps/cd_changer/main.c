@@ -22,6 +22,7 @@
 #include <ibus-phone-protocol/ibus-phone-protocol.h>
 #include <system-time/system-time.h>
 
+#include "reboot-sys.h"
 #include "radio-interface.h"
 #include "device-status.h"
 #include "user-interface.h"
@@ -120,13 +121,12 @@ void _debug_isr_tx_complete( void )
     }
 }
 
-
 #if (1 == ENABLE_STATUS_TASK)
 static char task_buffer[1024];
 static void __idle_task( void *params )
 {
     while( 1 ) {
-        os_task_delay_ms( 2000 );
+        os_task_delay_ms( 5000 );
         printf( "Still alive, SRAM Left: %ld, OS/Stack SDRAM Usage: %ld\n", __sram_have, __sdram_use );
         os_task_get_run_time_stats( task_buffer );
         printf( "%s\n", task_buffer );
@@ -175,6 +175,8 @@ int main( void )
 #ifdef SUPPORT_TEXT
     display_init( ibus_phone_display, 1000, 4000, 2000, 5000, 3, true);
 #endif
+
+    reboot_system_init();
 
     /* Start the RTOS - never returns. */
     __enable_os = true;

@@ -6,7 +6,8 @@ SOURCES = \
           user-interface.c \
           radio-interface.c \
           device-status.c \
-          ui-t.c\
+          reboot-sys.c \
+          ui-t.c \
           main.c
 
 LIBRARIES = \
