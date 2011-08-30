@@ -39,7 +39,9 @@ MEMORY
   FLASH (rxai!w) : ORIGIN = 0x80002240, LENGTH = 0x00080000-0x2440
   HIGH_BLANK     : ORIGIN = 0x8007FE00, LENGTH = 0x00000200
   SDRAM (wxa!ri) : ORIGIN = 0xD0000000, LENGTH = 32M
-  SRAM  (wxa!ri) : ORIGIN = 0x00000004, LENGTH = 0x0000FFFC
+  SYS_STACK (wxa!ri) : ORIGIN = 0x00000004, LENGTH = 0x00000040
+  RESET_LOG (wxa!ri) : ORIGIN = 0x00000044, LENGTH = 0x00000100
+  SRAM  (wxa!ri) : ORIGIN = 0x00000144, LENGTH = 0x0000FEBC
   USERPAGE       : ORIGIN = 0x80800000, LENGTH = 0x00000200
 }
 
@@ -50,9 +52,10 @@ PHDRS
   FLASH          PT_LOAD;
   HIGH_BLANK     PT_LOAD;
   SDRAM          PT_NULL;
+  SYS_STACK      PT_NULL;
   SRAM           PT_NULL;
-  SDRAM_ALIGN    PT_NULL;
   SDRAM_AT_FLASH PT_LOAD;
+  SRAM_AT_FLASH  PT_LOAD;
   USERPAGE       PT_LOAD;
 }
 
@@ -139,7 +142,7 @@ SECTIONS
   .gcc_except_table : ONLY_IF_RO { KEEP (*(.gcc_except_table)) *(.gcc_except_table.*) } >FLASH AT>FLASH :FLASH
   .lalign           : { . = ALIGN(8); PROVIDE(_data_lma = .); } >FLASH AT>FLASH :FLASH
   . = ORIGIN(SDRAM);
-  .dalign           : { . = ALIGN(8); PROVIDE(_data = .); } >SDRAM AT>SDRAM :SDRAM_ALIGN
+  .dalign           : { . = ALIGN(8); PROVIDE(_data = .); } >SDRAM
   /* Exception handling  */
   .eh_frame         : ONLY_IF_RW { KEEP (*(.eh_frame)) } >SDRAM AT>FLASH :SDRAM_AT_FLASH
   .gcc_except_table : ONLY_IF_RW { KEEP (*(.gcc_except_table)) *(.gcc_except_table.*) } >SDRAM AT>FLASH :SDRAM_AT_FLASH
@@ -190,7 +193,6 @@ SECTIONS
   .data.rel.ro : { *(.data.rel.ro.local) *(.data.rel.ro*) } >SDRAM AT>FLASH :SDRAM_AT_FLASH
   .dynamic          : { *(.dynamic) } >SDRAM AT>FLASH :SDRAM_AT_FLASH
   .got              : { *(.got.plt) *(.got) } >SDRAM AT>FLASH :SDRAM_AT_FLASH
-  .ramtext          : { *(.ramtext .ramtext.*) } >SDRAM AT>FLASH :SDRAM_AT_FLASH
   .ddalign          : { . = ALIGN(8); } >SDRAM AT>FLASH :SDRAM_AT_FLASH
   .data             :
   {
@@ -265,6 +267,10 @@ SECTIONS
   .debug_funcnames 0 : { *(.debug_funcnames) }
   .debug_typenames 0 : { *(.debug_typenames) }
   .debug_varnames  0 : { *(.debug_varnames) }
+  __reset_log__ = ORIGIN(RESET_LOG);
+  __reset_log_size__ = LENGTH(RESET_LOG);
+  __sp_stack_lower__ = ORIGIN(SYS_STACK);
+  __sp_stack_upper__ = ORIGIN(SYS_STACK) + LENGTH(SYS_STACK);
   . = ORIGIN(SRAM);
   __nano_buffer_start__ = ALIGN(4);
   .nano_buffer      :
