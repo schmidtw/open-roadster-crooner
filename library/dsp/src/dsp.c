@@ -34,7 +34,7 @@
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
 #define DSP_TASK_STACK_SIZE 50
-#define DSP_OUT_MSG_MAX     20
+#define DSP_OUT_MSG_MAX     40
 #define DSP_IN_MSG_MAX      10
 #define DSP_BUFFER_SIZE     441
 #define DSP_SILENCE_MSG_MAX 2
