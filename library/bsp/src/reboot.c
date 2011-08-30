@@ -88,28 +88,33 @@ void reboot_output( FILE *out, reboot_trace_t *trace )
 
     fprintf( out, "Exception: " );
     switch( trace->exception_cause ) {
-        case 0x00: fprintf( out, "Unrecoverable exception\n" );                     break;
-        case 0x04: fprintf( out, "TLB multiple hit\n" );                            break;
-        case 0x08: fprintf( out, "Bus error data fetch 0x%08lx\n", trace->bear );   break;
-        case 0x0c: fprintf( out, "Bus error instruction fetch\n" );                 break;
-        case 0x10: fprintf( out, "Non maskible interrupt\n" );                      break;
-        case 0x14: fprintf( out, "Instruction address\n" );                         break;
-        case 0x18: fprintf( out, "ITLB protection\n" );                             break;
-        case 0x1c: fprintf( out, "Breakpoint\n" );                                  break;
-        case 0x20: fprintf( out, "Illegal opcode\n" );                              break;
-        case 0x24: fprintf( out, "Unimplemented instruction\n" );                   break;
-        case 0x28: fprintf( out, "Privilege violation\n" );                         break;
-        case 0x2c: fprintf( out, "Floating point\n" );                              break;
-        case 0x30: fprintf( out, "Coprossor absent\n" );                            break;
-        case 0x34: fprintf( out, "Data address (read)\n" );                         break;
-        case 0x38: fprintf( out, "Data address (write)\n" );                        break;
-        case 0x3c: fprintf( out, "DTLB protection (read)\n" );                      break;
-        case 0x40: fprintf( out, "DTLB protection (write)\n" );                     break;
-        case 0x44: fprintf( out, "DTLB modified\n" );                               break;
-        case 0x50: fprintf( out, "ITLB miss\n" );                                   break;
-        case 0x60: fprintf( out, "DTLB miss (read)\n" );                            break;
-        case 0x70: fprintf( out, "DTLB miss (write)\n" );                           break;
-        default:   fprintf( out, "Unknown: '0x%08lx'\n", trace->exception_cause );  break;
+        case 0x00:   fprintf( out, "Unrecoverable exception\n" );                     break;
+        case 0x04:   fprintf( out, "TLB multiple hit\n" );                            break;
+        case 0x08:   fprintf( out, "Bus error data fetch 0x%08lx\n", trace->bear );   break;
+        case 0x0c:   fprintf( out, "Bus error instruction fetch\n" );                 break;
+        case 0x10:   fprintf( out, "Non maskible interrupt\n" );                      break;
+        case 0x14:   fprintf( out, "Instruction address\n" );                         break;
+        case 0x18:   fprintf( out, "ITLB protection\n" );                             break;
+        case 0x1c:   fprintf( out, "Breakpoint\n" );                                  break;
+        case 0x20:   fprintf( out, "Illegal opcode\n" );                              break;
+        case 0x24:   fprintf( out, "Unimplemented instruction\n" );                   break;
+        case 0x28:   fprintf( out, "Privilege violation\n" );                         break;
+        case 0x2c:   fprintf( out, "Floating point\n" );                              break;
+        case 0x30:   fprintf( out, "Coprossor absent\n" );                            break;
+        case 0x34:   fprintf( out, "Data address (read)\n" );                         break;
+        case 0x38:   fprintf( out, "Data address (write)\n" );                        break;
+        case 0x3c:   fprintf( out, "DTLB protection (read)\n" );                      break;
+        case 0x40:   fprintf( out, "DTLB protection (write)\n" );                     break;
+        case 0x44:   fprintf( out, "DTLB modified\n" );                               break;
+        case 0x50:   fprintf( out, "ITLB miss\n" );                                   break;
+        case 0x60:   fprintf( out, "DTLB miss (read)\n" );                            break;
+        case 0x70:   fprintf( out, "DTLB miss (write)\n" );                           break;
+        case 0x1000:
+            fprintf( out, "Unhandled Interrupt: group=%lu, req=%lu\n",
+                     trace->r[0], trace->r[1] );
+            break;
+
+        default:     fprintf( out, "Unknown: '0x%08lx'\n", trace->exception_cause );  break;
     }
 
     switch( trace->exception_cause ) {
@@ -122,6 +127,9 @@ void reboot_output( FILE *out, reboot_trace_t *trace )
         case 0x34:
         case 0x38:
             fprintf( out, "Invalid Memory Address: 0x%08lx\n", trace->return_address );
+            break;
+
+        case 0x1000:
             break;
 
         default:

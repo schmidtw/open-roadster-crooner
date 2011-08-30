@@ -185,6 +185,10 @@ bsp_status_t intc_register_isr( const intc_handler_t handler,
     group = ((uint32_t) isr) >> 8;
     line = 0x00ff & ((uint32_t) isr);
 
+    if( NULL == handler ) {
+        return BSP_ERROR_PARAMETER;
+    }
+
     if( sizeof(__intc_handler_table)/sizeof(__intc_handler_table_t) <= group ) {
         return BSP_ERROR_PARAMETER;
     }
@@ -198,13 +202,8 @@ bsp_status_t intc_register_isr( const intc_handler_t handler,
         return BSP_ERROR_PARAMETER;
     }
 
-    if( NULL == handler ) {
-        __intc_handler_table[group].table[line] = &__unhandled_interrupt;
-        AVR32_INTC.ipr[group] = isr_val[0]; /* default */
-    } else {
-        __intc_handler_table[group].table[line] = handler;
-        AVR32_INTC.ipr[group] = isr_val[level];
-    }
+    __intc_handler_table[group].table[line] = handler;
+    AVR32_INTC.ipr[group] = isr_val[level];
 
     return BSP_RETURN_OK;
 }
@@ -254,15 +253,7 @@ void __intc_init( void )
 __attribute__ ((__interrupt__))
 static void __unhandled_interrupt( void )
 {
-    struct _reent reent;
-
-    _REENT_INIT_PTR( (&(reent)) );
-    _impure_ptr = &reent;
-
-    fprintf( stderr, "\nunhandled interrupt\n" );
-    fflush( stderr );
-
-    while( 1 ) { ; }
+    cpu_reboot();
 }
 
 /**
@@ -291,6 +282,7 @@ void SCALLYield( void )
 intc_handler_t __bsp_interrupt_handler( uint32_t index )
 {
     uint32_t group, req;
+    intc_handler_t fn;
 
     /* The list is reversed - so we need to invert the index as well. */
     group = AVR32_INTC.icr[index];
@@ -305,7 +297,28 @@ intc_handler_t __bsp_interrupt_handler( uint32_t index )
      * the function & return. */
     req = 31 - __builtin_clz( req );
 
-    return __intc_handler_table[group].table[req];
+    fn = __intc_handler_table[group].table[req];
+
+    if( __unhandled_interrupt != fn ) {
+        return fn;
+    } else {
+        static reboot_trace_t *trace;
+
+        trace = reboot_pointer_get();
+
+        memset( trace, 0, sizeof(reboot_trace_t) );
+
+        trace->cpu_count = cpu_get_sys_count();
+        trace->exception_cause = 0x1000;
+        trace->r[0] = group;
+        trace->r[1] = req;
+  
+        trace->checksum = reboot_calculate_checksum( trace );
+
+        cpu_reboot();
+    }
+
+    return NULL;
 }
 
 /**
