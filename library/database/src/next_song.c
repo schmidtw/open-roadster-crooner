@@ -95,26 +95,16 @@ db_status_t next_song( song_node_t ** current_song,
         default:
             /* DT_RANDOM */
             rv = DS_SUCCESS;
-            switch( level ) {
-                case DL_ARTIST:
-                case DL_ALBUM:
-                default: /* DL_SONG */
-                {
-                    /* The random function is designed to be run from the parent
-                     * of this level.
-                     */
-                    generic_n = (generic_node_t*)generic_n->parent;
-                    if( NULL == generic_n->children.head ) {
-                        rv = DS_FAILURE;
-                    } else {
-                        generic_n = find_random_song_from_generic(
-                                (generic_node_t *)generic_n,
-                                generic_n->d.list.index_songs_start,
-                                generic_n->d.list.index_songs_stop);
-                    }
-                    break;
-                }
+            generic_n = (generic_node_t*)generic_n->parent;
+            if( NULL == generic_n->children.head ) {
+                rv = DS_FAILURE;
+            } else {
+                generic_n = find_random_song_from_generic(
+                        (generic_node_t *)generic_n,
+                        generic_n->d.list.index_songs_start,
+                        generic_n->d.list.index_songs_stop);
             }
+            break;
     }
     if( NULL != generic_n ) {
         switch( generic_n->type ) {
