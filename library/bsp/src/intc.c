@@ -331,6 +331,10 @@ void __bsp_exception_handler( uint32_t exception_cause, uint32_t return_address,
     trace->bear = __builtin_mfsr( AVR32_BEAR );
     trace->config0 = __builtin_mfsr( AVR32_CONFIG0 );
 
+    memset( trace->firmware, '\0', 0x40 );
+    /* Ideally the 0x80002200 comes from the linker script. */
+    strcpy( trace->firmware, (char*) 0x80002200 );
+
     for( i = 0; i < 16; i++ ) {
         trace->r[i] = r[15 - i];
     }

@@ -128,6 +128,7 @@ void reboot_output( FILE *out, reboot_trace_t *trace )
             fprintf( out, "Offending instruction: 0x%08lx\n", trace->return_address );
     }
 
+    fprintf( out, "Firmware: %s\n", trace->firmware );
     fprintf( out, "-- Register File ---------------\n" );
     for( i = 0; i < 10; i++ ) {
         fprintf( out, " r%d: 0x%08lx\n", i, trace->r[i] );
@@ -170,6 +171,9 @@ uint32_t reboot_calculate_checksum( reboot_trace_t *trace )
     for( i = 0; i < 16; i++ ) {
         checksum ^= trace->r[i];
         checksum ^= trace->stack[i];
+    }
+    for( i = 0; i < 0x40; i++ ) {
+        checksum ^= trace->firmware[i];
     }
 
     return checksum;

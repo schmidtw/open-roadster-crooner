@@ -33,6 +33,7 @@ typedef struct {
     uint32_t sr;
     uint32_t stack[MAX_STACK_DEPTH]; /* 0 if not needed */
     uint32_t checksum;
+    char firmware[0x40];
 } reboot_trace_t;
 
 /**
