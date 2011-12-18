@@ -217,7 +217,7 @@ void test_queued_song( void )
     printf("\n");
     srand(11);
 
-    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_SONG) );
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
     backup1_n = so_n;
     print_song_info( so_n );
 

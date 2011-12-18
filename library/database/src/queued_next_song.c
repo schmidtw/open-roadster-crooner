@@ -66,7 +66,7 @@ db_status_t queued_next_song( song_node_t ** current_song,
     }
 
     /* Failed to get the previous song from the list */
-    rv = next_song(current_song, operation, level);
+    rv = next_song(current_song, DT_RANDOM, level);
     if(    ( DS_SUCCESS == rv )
         || ( DS_END_OF_LIST == rv ) ) {
         node = malloc( sizeof(queued_node_t) );

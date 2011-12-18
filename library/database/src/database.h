@@ -145,9 +145,11 @@ db_status_t next_song( song_node_t ** current_song,
  * Using this function will keep a playlist queue such that
  * a DT_PREVIOUS will result in the previous song being played.
  * If no previous song is available, the @next_song rules will be
- * followed.
+ * followed with a supplied DT_RANDOM.
  *
- * @note There is no queue clear at this point
+ * @param operation if not DT_PREVIOUS, a DT_RANDOM will be used
+ *        for the @next_song call
+ *
  * @note Songs collected via next_song interface will not be placed
  *       into the play queue
  */
