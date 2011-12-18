@@ -386,6 +386,7 @@ static void __process_command( irp_state_t *device_status,
                 /* Without this we seem to deadlock on "full error" testing. */
                 /* The real error seems to be due to the physical ibus driver. */
                 os_task_delay_ticks( 100 );
+                /* no break */
 
             case PB_STATUS__END_OF_SONG:
                 _D2( "RI_MSG_TYPE__PLAYBACK_STATUS:PB_STATUS__END_OF_SONG\n" );
@@ -550,7 +551,8 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
     bool isNewSong = true;
     db_traverse_t direction;
     uint8_t disc_temp = disc;
-    
+    next_song_fct get_next_song_fct;
+
     switch( cmd ) {
         case IRP_CMD__FAST_PLAY__FORWARD:
             disc_temp = DM_SONG;
@@ -559,9 +561,6 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
         case IRP_CMD__SEEK__NEXT:
         case IRP_CMD__SEEK__ALT_NEXT:
             direction = DT_NEXT;
-            if( is_random_enabled() ) {
-                direction = DT_RANDOM;
-            }
             break;
         case IRP_CMD__FAST_PLAY__REVERSE:
             disc_temp = DM_SONG;
@@ -570,27 +569,32 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
         case IRP_CMD__SEEK__PREV:
         case IRP_CMD__SEEK__ALT_PREV:
             direction = DT_PREVIOUS;
-            if( is_random_enabled() ) {
-                direction = DT_RANDOM;
-            }
             break;
         default:
             return false;
     }
     
+    if( is_random_enabled() ) {
+        get_next_song_fct = queued_next_song;
+    } else {
+        get_next_song_fct = next_song;
+    }
+
     switch( disc_temp ) {
         case DM_SONG:
-            rv = next_song( song, direction, DL_SONG );
+            rv = get_next_song_fct( song, direction, DL_SONG );
             if( DS_END_OF_LIST != rv ) {
                 break;
             }
+            /* no break */
         case DM_ALBUM:
-            rv = next_song( song, direction, DL_ALBUM );
+            rv = get_next_song_fct( song, direction, DL_ALBUM );
             if( DS_END_OF_LIST != rv ) {
                 break;
             }
+            /* no break */
         case DM_ARTIST:
-            next_song( song, direction, DL_ARTIST );
+            get_next_song_fct( song, direction, DL_ARTIST );
             break;
         case DM_TEXT_DISPLAY:
             set_display_state( !is_display_enabled());
