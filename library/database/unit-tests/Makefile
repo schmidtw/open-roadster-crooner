@@ -25,6 +25,7 @@ print_test__SOURCES  = \
                        ../src/indexer.c \
                        ../../linked-list/src/linked-list.c \
                        ../src/next_song.c \
+                       ../src/queued_next_song.c \
                        ../src/w_malloc.c
 
 include ../../make/Makefile.unit-test

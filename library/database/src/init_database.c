@@ -27,6 +27,7 @@ root_database_node_t rdn;
 bool init_database( media_interface_t *mi )
 {
     mi_init( mi );
+    queued_song_init();
     rdn.initialized = true;
     
     return true;

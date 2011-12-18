@@ -18,6 +18,7 @@ SOURCES = \
   init_database.c \
   mi_interface.c \
   next_song.c \
+  queued_next_song.c \
   w_malloc.c
 
 include ../../make/Makefile.common

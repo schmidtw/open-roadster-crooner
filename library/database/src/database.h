@@ -142,6 +142,22 @@ db_status_t next_song( song_node_t ** current_song,
                        const db_level_t level );
 
 /**
+ * Using this function will keep a playlist queue such that
+ * a DT_PREVIOUS will result in the previous song being played.
+ * If no previous song is available, the @next_song rules will be
+ * followed.
+ *
+ * @note There is no queue clear at this point
+ * @note Songs collected via next_song interface will not be placed
+ *       into the play queue
+ */
+db_status_t queued_next_song( song_node_t ** current_song,
+                             const db_traverse_t operation,
+                             const db_level_t level );
+
+typedef db_status_t (*next_song_fct)( song_node_t **, const db_traverse_t, const db_level_t );
+
+/**
  * Cleans up all the Group/Artist/Album/Song nodes.
  */
 void database_purge( void );

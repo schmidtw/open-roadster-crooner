@@ -17,6 +17,7 @@
 #include "database.h"
 #include "internal_database.h"
 #include "generic.h"
+#include "queued_next_song.h"
 
 /* See database.h for information */
 void database_purge( void )
@@ -25,4 +26,6 @@ void database_purge( void )
         delete_generic(&(rdn.root->node), NULL);
         rdn.root = NULL;
     }
+
+    queued_song_clear();
 }

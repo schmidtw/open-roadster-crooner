@@ -207,6 +207,50 @@ void test_random_song( void )
     database_purge();
 }
 
+void test_queued_song( void )
+{
+    int ii;
+    song_node_t * so_n = NULL;
+    song_node_t * backup1_n, *backup2_n, *backup3_n;
+    queued_song_init();
+    create_simple_database();
+    printf("\n");
+    srand(11);
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_SONG) );
+    backup1_n = so_n;
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_NEXT, DL_ARTIST) );
+    backup2_n = so_n;
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_NEXT, DL_SONG) );
+    backup3_n = so_n;
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_NEXT, DL_SONG) );
+    print_song_info( so_n );
+
+    CU_ASSERT( backup2_n != backup1_n );
+    CU_ASSERT( backup3_n != backup2_n );
+    CU_ASSERT( so_n != backup3_n );
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+
+    print_song_info( so_n );
+    CU_ASSERT( so_n == backup3_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    CU_ASSERT( so_n == backup2_n );
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    CU_ASSERT( so_n == backup1_n );
+    print_song_info( so_n );
+
+    database_purge();
+}
+
 void add_suites( CU_pSuite *suite )
 {
     *suite = CU_add_suite( "Print Test", NULL, NULL );
@@ -214,10 +258,14 @@ void add_suites( CU_pSuite *suite )
     CU_add_test( *suite, "Test Next Song Print", test_next_song );
     CU_add_test( *suite, "Test Prev Song Print", test_previous_song );
     CU_add_test( *suite, "Test Rand Song Print", test_random_song );
+    CU_add_test( *suite, "Test Queued Song", test_queued_song );
+
+    database_purge();
 }
 
 int main( int argc, char *argv[] )
 {
+    int rv = 1;
     CU_pSuite suite = NULL;
 
     if( CUE_SUCCESS == CU_initialize_registry() ) {
@@ -229,10 +277,14 @@ int main( int argc, char *argv[] )
             printf( "\n" );
             CU_basic_show_failures( CU_get_failure_list() );
             printf( "\n\n" );
+            rv = CU_get_number_of_tests_failed();
         }
 
         CU_cleanup_registry();
     }
 
+    if( 0 != rv ) {
+        return 1;
+    }
     return CU_get_error();
 }
