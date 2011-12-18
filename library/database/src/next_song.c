@@ -65,9 +65,10 @@ db_status_t next_song( song_node_t ** current_song,
     switch( level ) {
         case DL_ARTIST:
             generic_n = (generic_node_t*)generic_n->parent;
+            /* no break */
         case DL_ALBUM:
             generic_n = (generic_node_t*)generic_n->parent;
-            /* break left out on purpose */
+            /* no break */
         default:
             /* DL_SONG */
             break;
@@ -110,12 +111,16 @@ db_status_t next_song( song_node_t ** current_song,
         switch( generic_n->type ) {
             case GNT_ROOT:
                 generic_n = (generic_node_t*)generic_n->children.head->data;
+                /* no break */
             case GNT_ARTIST:
                 generic_n = (generic_node_t*)generic_n->children.head->data;
+                /* no break */
             case GNT_ALBUM:
                 generic_n = (generic_node_t*)generic_n->children.head->data;
+                /* no break */
             case GNT_SONG:
                 *current_song = (song_node_t*)generic_n;
+                /* no break */
         }
     } else {
         *current_song = NULL;
