@@ -2,6 +2,7 @@
 LIBRARIES = \
             mock \
             linked-list \
+            circular-buffer \
             util \
             bsp \
             newlib \
