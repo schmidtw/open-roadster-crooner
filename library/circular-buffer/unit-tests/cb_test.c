@@ -19,6 +19,7 @@ void test_invalid_create( void ) {
     cb_destroy_list(&cb);
     CU_ASSERT_EQUAL(cb, NULL);
 
+    cb_clear_list(NULL);
 }
 
 void test_create_fill_use_case( void )

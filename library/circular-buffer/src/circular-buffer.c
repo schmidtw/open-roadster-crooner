@@ -52,11 +52,13 @@ void *cb_create_list( size_t size, uint8_t num )
 void cb_clear_list( void * list )
 {
     cb_struct_t *ptr = (cb_struct_t*)list;
-    size_t num = ptr->element_number;
-    size_t element_size = ptr->element_size;
-    bzero(ptr->data, num*element_size);
-    ptr->head = NULL;
-    ptr->tail = NULL;
+    if( NULL != ptr ) {
+        size_t num = ptr->element_number;
+        size_t element_size = ptr->element_size;
+        bzero(ptr->data, num*element_size);
+        ptr->head = NULL;
+        ptr->tail = NULL;
+    }
 }
 
 void cb_destroy_list( void ** list )
