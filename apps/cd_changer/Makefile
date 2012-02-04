@@ -23,6 +23,7 @@ LIBRARIES = \
             ibus-physical \
             freertos \
             linked-list \
+            circular-buffer \
             memcard \
             dsp \
             led \
