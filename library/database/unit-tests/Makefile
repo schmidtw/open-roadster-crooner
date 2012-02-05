@@ -24,6 +24,7 @@ print_test__SOURCES  = \
                        ../src/generic.c \
                        ../src/indexer.c \
                        ../../linked-list/src/linked-list.c \
+                       ../../circular-buffer/src/circular-buffer.c \
                        ../src/next_song.c \
                        ../src/queued_next_song.c \
                        ../src/w_malloc.c

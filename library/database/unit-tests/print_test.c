@@ -211,7 +211,7 @@ void test_queued_song( void )
 {
     int ii;
     song_node_t * so_n = NULL;
-    song_node_t * backup1_n, *backup2_n, *backup3_n;
+    song_node_t * backup1_n, *backup2_n, *backup3_n, *backup4_n, *backup5_n;
     queued_song_init();
     create_simple_database();
     printf("\n");
@@ -230,13 +230,32 @@ void test_queued_song( void )
     print_song_info( so_n );
 
     CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_NEXT, DL_SONG) );
+    backup4_n = so_n;
+    print_song_info( so_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_NEXT, DL_SONG) );
+    backup5_n = so_n;
+    print_song_info( so_n );
+
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_NEXT, DL_SONG) );
     print_song_info( so_n );
 
     CU_ASSERT( backup2_n != backup1_n );
     CU_ASSERT( backup3_n != backup2_n );
-    CU_ASSERT( so_n != backup3_n );
-    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    CU_ASSERT( backup4_n != backup3_n );
+    CU_ASSERT( backup5_n != backup4_n );
+    CU_ASSERT( so_n != backup5_n );
 
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    print_song_info( so_n );
+    CU_ASSERT( so_n == backup5_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
+    print_song_info( so_n );
+    CU_ASSERT( so_n == backup4_n );
+
+    CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
     print_song_info( so_n );
     CU_ASSERT( so_n == backup3_n );
 

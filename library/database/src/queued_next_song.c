@@ -21,7 +21,7 @@
 
 #define MAX_QUEUED_LINKED_LIST 100
 
-void * queued_song_list;
+void * queued_song_list = NULL;
 
 typedef struct  {
     song_node_t * song_info;
@@ -29,7 +29,11 @@ typedef struct  {
 
 bool queued_song_init()
 {
-    queued_song_list = cb_create_list(sizeof(queued_node_t), MAX_QUEUED_LINKED_LIST);
+    if( NULL == queued_song_list ) {
+        queued_song_list = cb_create_list(sizeof(queued_node_t), MAX_QUEUED_LINKED_LIST);
+    } else {
+        queued_song_clear();
+    }
     return true;
 }
 
