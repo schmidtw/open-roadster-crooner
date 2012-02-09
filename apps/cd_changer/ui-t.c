@@ -73,7 +73,7 @@ typedef enum {
 
 typedef struct {
     size_t valid;
-    ri_msg_t msg[UI_HISTORY];
+    irp_cmd_t msg[UI_HISTORY];
 } history_t;
 
 /*----------------------------------------------------------------------------*/
@@ -825,16 +825,43 @@ static void start_scan_timer( void )
 static void history_push( history_t *history, const ri_msg_t *msg )
 {
     if( (NULL != history) && (NULL != msg) ) {
-        int i;
+    	if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
+    	    bool isCommandKeeper = true;
+    	    irp_cmd_t cmd = msg->d.ibus.command;
+    	    switch( cmd ) {
+                case IRP_CMD__STOP:
+                    break;
+                case IRP_CMD__PAUSE:
+                    break;
+                case IRP_CMD__PLAY:
+                    break;
+                case IRP_CMD__SEEK__ALT_NEXT:
+                case IRP_CMD__FAST_PLAY__FORWARD:
+                case IRP_CMD__SEEK__NEXT:
+                    cmd = IRP_CMD__SEEK__NEXT;
+                    break;
+                case IRP_CMD__SEEK__ALT_PREV:
+                case IRP_CMD__FAST_PLAY__REVERSE:
+                case IRP_CMD__SEEK__PREV:
+                    cmd = IRP_CMD__SEEK__PREV;
+                    break;
+                default:
+                    isCommandKeeper = false;
+                    break;
+            }
+    	    if( isCommandKeeper ) {
+                int i;
 
-        for( i = UI_HISTORY - 1; 0 < i; i-- ) {
-            memcpy( &history->msg[i], &history->msg[i - 1], sizeof(ri_msg_t) );
-        }
-        memcpy( &history->msg[0], msg, sizeof(ri_msg_t) );
+                for( i = UI_HISTORY - 1; 0 < i; i-- ) {
+                    memcpy( &history->msg[i], &history->msg[i - 1], sizeof(irp_cmd_t) );
+                }
+                memcpy( &history->msg[0], &cmd, sizeof(irp_cmd_t) );
 
-        history->valid++;
-        if( UI_HISTORY <= history->valid ) {
-            history->valid = UI_HISTORY;
+                history->valid++;
+                if( UI_HISTORY <= history->valid ) {
+                    history->valid = UI_HISTORY;
+                }
+    	    }
         }
     }
 }
@@ -845,31 +872,9 @@ static bool history_get_last_cmd( history_t *history, irp_cmd_t *cmd )
         int i;
 
         for( i = 0; i < history->valid; i++ ) {
-            if( RI_MSG_TYPE__IBUS_CMD == history->msg[i].type ) {
-                if( NULL != cmd ) {
-                    *cmd = history->msg[i].d.ibus.command;
-                    switch( *cmd ) {
-                        case IRP_CMD__STOP:
-                            break;
-                        case IRP_CMD__PAUSE:
-                            break;
-                        case IRP_CMD__PLAY:
-                            break;
-                        case IRP_CMD__SEEK__ALT_NEXT:
-                        case IRP_CMD__FAST_PLAY__FORWARD:
-                        case IRP_CMD__SEEK__NEXT:
-                            *cmd = IRP_CMD__SEEK__NEXT;
-                            break;
-                        case IRP_CMD__SEEK__ALT_PREV:
-                        case IRP_CMD__FAST_PLAY__REVERSE:
-                        case IRP_CMD__SEEK__PREV:
-                            *cmd = IRP_CMD__SEEK__PREV;
-                            break;
-                        default:
-                            continue;
-                    }
-                    return true;
-                }
+            if( NULL != cmd ) {
+                *cmd = history->msg[i];
+                return true;
             }
         }
     }
