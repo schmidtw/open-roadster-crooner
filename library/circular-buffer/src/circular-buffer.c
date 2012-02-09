@@ -96,11 +96,13 @@ bool cb_pop( void * list, void *item )
 {
     cb_struct_t * cb_list = (cb_struct_t*)list;
     if(    ( NULL == list )
-        || ( NULL == item )
         || ( NULL == cb_list->head ) ) {
         return false;
     }
-    memcpy(item, cb_list->tail, cb_list->element_size);
+
+    if( NULL != item ) {
+        memcpy(item, cb_list->tail, cb_list->element_size);
+    }
 
     if( cb_list->head == cb_list->tail ) {
         cb_clear_list(list);
@@ -114,12 +116,12 @@ bool cb_pop( void * list, void *item )
     return true;
 }
 
-bool cb_push( void * list, void * element )
+void cb_push( void * list, void * element )
 {
     cb_struct_t * cb_list = (cb_struct_t*)list;
     if(    ( NULL == list )
         || ( NULL == element ) ) {
-        return false;
+        return;
     }
 
     if( NULL == cb_list->tail ) {
@@ -138,5 +140,4 @@ bool cb_push( void * list, void * element )
         }
     }
     memcpy( cb_list->tail, element, cb_list->element_size );
-    return true;
 }

@@ -13,8 +13,8 @@ void test_invalid_create( void ) {
     CU_ASSERT_EQUAL(cb_create_list(5, 0), NULL);
 
     cb = cb_create_list(8, 5);
-    CU_ASSERT_FALSE( cb_push(cb, NULL) );
-    CU_ASSERT_FALSE( cb_push(NULL, cb) );
+    cb_push(cb, NULL);
+    cb_push(NULL, cb);
 
     cb_destroy_list(&cb);
     CU_ASSERT_EQUAL(cb, NULL);
@@ -47,13 +47,13 @@ void test_create_fill_use_case( void )
         CU_ASSERT_EQUAL(t->key, 500);
     }
     local_element.value = 2;
-    CU_ASSERT_TRUE(cb_push(cb, &local_element));
+    cb_push(cb, &local_element);
     local_element.value = 3;
-    CU_ASSERT_TRUE(cb_push(cb, &local_element));
+    cb_push(cb, &local_element);
     local_element.value = 4;
-    CU_ASSERT_TRUE(cb_push(cb, &local_element));
+    cb_push(cb, &local_element);
     local_element.value = 5;
-    CU_ASSERT_TRUE(cb_push(cb, &local_element));
+    cb_push(cb, &local_element);
 
     CU_ASSERT_TRUE(cb_pop(cb, &local_element));
     CU_ASSERT_EQUAL(local_element.value, 5);
@@ -76,7 +76,7 @@ void test_create_fill_use_case( void )
         int i;
         for( i = 1; i <= 7; i++ ) {
             local_element.value = i;
-            CU_ASSERT_TRUE(cb_push(cb, &local_element));
+            cb_push(cb, &local_element);
         }
         for( i = 7; i > 2; i-- ) {
             CU_ASSERT_TRUE(cb_pop(cb, &local_element));
@@ -84,6 +84,9 @@ void test_create_fill_use_case( void )
         }
         CU_ASSERT_FALSE(cb_pop(cb, &local_element));
     }
+
+    cb_push(cb, &local_element);
+    CU_ASSERT_TRUE( cb_pop(cb, NULL) );
 
     cb_destroy_list(&cb);
     CU_ASSERT_EQUAL(cb,NULL);

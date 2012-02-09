@@ -49,12 +49,11 @@ db_status_t queued_next_song( song_node_t ** current_song,
     queued_node_t node;
     db_status_t rv;
     if( DT_PREVIOUS == operation ) {
-        queued_node_t node;
         /* Because we put the last played song on the queue, if we
          * want to go to the previous song, we need to remove the
          * last song, and the next song will be our song of interest
          */
-        if( cb_pop(queued_song_list, (void*)&node) ) {
+        if( cb_pop(queued_song_list, NULL) ) {
             queued_node_t *tmp = (queued_node_t *)cb_peek_tail(queued_song_list);
             if( NULL != tmp ) {
                 (*current_song) = tmp->song_info;
