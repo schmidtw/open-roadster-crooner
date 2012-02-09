@@ -29,6 +29,7 @@
 #include <display/display.h>
 #endif
 #include <database/database.h>
+#include <circular-buffer/circular-buffer.h>
 
 #include "user-interface.h"
 
@@ -71,11 +72,6 @@ typedef enum {
     DM_TEXT_DISPLAY = 5
 } disc_mode_t;
 
-typedef struct {
-    size_t valid;
-    irp_cmd_t msg[UI_HISTORY];
-} history_t;
-
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
@@ -110,8 +106,8 @@ static void enable_scan_state( void );
 static void disable_scan_state( void );
 static bool is_scan_enabled( void );
 static void start_scan_timer( void );
-static void history_push( history_t *history, const ri_msg_t *msg );
-static bool history_get_last_cmd( history_t *history, irp_cmd_t *cmd );
+static void history_push( void *history_list, const ri_msg_t *msg );
+static bool history_get_last_cmd( void *history_list, irp_cmd_t *cmd );
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -144,12 +140,15 @@ bool ui_t_init( void )
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
 /* See user-interface.h for details. */
+void *__history = NULL;
 static void* __get_user_data()
 {
-    static history_t h;
-
-    h.valid = 0;
-    return &h;
+    if( NULL == __history ) {
+        __history = cb_create_list(sizeof(irp_cmd_t), UI_HISTORY);
+    }
+    /* This list is never destroyed, only created and cleared */
+    cb_clear_list(__history);
+    return __history;
 }
 
 /* See user-interface.h for details. */
@@ -183,13 +182,13 @@ static void __process_command( irp_state_t *device_status,
     irp_cmd_t last;
     display_action_t shouldSendText = NO_DISPLAY_UPDATE;
     bool send_status = true;
-    history_t *history = (history_t *) user_data;
+    void *history_list = user_data;
 
     _D2( "device_status: 0x%04x -- %s\n", *device_status, irp_state_to_string(*device_status) );
 
     /* Just make it not match the search below... */
     last = IRP_CMD__GET_STATUS;
-    history_get_last_cmd( history, &last );
+    history_get_last_cmd( history_list, &last );
 
     _D2( "Last cmd: %s\n", irp_cmd_to_string(last) );
 
@@ -427,7 +426,7 @@ static void __process_command( irp_state_t *device_status,
 #endif
     }
 
-    history_push( history, msg );
+    history_push( history_list, msg );
 }
 
 /**
@@ -822,11 +821,10 @@ static void start_scan_timer( void )
     return;
 }
 
-static void history_push( history_t *history, const ri_msg_t *msg )
+static void history_push( void *history_list, const ri_msg_t *msg )
 {
-    if( (NULL != history) && (NULL != msg) ) {
+    if( (NULL != history_list) && (NULL != msg) ) {
     	if( RI_MSG_TYPE__IBUS_CMD == msg->type ) {
-    	    bool isCommandKeeper = true;
     	    irp_cmd_t cmd = msg->d.ibus.command;
     	    switch( cmd ) {
                 case IRP_CMD__STOP:
@@ -846,38 +844,22 @@ static void history_push( history_t *history, const ri_msg_t *msg )
                     cmd = IRP_CMD__SEEK__PREV;
                     break;
                 default:
-                    isCommandKeeper = false;
-                    break;
+                    return;
             }
-    	    if( isCommandKeeper ) {
-                int i;
-
-                for( i = UI_HISTORY - 1; 0 < i; i-- ) {
-                    memcpy( &history->msg[i], &history->msg[i - 1], sizeof(irp_cmd_t) );
-                }
-                memcpy( &history->msg[0], &cmd, sizeof(irp_cmd_t) );
-
-                history->valid++;
-                if( UI_HISTORY <= history->valid ) {
-                    history->valid = UI_HISTORY;
-                }
-    	    }
+    	    /* Only returns NULL if there was a bad
+    	     * parameter passed in
+    	     */
+    	    cb_push(history_list, &cmd);
         }
     }
 }
 
-static bool history_get_last_cmd( history_t *history, irp_cmd_t *cmd )
+static bool history_get_last_cmd( void *history_list, irp_cmd_t *cmd )
 {
-    if( NULL != history ) {
-        int i;
-
-        for( i = 0; i < history->valid; i++ ) {
-            if( NULL != cmd ) {
-                *cmd = history->msg[i];
-                return true;
-            }
-        }
+    irp_cmd_t *tmp = (irp_cmd_t*)cb_peek_tail(history_list);
+    if( NULL != tmp ) {
+        *cmd = *tmp;
+        return true;
     }
-
     return false;
 }
