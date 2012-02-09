@@ -769,9 +769,11 @@ static uint8_t get_random_track( bool random_state )
  */
 static void set_random_state( bool new_state )
 {
-    random_state = new_state;
-    if( true == random_state ) {
-        srand( cpu_get_sys_count() );
+    if( new_state != random_state ) {
+        random_state = new_state;
+        if( true == random_state ) {
+            srand( cpu_get_sys_count() );
+        }
     }
 }
 
@@ -846,8 +848,28 @@ static bool history_get_last_cmd( history_t *history, irp_cmd_t *cmd )
             if( RI_MSG_TYPE__IBUS_CMD == history->msg[i].type ) {
                 if( NULL != cmd ) {
                     *cmd = history->msg[i].d.ibus.command;
+                    switch( *cmd ) {
+                        case IRP_CMD__STOP:
+                            break;
+                        case IRP_CMD__PAUSE:
+                            break;
+                        case IRP_CMD__PLAY:
+                            break;
+                        case IRP_CMD__SEEK__ALT_NEXT:
+                        case IRP_CMD__FAST_PLAY__FORWARD:
+                        case IRP_CMD__SEEK__NEXT:
+                            *cmd = IRP_CMD__SEEK__NEXT;
+                            break;
+                        case IRP_CMD__SEEK__ALT_PREV:
+                        case IRP_CMD__FAST_PLAY__REVERSE:
+                        case IRP_CMD__SEEK__PREV:
+                            *cmd = IRP_CMD__SEEK__PREV;
+                            break;
+                        default:
+                            continue;
+                    }
+                    return true;
                 }
-                return true;
             }
         }
     }
