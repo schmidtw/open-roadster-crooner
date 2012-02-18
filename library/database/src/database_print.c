@@ -28,6 +28,9 @@
 #define MAX_TRACK_DIGITS        5
 #define MAX_FILE_NAME           35
 
+#ifdef UNIT_TEST
+#define INT32_STANDARD_INT_SIZE
+#endif
 
 void database_print( void )
 {
@@ -37,7 +40,14 @@ void database_print( void )
     if(    ( NULL != rdn.root )
         && ( NULL != rdn.root->children.head ) )
     {
-        printf(" root (%lu-%lu)\n", rdn.root->d.list.index_songs_start, rdn.root->d.list.index_songs_stop);
+        printf(
+#ifdef INT32_STANDARD_INT_SIZE
+               " root (%u-%u)\n",
+#else
+               " root (%lu-%lu)\n",
+#endif
+               rdn.root->d.list.index_songs_start,
+               rdn.root->d.list.index_songs_stop);
         gn = (generic_node_t *)rdn.root->children.head->data;
         while( NULL != gn ) {
             artist_print( gn, DISPLAY_OFFSET );
@@ -55,12 +65,17 @@ void artist_print( generic_node_t * artist, int spaces )
 {
     generic_node_t *al_n;
     
-    printf("%*.*s %lu-(%lu-%lu) %-*.*s\n",
-            spaces, spaces, " ",
-            artist->d.list.index,
-            artist->d.list.index_songs_start,
-            artist->d.list.index_songs_stop,
-            MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name.artist );
+    printf(
+#ifdef INT32_STANDARD_INT_SIZE
+           "%*.*s %u-(%u-%u) %-*.*s\n",
+#else
+           "%*.*s %lu-(%lu-%lu) %-*.*s\n",
+#endif
+           spaces, spaces, " ",
+           artist->d.list.index,
+           artist->d.list.index_songs_start,
+           artist->d.list.index_songs_stop,
+           MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name.artist );
     if( NULL == artist->children.head ) {
         printf("%*.*s Why are the albums NULL?\n", spaces, spaces, " ");
         return;
@@ -80,12 +95,17 @@ void album_print( generic_node_t * album, int spaces )
 {
     generic_node_t *so_n;
     
-    printf("%*.*s %lu-(%lu-%lu) %-*.*s\n",
-            spaces, spaces, " ",
-            album->d.list.index,
-            album->d.list.index_songs_start,
-            album->d.list.index_songs_stop,
-            MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name.album );
+    printf(
+#ifdef INT32_STANDARD_INT_SIZE
+           "%*.*s %u-(%u-%u) %-*.*s\n",
+#else
+           "%*.*s %lu-(%lu-%lu) %-*.*s\n",
+#endif
+           spaces, spaces, " ",
+           album->d.list.index,
+           album->d.list.index_songs_start,
+           album->d.list.index_songs_stop,
+           MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name.album );
     if( NULL == album->children.head ) {
         printf("%*.*s Why are the songs NULL?\n", spaces, spaces, " ");
         return;
@@ -103,12 +123,17 @@ void album_print( generic_node_t * album, int spaces )
 
 void song_print( generic_node_t * song, int spaces )
 {
-    printf("%*.*s %*.*u %lu) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
-            spaces, spaces, " ",
-            MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, ((song_node_t*)song)->track_number,
-            ((song_node_t*)song)->index_songs_value,
-            MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->name.song,
-            song->d.gain.album_gain, song->d.gain.album_peak,
-            song->d.gain.track_gain, song->d.gain.track_peak,
-            MAX_FILE_NAME, MAX_FILE_NAME, ((song_node_t*)song)->file_location );
+    printf(
+#ifdef INT32_STANDARD_INT_SIZE
+           "%*.*s %*.*u %u) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
+#else
+           "%*.*s %*.*u %lu) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
+#endif
+           spaces, spaces, " ",
+           MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, ((song_node_t*)song)->track_number,
+           ((song_node_t*)song)->index_songs_value,
+           MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->name.song,
+           song->d.gain.album_gain, song->d.gain.album_peak,
+           song->d.gain.track_gain, song->d.gain.track_peak,
+           MAX_FILE_NAME, MAX_FILE_NAME, ((song_node_t*)song)->file_location );
 }

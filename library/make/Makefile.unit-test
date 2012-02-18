@@ -17,7 +17,7 @@ touch = touch
 
 QUIET  ?= @
 
-cflags        = -Wall -g -fprofile-arcs -ftest-coverage
+cflags        = -Wall -g -fprofile-arcs -ftest-coverage -DUNIT_TEST
 ldflags       = -lcunit
 extension     = ut-o
 inc_suffix    = __INCLUDES
@@ -65,7 +65,7 @@ define RUN_template
 $(1)_run : $(1)
 	./$(1)
 	$(QUIET)$(gcov) -l -p -o . $(1) *-$(1).c
-	$(QUIET)$(rename) 's/^..#/gcov..#/' ..#* 
+	$(QUIET)find . -maxdepth 1 -type f -exec $(rename) ..# gcov..# '{}' \;
 endef
 
 # $(1) = test name
