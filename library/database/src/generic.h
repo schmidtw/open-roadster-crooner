@@ -30,8 +30,6 @@ typedef ll_node_t * (*generic_create_fn_t)( const generic_node_types_t type, con
  *        be added to.
  * @param compare_fct function which is called to see if the existing element
  *        found in list is the same as the passed in element
- * @param new_node_fct function which is called if no element exists in the
- *        list
  * @param element data which is passed into the compare_fct and new_node_fct
  * @param created_node will be updated to true if a node was created, or
  *        false if the node was not created.  This is only valid if the
@@ -42,7 +40,6 @@ typedef ll_node_t * (*generic_create_fn_t)( const generic_node_types_t type, con
  */
 generic_node_t * find_or_create_generic( generic_node_t * generic,
         generic_compare_fn_t compare_fct,
-        generic_create_fn_t new_node_fct,
         void * element,
         bool * created_node );
 

@@ -24,7 +24,6 @@
 
 generic_node_t * find_or_create_generic( generic_node_t * generic,
         generic_compare_fn_t compare_fct,
-        generic_create_fn_t new_node_fct,
         void * element,
         bool * created_node )
 {
@@ -36,7 +35,6 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
     if(    ( NULL == element )
         || ( NULL == generic )
         || ( NULL == compare_fct )
-        || ( NULL == new_node_fct )
         || ( NULL == created_node ) ) {
         return NULL;
     }
@@ -72,7 +70,7 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
     /* The type of the newly created node will be be one greater
      * than the parent.
      */
-    node = new_node_fct( (generic->type+1) , element );
+    node = get_new_generic_node( (generic->type+1) , element );
     if( NULL == node ) {
         return NULL;
     }
@@ -86,7 +84,7 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
 
 int8_t generic_compare( const void * element1, const generic_node_t * element2 )
 {
-    return ( strcmp((char*)element1, element2->name.album) );
+    return ( strcasecmp((char*)element1, element2->name.album) );
 }
 
 int8_t song_compare( const void * element1, const generic_node_t * element2 )
@@ -94,7 +92,7 @@ int8_t song_compare( const void * element1, const generic_node_t * element2 )
     song_create_t * sc1 = (song_create_t*)element1;
     int32_t result = sc1->metadata->track_number - ((song_node_t*)element2)->track_number;
     if( 0 == result ) {
-        result = strcmp(sc1->metadata->title, element2->name.song);
+        result = strcasecmp(sc1->metadata->title, element2->name.song);
         if( 0 == result ) {
             if(    ( sc1->metadata->album_gain != element2->d.gain.album_gain )
                 || ( sc1->metadata->album_peak != element2->d.gain.album_peak )

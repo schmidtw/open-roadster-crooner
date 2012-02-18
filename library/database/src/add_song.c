@@ -22,12 +22,10 @@ song_node_t * add_song_to_root( generic_node_t * root,
     
     if( NULL != metadata ) {
         artist_n = find_or_create_generic( root, generic_compare,
-                get_new_generic_node, (void*)metadata->artist,
-                &artist_created );
+                (void*)metadata->artist, &artist_created );
         if( NULL != artist_n ) {
             album_n = find_or_create_generic( artist_n, generic_compare,
-                    get_new_generic_node, (void*)metadata->album,
-                    &album_created );
+                    (void*)metadata->album, &album_created );
             if( NULL != album_n ) {
                 bool song_created;
                 song_create_t sc;
@@ -35,8 +33,7 @@ song_node_t * add_song_to_root( generic_node_t * root,
                 sc.play_fn = play_fn;
                 sc.file_location = file_location;
                 song_n = (song_node_t*)find_or_create_generic( album_n,
-                        song_compare, get_new_generic_node, (void*)&sc,
-                        &song_created);
+                        song_compare, (void*)&sc, &song_created);
                 if( NULL != song_n ) {
                     return song_n;
                 }
