@@ -253,6 +253,7 @@ static bt_ir_t __check_list_iterator(bt_node_t *node, volatile void *user_data)
         data->didFailureOccur = true;
     }
     data->counter++;
+    return BT_IR__CONTINUE;
 }
 
 static bool __check_list( bt_list_t *list, int *array, size_t array_size )
