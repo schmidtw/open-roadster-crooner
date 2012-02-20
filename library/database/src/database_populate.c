@@ -146,7 +146,7 @@ static bool __put_songs_into_root( const char * RootDirectory )
                 rv = mi_get_information( full_path, &metadata, &play_fn );
                 if( MI_RETURN_OK == rv ) {
                     if( 0 < metadata.disc_number ) {
-                        metadata.disc_number += 1000 * (metadata.disc_number - 1);
+                        metadata.track_number += 1000 * (metadata.disc_number - 1);
                     }
                     add_song_to_root( rdn.root, &metadata,
                             play_fn, full_path );
