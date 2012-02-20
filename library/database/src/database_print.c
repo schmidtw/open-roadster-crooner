@@ -49,7 +49,7 @@ void database_print( void )
     }
 }
 
-bt_ir_t artist_print(bt_node_t *node, volatile void *user_data)
+bt_ir_t artist_print(bt_node_t *node, void *user_data)
 {
     generic_node_t *artist = (generic_node_t*)node->data;
     int spaces = (int) user_data;
@@ -69,7 +69,7 @@ bt_ir_t artist_print(bt_node_t *node, volatile void *user_data)
     return BT_IR__CONTINUE;
 }
 
-bt_ir_t album_print(bt_node_t *node, volatile void *user_data)
+bt_ir_t album_print(bt_node_t *node, void *user_data)
 {
     generic_node_t *album = (generic_node_t*)node->data;
     int spaces = (int) user_data;
@@ -89,7 +89,7 @@ bt_ir_t album_print(bt_node_t *node, volatile void *user_data)
     return BT_IR__CONTINUE;
 }
 
-bt_ir_t song_print(bt_node_t *node, volatile void *user_data)
+bt_ir_t song_print(bt_node_t *node, void *user_data)
 {
     generic_node_t *song = (generic_node_t*) node->data;
     int spaces = (int) user_data;

@@ -29,4 +29,8 @@ print_test__SOURCES  = \
                        ../src/queued_next_song.c \
                        ../src/w_malloc.c
 
+print_test__CFLAGS = \
+  -Wno-pointer-to-int-cast \
+  -Wno-int-to-pointer-cast
+
 include ../../make/Makefile.unit-test

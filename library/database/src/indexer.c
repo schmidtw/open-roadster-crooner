@@ -11,7 +11,7 @@ typedef struct {
     uint32_t identifier_in_list;
 } indexer_t;
 
-bt_ir_t index_generic( bt_node_t *node, volatile void *user_data );
+bt_ir_t index_generic( bt_node_t *node, void *user_data );
 
 
 void index_root( bt_node_t * root )
@@ -23,7 +23,7 @@ void index_root( bt_node_t * root )
     bt_set_compare( &root_node->children, compare_indexed_general );
 }
 
-bt_ir_t index_generic( bt_node_t *node, volatile void *user_data )
+bt_ir_t index_generic( bt_node_t *node, void *user_data )
 {
     indexer_t *indexer = (indexer_t *)user_data;
     generic_node_t *gn = (generic_node_t *)node->data;

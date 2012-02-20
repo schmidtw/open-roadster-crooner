@@ -234,7 +234,7 @@ bt_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
     return &(generic_n->node);
 }
 
-void delete_generic(bt_node_t *node, volatile void *user_data)
+void delete_generic(bt_node_t *node, void *user_data)
 {
     generic_node_t *generic_n;
 

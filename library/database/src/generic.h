@@ -67,6 +67,6 @@ int8_t song_compare( const void * element1, const void * element2 );
  * Deletion function which should be referenced when using
  * the list deleter function.
  */
-void delete_generic(bt_node_t *node, volatile void *user_data);
+void delete_generic(bt_node_t *node, void *user_data);
 
 #endif /* __GENERIC_H__ */
