@@ -26,15 +26,8 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define max(a,b) \
-   ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-     _a > _b ? _a : _b; })
-
-#define min(a,b) \
-   ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-     _a < _b ? _a : _b; })
+#define max(X,Y) ((X) > (Y) ? (X) : (Y))
+#define min(X,Y) ((X) < (Y) ? (X) : (Y))
 
 
 /*----------------------------------------------------------------------------*/
@@ -51,7 +44,7 @@
 /*                             Function Prototypes                            */
 /*----------------------------------------------------------------------------*/
 static int __height( bt_node_t * node );
-static bool __insert( bt_node_t *node_to_add, bt_node_t **tree_root, bt_compare comparer );
+static void __correct_height( bt_node_t **tree_root );
 static void __single_rotate_right( bt_node_t **node );
 static void __single_rotate_left( bt_node_t **node );
 static void __double_rotate_right( bt_node_t **node );
@@ -69,6 +62,13 @@ static bt_node_t* __get_next( volatile bt_list_t *list, bt_node_t *node,
         void *data, bt_get_t next, volatile bool *isFound );
 static bt_node_t* __get_head( bt_node_t *node );
 static bt_node_t* __get_tail( bt_node_t *node );
+
+/* Insert and Remove balance as the go */
+static bool __insert( bt_node_t *node_to_add, bt_node_t **tree_root, bt_compare comparer );
+static bool __remove( void *data, bt_node_t **tree_root,
+        bt_compare comparer,
+        void (*deleter)(bt_node_t *node, volatile void *user_data),
+        volatile void *user_data);
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -162,6 +162,17 @@ void bt_delete_list( volatile bt_list_t *list,
     }
 }
 
+void bt_remove( volatile bt_list_t *list, void *data,
+        void (*deleter)(bt_node_t *node, volatile void *user_data),
+        volatile void *user_data )
+{
+    if(    ( NULL != list )
+        && ( NULL != data )
+        && ( NULL != deleter ) ) {
+        __remove(data, &list->root, list->comparer, deleter, user_data);
+    }
+}
+
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
@@ -171,6 +182,29 @@ static int __height( bt_node_t * node ) {
     } else {
         return node->height;
     }
+}
+
+static void __correct_height( bt_node_t **tree_root )
+{
+    int diff = __height((*tree_root)->left) -
+               __height((*tree_root)->right);
+    if( 2 == diff ) {
+        /* The left node is out of wack */
+        if( __height( (*tree_root)->left->left ) > __height( (*tree_root)->left->right ) ) {
+            __single_rotate_left(tree_root);
+        } else {
+            __double_rotate_left(tree_root);
+        }
+    } else if ( -2 == diff ) {
+        /* The right node is out of wack */
+        if( __height( (*tree_root)->right->right ) > __height( (*tree_root)->right->left ) ) {
+            __single_rotate_right(tree_root);
+        } else {
+            __double_rotate_right(tree_root);
+        }
+    }
+    (*tree_root)->height = max( __height((*tree_root)->left),
+                                __height((*tree_root)->right)) + 1;
 }
 
 static bool __insert( bt_node_t *node_to_add, bt_node_t **tree_root, bt_compare comparer )
@@ -185,30 +219,15 @@ static bool __insert( bt_node_t *node_to_add, bt_node_t **tree_root, bt_compare 
             if( !__insert(node_to_add, &(*tree_root)->left, comparer) ) {
                 return false;
             }
-            if( 2 == (__height((*tree_root)->left) - __height((*tree_root)->right)) ) {
-                if( 0 > comparer(node_to_add->data, (*tree_root)->left->data) ) {
-                    __single_rotate_left(tree_root);
-                } else {
-                    __double_rotate_left(tree_root);
-                }
-            }
         } else if( 0 < compare_rslt ) {
             /* Add node is greater than this node */
             if( !__insert(node_to_add, &(*tree_root)->right, comparer) ) {
                 return false;
             }
-            if( 2 == (__height((*tree_root)->right) - __height((*tree_root)->left)) ) {
-                if( 0 < comparer(node_to_add->data, (*tree_root)->right->data) ) {
-                    __single_rotate_right(tree_root);
-                } else {
-                    __double_rotate_right(tree_root);
-                }
-            }
         } else { /* 0 == compare_rslt */
             return false;
         }
-        (*tree_root)->height = max( __height((*tree_root)->left),
-                                    __height((*tree_root)->right)) + 1;
+        __correct_height(tree_root);
     }
     return true;
 }
@@ -384,4 +403,52 @@ static bt_node_t* __get_tail( bt_node_t *node )
         }
     }
     return node;
+}
+
+static bool __remove( void *data, bt_node_t **tree_root,
+        bt_compare comparer,
+        void (*deleter)(bt_node_t *node, volatile void *user_data),
+        volatile void *user_data)
+{
+    int8_t result;
+    bool rv = true;
+    if( NULL == *tree_root ) {
+        return false;
+    }
+
+    result = comparer( data, (*tree_root)->data );
+    if( 0 == result ) {
+        bt_node_t *tmp = *tree_root;
+        if(    (NULL == tmp->left)
+            && (NULL == tmp->right) ) {
+            *tree_root = NULL;
+        } else if( NULL == tmp->right ) {
+            *tree_root = tmp->left;
+        } else if( NULL == tmp->left ) {
+            *tree_root = tmp->right;
+        } else {
+            /* The left and right nodes are both in use.
+             * During this removal call, this is the only
+             * time this case will be hit
+             */
+            bt_node_t *new_head = __get_head(tmp->right);
+            __remove( new_head->data, &tmp->right, comparer, NULL, user_data );
+            new_head->left = tmp->left;
+            new_head->right = tmp->right;
+            *tree_root = new_head;
+        }
+        if( NULL != deleter ) {
+            deleter( tmp, user_data );
+        }
+    } else if( -1 == result ) {
+        rv = __remove( data, &(*tree_root)->left, comparer, deleter, user_data );
+    } else { /* 1 == result */
+        rv = __remove( data, &(*tree_root)->right, comparer, deleter, user_data );
+    }
+    if(    (rv)
+        && (NULL != *tree_root) )
+    {
+        __correct_height(tree_root);
+    }
+    return rv;
 }

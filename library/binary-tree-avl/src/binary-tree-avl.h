@@ -158,9 +158,14 @@ void bt_iterate( volatile bt_list_t *list,
  *  Used to remove a node from the list.
  *
  *  @param list the list to remove from
- *  @param node the node to remove from the list
+ *  @param data pointer of data to be used to remove the node by
+ *  @param deleter function pointer which is to be called with the bt_node_t*
+ *         which is to be deleted
+ *  @param user_data the user_data to pass as an argument to the deleter
  */
-void bt_remove( volatile bt_list_t *list, bt_node_t *node );
+void bt_remove( volatile bt_list_t *list, void *data,
+        void (*deleter)(bt_node_t *node, volatile void *user_data),
+        volatile void *user_data );
 
 /**
  *  Used to delete all the nodes in a list.

@@ -235,12 +235,124 @@ void test_bt_get( void )
     bt_delete_list(&list, deleter_ut, NULL);
 }
 
+
+typedef struct {
+    size_t counter;
+    size_t array_size;
+    int *array;
+    bool didFailureOccur;
+} __check_list_t;
+
+static bt_ir_t __check_list_iterator(bt_node_t *node, volatile void *user_data)
+{
+    __check_list_t *data = (__check_list_t *)user_data;
+
+    CU_ASSERT_FATAL( data->counter < data->array_size );
+    CU_ASSERT( data->array[data->counter] == (int)node->data );
+    if( data->array[data->counter] != (int)node->data ) {
+        data->didFailureOccur = true;
+    }
+    data->counter++;
+}
+
+static bool __check_list( bt_list_t *list, int *array, size_t array_size )
+{
+    volatile __check_list_t data;
+    data.counter = 0;
+    data.array_size = array_size;
+    data.array = array;
+    data.didFailureOccur = false;
+
+    bt_iterate(list, __check_list_iterator, NULL, &data);
+    return !data.didFailureOccur;
+}
+
+void test_bt_remove( void )
+{
+    bt_list_t list;
+
+    bt_init_list(&list, comp);
+
+    bt_remove(NULL, 1, deleter_ut, NULL );
+    bt_remove(&list, NULL, deleter_ut, NULL);
+    bt_remove(&list, 1, NULL, NULL);
+    bt_remove(&list, 1, deleter_ut, NULL);
+
+    create_node_and_add_to_list(&list, 5, true);
+    bt_remove(&list, 1, deleter_ut, NULL);
+
+    bt_remove(&list, 5, deleter_ut, NULL);
+    CU_ASSERT( NULL == bt_get_head(&list) );
+
+    create_node_and_add_to_list(&list, 5, true);
+    create_node_and_add_to_list(&list, 4, true);
+    create_node_and_add_to_list(&list, 6, true);
+    create_node_and_add_to_list(&list, 7, true);
+
+    /* remove: left NULL, right DATA */
+    bt_remove(&list, 6, deleter_ut, NULL);
+    {
+        int local_array[] = {4,5,7};
+        CU_ASSERT(__check_list( &list, local_array, sizeof(local_array) ));
+    }
+
+    create_node_and_add_to_list(&list, 6, true);
+    /* remove: left DATA, right NULL */
+    bt_remove(&list, 7, deleter_ut, NULL);
+    {
+        int local_array[] = {4,5,6};
+        CU_ASSERT(__check_list( &list, local_array, sizeof(local_array) ));
+    }
+
+    bt_delete_list(&list, deleter_ut, NULL);
+    create_node_and_add_to_list(&list, 5, true);
+    create_node_and_add_to_list(&list, 4, true);
+    create_node_and_add_to_list(&list, 7, true);
+    create_node_and_add_to_list(&list, 6, true);
+    create_node_and_add_to_list(&list, 8, true);
+    bt_remove(&list, 7, deleter_ut, NULL);
+    /* remove: left DATA, right DATA...no balance required */
+    {
+        int local_array[] = {4,5,6,8};
+        CU_ASSERT(__check_list( &list, local_array, sizeof(local_array) ));
+    }
+
+    bt_delete_list(&list, deleter_ut, NULL);
+    create_node_and_add_to_list(&list, 5, true);
+    create_node_and_add_to_list(&list, 4, true);
+    create_node_and_add_to_list(&list, 7, true);
+    create_node_and_add_to_list(&list, 6, true);
+    create_node_and_add_to_list(&list, 8, true);
+    bt_remove(&list, 5, deleter_ut, NULL);
+    /* remove: left DATA, right DATA...no balance required */
+    {
+        int local_array[] = {4,6,7,8};
+        CU_ASSERT(__check_list( &list, local_array, sizeof(local_array) ));
+    }
+
+    bt_delete_list(&list, deleter_ut, NULL);
+    create_node_and_add_to_list(&list, 5, true);
+    create_node_and_add_to_list(&list, 4, true);
+    create_node_and_add_to_list(&list, 7, true);
+    create_node_and_add_to_list(&list, 6, true);
+    create_node_and_add_to_list(&list, 8, true);
+    bt_remove(&list, 4, deleter_ut, NULL);
+    /* remove: left NULL, right NULL...balance required */
+    {
+        int local_array[] = {5,6,7,8};
+        CU_ASSERT(__check_list( &list, local_array, sizeof(local_array) ));
+    }
+
+
+}
+
 void add_suites( CU_pSuite *suite )
 {
     *suite = CU_add_suite( "Singly Binary Tree (AVL) Test", NULL, NULL );
     CU_add_test( *suite, "Test bt_add()", test_bt_add );
     CU_add_test( *suite, "Test bt_head/tail()", test_bt_head_tail );
     CU_add_test( *suite, "Test bt_get()", test_bt_get );
+    CU_add_test( *suite, "Test bt_remove()", test_bt_remove );
 }
 
 int main( int argc, char *argv[] )
