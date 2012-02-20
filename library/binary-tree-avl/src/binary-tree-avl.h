@@ -100,7 +100,7 @@ typedef struct {
  *  @return true if the node was added, false if the node is already in the
  *          tree
  */
-bool bt_add( volatile bt_list_t *list, bt_node_t *node );
+bool bt_add( bt_list_t *list, bt_node_t *node );
 
 /**
  *  Find a node in the tree and return a pointer to the node.
@@ -114,7 +114,7 @@ bool bt_add( volatile bt_list_t *list, bt_node_t *node );
  *  @return pointer to the node which matches the data passed in, or NULL
  *          if the data doesn't match any node in the tree.
  */
-bt_node_t* bt_find( volatile bt_list_t *list, void *data );
+bt_node_t* bt_find( bt_list_t *list, void *data );
 
 /**
  * Gets the node requested by next.  Looks in the binary tree list for node.
@@ -124,15 +124,15 @@ bt_node_t* bt_find( volatile bt_list_t *list, void *data );
  * @param next indicates the get operation
  * @return pointer to the next node in the list, NULL if there is no next node
  */
-bt_node_t* bt_get( volatile bt_list_t *list, bt_node_t *node, bt_get_t next );
+bt_node_t* bt_get( bt_list_t *list, bt_node_t *node, bt_get_t next );
 
 /**
  * Get the head/tail of the list
  *
  * @param list pointer to the list to search
  */
-bt_node_t* bt_get_head( volatile bt_list_t *list );
-bt_node_t* bt_get_tail( volatile bt_list_t *list );
+bt_node_t* bt_get_head( bt_list_t *list );
+bt_node_t* bt_get_tail( bt_list_t *list );
 
 /**
  *  Used to iterate over a list and optionally delete nodes
@@ -149,10 +149,10 @@ bt_node_t* bt_get_tail( volatile bt_list_t *list );
  *  @param deleter the function to call when deleting a node
  *  @param user_data the user_data to pass as an argument to the deleter
  */
-void bt_iterate( volatile bt_list_t *list,
-                 bt_ir_t (*iterator)(bt_node_t *node, volatile void *user_data),
-                 void (*deleter)(bt_node_t *node, volatile void *user_data),
-                 volatile void *user_data );
+void bt_iterate( bt_list_t *list,
+                 bt_ir_t (*iterator)(bt_node_t *node, void *user_data),
+                 void (*deleter)(bt_node_t *node, void *user_data),
+                 void *user_data );
 
 /**
  *  Used to remove a node from the list.
@@ -163,9 +163,9 @@ void bt_iterate( volatile bt_list_t *list,
  *         which is to be deleted
  *  @param user_data the user_data to pass as an argument to the deleter
  */
-void bt_remove( volatile bt_list_t *list, void *data,
-        void (*deleter)(bt_node_t *node, volatile void *user_data),
-        volatile void *user_data );
+void bt_remove( bt_list_t *list, void *data,
+        void (*deleter)(bt_node_t *node, void *user_data),
+        void *user_data );
 
 /**
  *  Used to delete all the nodes in a list.
@@ -177,8 +177,8 @@ void bt_remove( volatile bt_list_t *list, void *data,
  *  @param deleter the function to call when deleting a node
  *  @param user_data optional user data to pass the deleter function
  */
-void bt_delete_list( volatile bt_list_t *list,
-                     void (*deleter)(bt_node_t *node, volatile void *user_data),
-                     volatile void *user_data );
+void bt_delete_list( bt_list_t *list,
+                     void (*deleter)(bt_node_t *node, void *user_data),
+                     void *user_data );
 
 #endif

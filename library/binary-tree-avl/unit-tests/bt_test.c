@@ -8,7 +8,7 @@
 
 //#define ENABLE_DEBUG 1
 
-bt_ir_t iterate_print( bt_node_t *node, volatile void *user_data )
+bt_ir_t iterate_print( bt_node_t *node, void *user_data )
 {
 #ifdef ENABLE_DEBUG
     printf("Data: %d\n", node->data);
@@ -16,7 +16,7 @@ bt_ir_t iterate_print( bt_node_t *node, volatile void *user_data )
     return BT_IR__CONTINUE;
 }
 
-void deleter_ut(bt_node_t *node, volatile void *user_data) {
+void deleter_ut(bt_node_t *node, void *user_data) {
 #ifdef ENABLE_DEBUG
     printf("Deleting node holding data(%d)\n", node->data);
 #endif
@@ -243,7 +243,7 @@ typedef struct {
     bool didFailureOccur;
 } __check_list_t;
 
-static bt_ir_t __check_list_iterator(bt_node_t *node, volatile void *user_data)
+static bt_ir_t __check_list_iterator(bt_node_t *node, void *user_data)
 {
     __check_list_t *data = (__check_list_t *)user_data;
 
@@ -258,7 +258,7 @@ static bt_ir_t __check_list_iterator(bt_node_t *node, volatile void *user_data)
 
 static bool __check_list( bt_list_t *list, int *array, size_t array_size )
 {
-    volatile __check_list_t data;
+    __check_list_t data;
     data.counter = 0;
     data.array_size = array_size;
     data.array = array;

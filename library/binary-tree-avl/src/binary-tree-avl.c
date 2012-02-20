@@ -49,17 +49,17 @@ static void __single_rotate_right( bt_node_t **node );
 static void __single_rotate_left( bt_node_t **node );
 static void __double_rotate_right( bt_node_t **node );
 static void __double_rotate_left( bt_node_t **node );
-static bt_ir_t __iterate( volatile bt_node_t *node,
+static bt_ir_t __iterate( bt_node_t *node,
                  bt_ir_t (*iterator)(bt_node_t *node,
-                     volatile void *user_data),
+                     void *user_data),
                  void (*deleter)(bt_node_t *node,
-                         volatile void *user_data),
-                 volatile void *user_data );
-static void __delete_list( volatile bt_node_t *list,
-        void (*deleter)(bt_node_t *node, volatile void *user_data),
-        volatile void *user_data );
-static bt_node_t* __get_next( volatile bt_list_t *list, bt_node_t *node,
-        void *data, bt_get_t next, volatile bool *isFound );
+                         void *user_data),
+                 void *user_data );
+static void __delete_list( bt_node_t *list,
+        void (*deleter)(bt_node_t *node, void *user_data),
+        void *user_data );
+static bt_node_t* __get_next( bt_list_t *list, bt_node_t *node,
+        void *data, bt_get_t next, bool *isFound );
 static bt_node_t* __get_head( bt_node_t *node );
 static bt_node_t* __get_tail( bt_node_t *node );
 
@@ -67,13 +67,13 @@ static bt_node_t* __get_tail( bt_node_t *node );
 static bool __insert( bt_node_t *node_to_add, bt_node_t **tree_root, bt_compare comparer );
 static bool __remove( void *data, bt_node_t **tree_root,
         bt_compare comparer,
-        void (*deleter)(bt_node_t *node, volatile void *user_data),
-        volatile void *user_data);
+        void (*deleter)(bt_node_t *node, void *user_data),
+        void *user_data);
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
-bool bt_add( volatile bt_list_t *list, bt_node_t *node )
+bool bt_add( bt_list_t *list, bt_node_t *node )
 {
     if(    ( NULL != list )
         && ( NULL != node ) ) {
@@ -82,7 +82,7 @@ bool bt_add( volatile bt_list_t *list, bt_node_t *node )
     return false;
 }
 
-bt_node_t* bt_find( volatile bt_list_t *list, void *data )
+bt_node_t* bt_find( bt_list_t *list, void *data )
 {
     if(    ( NULL != list )
         && ( NULL != data ) ) {
@@ -101,7 +101,7 @@ bt_node_t* bt_find( volatile bt_list_t *list, void *data )
     return NULL;
 }
 
-bt_node_t* bt_get( volatile bt_list_t *list, bt_node_t *node, bt_get_t next )
+bt_node_t* bt_get( bt_list_t *list, bt_node_t *node, bt_get_t next )
 {
     bt_node_t* rv = NULL;
     if(    ( NULL != list )
@@ -114,7 +114,7 @@ bt_node_t* bt_get( volatile bt_list_t *list, bt_node_t *node, bt_get_t next )
     return rv;
 }
 
-bt_node_t* bt_get_head( volatile bt_list_t *list )
+bt_node_t* bt_get_head( bt_list_t *list )
 {
     bt_node_t* rv = NULL;
     if(    ( NULL != list )
@@ -124,7 +124,7 @@ bt_node_t* bt_get_head( volatile bt_list_t *list )
     return rv;
 }
 
-bt_node_t* bt_get_tail( volatile bt_list_t *list )
+bt_node_t* bt_get_tail( bt_list_t *list )
 {
     bt_node_t* rv = NULL;
     if(    ( NULL != list )
@@ -134,12 +134,12 @@ bt_node_t* bt_get_tail( volatile bt_list_t *list )
     return rv;
 }
 
-void bt_iterate( volatile bt_list_t *list,
+void bt_iterate( bt_list_t *list,
                  bt_ir_t (*iterator)(bt_node_t *node,
-                     volatile void *user_data),
+                     void *user_data),
                  void (*deleter)(bt_node_t *node,
-                         volatile void *user_data),
-                 volatile void *user_data )
+                         void *user_data),
+                 void *user_data )
 {
     if(    ( NULL != list )
         && ( NULL != iterator )
@@ -149,9 +149,9 @@ void bt_iterate( volatile bt_list_t *list,
     }
 }
 
-void bt_delete_list( volatile bt_list_t *list,
-                     void (*deleter)(bt_node_t *node, volatile void *user_data),
-                     volatile void *user_data )
+void bt_delete_list( bt_list_t *list,
+                     void (*deleter)(bt_node_t *node, void *user_data),
+                     void *user_data )
 {
     if(    ( NULL != list )
         && ( NULL != list->root )
@@ -162,9 +162,9 @@ void bt_delete_list( volatile bt_list_t *list,
     }
 }
 
-void bt_remove( volatile bt_list_t *list, void *data,
-        void (*deleter)(bt_node_t *node, volatile void *user_data),
-        volatile void *user_data )
+void bt_remove( bt_list_t *list, void *data,
+        void (*deleter)(bt_node_t *node, void *user_data),
+        void *user_data )
 {
     if(    ( NULL != list )
         && ( NULL != data )
@@ -289,12 +289,12 @@ static void __double_rotate_right( bt_node_t **node )
     __single_rotate_right(node);
 }
 
-static bt_ir_t __iterate( volatile bt_node_t *node,
+static bt_ir_t __iterate( bt_node_t *node,
                  bt_ir_t (*iterator)(bt_node_t *node,
-                     volatile void *user_data),
+                     void *user_data),
                  void (*deleter)(bt_node_t *node,
-                         volatile void *user_data),
-                 volatile void *user_data )
+                         void *user_data),
+                 void *user_data )
 {
     bt_ir_t rv = BT_IR__CONTINUE;
     if( NULL != node->left ) {
@@ -310,9 +310,9 @@ static bt_ir_t __iterate( volatile bt_node_t *node,
     return rv;
 }
 
-static void __delete_list( volatile bt_node_t *node,
-        void (*deleter)(bt_node_t *node, volatile void *user_data),
-        volatile void *user_data )
+static void __delete_list( bt_node_t *node,
+        void (*deleter)(bt_node_t *node, void *user_data),
+        void *user_data )
 {
     if( NULL != node->left ) {
         __delete_list(node->left, deleter, user_data);
@@ -325,8 +325,8 @@ static void __delete_list( volatile bt_node_t *node,
     deleter(node, user_data);
 }
 
-static bt_node_t* __get_next( volatile bt_list_t *list, bt_node_t *node,
-        void *data, bt_get_t next, volatile bool *isFound )
+static bt_node_t* __get_next( bt_list_t *list, bt_node_t *node,
+        void *data, bt_get_t next, bool *isFound )
 {
     int8_t compare_rslt = list->comparer( data, node->data );
     bt_node_t *rv = NULL;
@@ -407,8 +407,8 @@ static bt_node_t* __get_tail( bt_node_t *node )
 
 static bool __remove( void *data, bt_node_t **tree_root,
         bt_compare comparer,
-        void (*deleter)(bt_node_t *node, volatile void *user_data),
-        volatile void *user_data)
+        void (*deleter)(bt_node_t *node, void *user_data),
+        void *user_data)
 {
     int8_t result;
     bool rv = true;
