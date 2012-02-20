@@ -36,7 +36,7 @@ void create_node_and_add_to_list( bt_list_t *list, int data, bool isExpected ) {
     bt_node_t *node = malloc(sizeof(bt_node_t));
     bool rv;
     CU_ASSERT_FATAL(NULL != node);
-    bt_init_node(node, data);
+    bt_init_node(node, (void*)data);
 
     rv = bt_add(list, node);
     CU_ASSERT( isExpected == rv );
@@ -86,13 +86,13 @@ void test_bt_add( void )
 
     bt_iterate(&list, iterate_print, NULL, NULL);
 
-    node = bt_find(&list, 12);
-    CU_ASSERT( 12 == node->data );
-    node = bt_find(NULL, 15);
+    node = bt_find(&list, (void*)12);
+    CU_ASSERT( (void*)12 == node->data );
+    node = bt_find(NULL, (void*)15);
     CU_ASSERT( NULL == node );
     node = bt_find(&list, NULL);
     CU_ASSERT( NULL == node );
-    node = bt_find(&list, 100);
+    node = bt_find(&list, (void*)100);
     CU_ASSERT( NULL == node );
 
     bt_delete_list(&list, deleter_ut, NULL);
@@ -119,25 +119,25 @@ void test_bt_head_tail() {
     create_node_and_add_to_list(&list, 1, true);
 
     node = bt_get_head(&list);
-    CU_ASSERT( 1 == node->data );
+    CU_ASSERT( (void*)1 == node->data );
 
     node = bt_get_tail(&list);
-    CU_ASSERT( 1 == node->data );
+    CU_ASSERT( (void*)1 == node->data );
 
     create_node_and_add_to_list(&list, -1, true);
 
     node = bt_get_head(&list);
-    CU_ASSERT( -1 == node->data );
+    CU_ASSERT( (void*)-1 == node->data );
 
     node = bt_get_tail(&list);
-    CU_ASSERT( 1 == node->data );
+    CU_ASSERT( (void*)1 == node->data );
 
     create_node_and_add_to_list(&list, 2, true);
     node = bt_get_head(&list);
-    CU_ASSERT( -1 == node->data );
+    CU_ASSERT( (void*)-1 == node->data );
 
     node = bt_get_tail(&list);
-    CU_ASSERT( 2 == node->data );
+    CU_ASSERT( (void*)2 == node->data );
 
     bt_delete_list(&list, deleter_ut, NULL);
 }
@@ -145,7 +145,7 @@ void test_bt_head_tail() {
 void test_bt_get( void )
 {
     bt_list_t list;
-    bt_node_t *node;
+    bt_node_t *node = NULL;
     bt_init_list(&list, comp);
 
     node = bt_get(NULL, node, BT_GET__NEXT);
@@ -169,65 +169,65 @@ void test_bt_get( void )
 
     node = bt_get(&list, bt_get_tail(&list), BT_GET__PREVIOUS);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 1 == node->data );
+    CU_ASSERT( (void*)1 == node->data );
 
     node = bt_get(&list, node, BT_GET__PREVIOUS);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( -2 == node->data );
+    CU_ASSERT( (void*)-2 == node->data );
 
     node = bt_get(&list, node, BT_GET__NEXT);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 1 == node->data );
+    CU_ASSERT( (void*)1 == node->data );
 
     node = bt_get(&list, node, BT_GET__NEXT);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 3 == node->data );
+    CU_ASSERT( (void*)3 == node->data );
 
     create_node_and_add_to_list(&list, 2, true);
     create_node_and_add_to_list(&list, -1, true);
 
     node = bt_get(&list, bt_get_tail(&list), BT_GET__PREVIOUS);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 2 == node->data );
+    CU_ASSERT( (void*)2 == node->data );
 
     node = bt_get(&list, node, BT_GET__PREVIOUS);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 1 == node->data );
+    CU_ASSERT( (void*)1 == node->data );
 
     node = bt_get(&list, node, BT_GET__PREVIOUS);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( -1 == node->data );
+    CU_ASSERT( (void*)-1 == node->data );
 
     node = bt_get(&list, node, BT_GET__PREVIOUS);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( -2 == node->data );
+    CU_ASSERT( (void*)-2 == node->data );
 
     node = bt_get(&list, node, BT_GET__NEXT);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( -1 == node->data );
+    CU_ASSERT( (void*)-1 == node->data );
 
     node = bt_get(&list, node, BT_GET__NEXT);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 1 == node->data );
+    CU_ASSERT( (void*)1 == node->data );
 
     node = bt_get(&list, node, BT_GET__NEXT);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 2 == node->data );
+    CU_ASSERT( (void*)2 == node->data );
 
     node = bt_get(&list, node, BT_GET__NEXT);
     CU_ASSERT_FATAL( NULL != node );
-    CU_ASSERT( 3 == node->data );
+    CU_ASSERT( (void*)3 == node->data );
 
     {
         bt_node_t node_not_in_list;
-        bt_init_node(&node_not_in_list, -3);
+        bt_init_node(&node_not_in_list, (void*)-3);
         node = bt_get(&list, &node_not_in_list, BT_GET__NEXT);
         CU_ASSERT( NULL == node );
     }
 
     {
         bt_node_t node_not_in_list;
-        bt_init_node(&node_not_in_list, 4);
+        bt_init_node(&node_not_in_list, (void*)4);
         node = bt_get(&list, &node_not_in_list, BT_GET__PREVIOUS);
         CU_ASSERT( NULL == node );
     }
@@ -274,15 +274,15 @@ void test_bt_remove( void )
 
     bt_init_list(&list, comp);
 
-    bt_remove(NULL, 1, deleter_ut, NULL );
+    bt_remove(NULL, (void*)1, deleter_ut, NULL );
     bt_remove(&list, NULL, deleter_ut, NULL);
-    bt_remove(&list, 1, NULL, NULL);
-    bt_remove(&list, 1, deleter_ut, NULL);
+    bt_remove(&list, (void*)1, NULL, NULL);
+    bt_remove(&list, (void*)1, deleter_ut, NULL);
 
     create_node_and_add_to_list(&list, 5, true);
-    bt_remove(&list, 1, deleter_ut, NULL);
+    bt_remove(&list, (void*)1, deleter_ut, NULL);
 
-    bt_remove(&list, 5, deleter_ut, NULL);
+    bt_remove(&list, (void*)5, deleter_ut, NULL);
     CU_ASSERT( NULL == bt_get_head(&list) );
 
     create_node_and_add_to_list(&list, 5, true);
@@ -291,7 +291,7 @@ void test_bt_remove( void )
     create_node_and_add_to_list(&list, 7, true);
 
     /* remove: left NULL, right DATA */
-    bt_remove(&list, 6, deleter_ut, NULL);
+    bt_remove(&list, (void*)6, deleter_ut, NULL);
     {
         int local_array[] = {4,5,7};
         CU_ASSERT(__check_list( &list, local_array, sizeof(local_array) ));
@@ -299,7 +299,7 @@ void test_bt_remove( void )
 
     create_node_and_add_to_list(&list, 6, true);
     /* remove: left DATA, right NULL */
-    bt_remove(&list, 7, deleter_ut, NULL);
+    bt_remove(&list, (void*)7, deleter_ut, NULL);
     {
         int local_array[] = {4,5,6};
         CU_ASSERT(__check_list( &list, local_array, sizeof(local_array) ));
@@ -311,7 +311,7 @@ void test_bt_remove( void )
     create_node_and_add_to_list(&list, 7, true);
     create_node_and_add_to_list(&list, 6, true);
     create_node_and_add_to_list(&list, 8, true);
-    bt_remove(&list, 7, deleter_ut, NULL);
+    bt_remove(&list, (void*)7, deleter_ut, NULL);
     /* remove: left DATA, right DATA...no balance required */
     {
         int local_array[] = {4,5,6,8};
@@ -324,7 +324,7 @@ void test_bt_remove( void )
     create_node_and_add_to_list(&list, 7, true);
     create_node_and_add_to_list(&list, 6, true);
     create_node_and_add_to_list(&list, 8, true);
-    bt_remove(&list, 5, deleter_ut, NULL);
+    bt_remove(&list, (void*)5, deleter_ut, NULL);
     /* remove: left DATA, right DATA...no balance required */
     {
         int local_array[] = {4,6,7,8};
@@ -337,7 +337,7 @@ void test_bt_remove( void )
     create_node_and_add_to_list(&list, 7, true);
     create_node_and_add_to_list(&list, 6, true);
     create_node_and_add_to_list(&list, 8, true);
-    bt_remove(&list, 4, deleter_ut, NULL);
+    bt_remove(&list, (void*)4, deleter_ut, NULL);
     /* remove: left NULL, right NULL...balance required */
     {
         int local_array[] = {5,6,7,8};
