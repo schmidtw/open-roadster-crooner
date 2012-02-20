@@ -7,8 +7,6 @@
 #include "generic.h"
 #include "song.h"
 
-static bt_ir_t scrubber(bt_node_t *node, volatile void *user_data);
-
 song_node_t * add_song_to_root( generic_node_t * root,
         media_metadata_t * metadata,
         media_play_fn_t play_fn,
@@ -46,22 +44,10 @@ song_node_t * add_song_to_root( generic_node_t * root,
         }
     }
     if( true == artist_created ) {
-//        bt_remove( &artist_n->parent->children, &artist_n->node );
-        delete_generic( &artist_n->node, NULL );
+        bt_remove( &artist_n->parent->children, artist_n, delete_generic, NULL );
     } else if( true == album_created ) {
-//        bt_remove( &album_n->parent->children, &album_n->node );
-        delete_generic(&album_n->node, NULL);
+        bt_remove( &album_n->parent->children, album_n, delete_generic, NULL );
     }
 
     return NULL;
-}
-
-static bt_ir_t scrubber(bt_node_t *node, volatile void *user_data)
-{
-    /* TODO: Implement remove for the binary tree */
-//    if( node == (bt_node_t *)user_data ) {
-//        return LL_IR__DELETE_AND_STOP;
-//    }
-//    return LL_IR__CONTINUE;
-    return BT_IR__STOP;
 }
