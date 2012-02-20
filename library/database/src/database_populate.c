@@ -33,7 +33,7 @@
 #define DEBUG_DUMP_LIST 0
 
 bool iterate_to_dir_entry( const char * dir_name );
-bool put_songs_into_root( const char * RootDirectory );
+static bool __put_songs_into_root( const char * RootDirectory );
 
 
 /**
@@ -70,31 +70,24 @@ bool populate_database( const char * RootDirectory )
     
     database_purge();
     
-    if( NULL == RootDirectory ) {
-        goto failure;
-    }
-    
-    root = get_new_generic_node(GNT_ROOT, "root");
-    if( NULL == root ) {
-        goto failure;
-    }
-    rdn.root = (generic_node_t *)(root->data);
-
-    if( false == put_songs_into_root(RootDirectory) ) {
-        goto failure;
-    }
-    index_root(&(rdn.root->node));
-    
+    if( NULL != RootDirectory ) {
+        root = get_new_generic_node(GNT_ROOT, "root");
+        if( NULL != root ) {
+            rdn.root = (generic_node_t *)(root->data);
+            if( __put_songs_into_root(RootDirectory) ) {
+                index_root(&(rdn.root->node));
 #if (0 != DEBUG_DUMP_LIST)
-    database_print();
+                database_print();
 #endif
-    return true;
-failure:
+                return true;
+            }
+        }
+    }
     database_purge();
     return false;
 }
 
-bool put_songs_into_root( const char * RootDirectory )
+static bool __put_songs_into_root( const char * RootDirectory )
 {
     char last_dir[MAX_SHORT_FILENAME_PATH_W_NULL];
     char full_path[MAX_SHORT_FILENAME_PATH_W_NULL];
@@ -152,10 +145,8 @@ bool put_songs_into_root( const char * RootDirectory )
                 /* Place this file into the miscellaneous group */
                 rv = mi_get_information( full_path, &metadata, &play_fn );
                 if( MI_RETURN_OK == rv ) {
-                    uint16_t adjusted_track_number;
-                    adjusted_track_number = metadata.track_number;
                     if( 0 < metadata.disc_number ) {
-                        adjusted_track_number += 1000 * (metadata.disc_number - 1);
+                        metadata.disc_number += 1000 * (metadata.disc_number - 1);
                     }
                     add_song_to_root( rdn.root, &metadata,
                             play_fn, full_path );
