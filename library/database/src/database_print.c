@@ -16,7 +16,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <linked-list/linked-list.h>
 #include "database.h"
 #include "internal_database.h"
 #include "database_print.h"
@@ -34,11 +33,9 @@
 
 void database_print( void )
 {
-    generic_node_t * gn;
     
     printf("==== Database ==========================\n");
-    if(    ( NULL != rdn.root )
-        && ( NULL != rdn.root->children.head ) )
+    if( NULL != rdn.root )
     {
         printf(
 #ifdef INT32_STANDARD_INT_SIZE
@@ -48,22 +45,14 @@ void database_print( void )
 #endif
                rdn.root->d.list.index_songs_start,
                rdn.root->d.list.index_songs_stop);
-        gn = (generic_node_t *)rdn.root->children.head->data;
-        while( NULL != gn ) {
-            artist_print( gn, DISPLAY_OFFSET );
-            if( NULL != gn->node.next ) {
-                gn = (generic_node_t *)gn->node.next->data;
-                printf("------------------------------\n");
-            } else {
-                break;
-            }
-        }
+        bt_iterate( &rdn.root->children, artist_print, NULL, (void*)DISPLAY_OFFSET);
     }
 }
 
-void artist_print( generic_node_t * artist, int spaces )
+bt_ir_t artist_print(bt_node_t *node, volatile void *user_data)
 {
-    generic_node_t *al_n;
+    generic_node_t *artist = (generic_node_t*)node->data;
+    int spaces = (int) user_data;
     
     printf(
 #ifdef INT32_STANDARD_INT_SIZE
@@ -76,24 +65,14 @@ void artist_print( generic_node_t * artist, int spaces )
            artist->d.list.index_songs_start,
            artist->d.list.index_songs_stop,
            MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name.artist );
-    if( NULL == artist->children.head ) {
-        printf("%*.*s Why are the albums NULL?\n", spaces, spaces, " ");
-        return;
-    }
-    al_n = (generic_node_t *)artist->children.head->data;
-    while( NULL != al_n ) {
-        album_print( al_n, (spaces + MAX_DISPLAY_ARTIST_LEN) );
-        if( NULL != al_n->node.next ) {
-            al_n = (generic_node_t *)al_n->node.next->data;
-        } else {
-            break;
-        }
-    }
+    bt_iterate(&artist->children, album_print, NULL, (void*)(spaces + MAX_DISPLAY_ARTIST_LEN));
+    return BT_IR__CONTINUE;
 }
 
-void album_print( generic_node_t * album, int spaces )
+bt_ir_t album_print(bt_node_t *node, volatile void *user_data)
 {
-    generic_node_t *so_n;
+    generic_node_t *album = (generic_node_t*)node->data;
+    int spaces = (int) user_data;
     
     printf(
 #ifdef INT32_STANDARD_INT_SIZE
@@ -106,23 +85,14 @@ void album_print( generic_node_t * album, int spaces )
            album->d.list.index_songs_start,
            album->d.list.index_songs_stop,
            MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name.album );
-    if( NULL == album->children.head ) {
-        printf("%*.*s Why are the songs NULL?\n", spaces, spaces, " ");
-        return;
-    }
-    so_n = (generic_node_t *)album->children.head->data;
-    while( NULL != so_n ) {
-        song_print( so_n, (spaces + MAX_DISPLAY_ARTIST_LEN) );
-        if( NULL != so_n->node.next ) {
-            so_n = (generic_node_t *)so_n->node.next->data;
-        } else {
-            break;
-        }
-    }
+    bt_iterate(&album->children, song_print, NULL, (void*)(spaces + MAX_DISPLAY_ALBUM_LEN));
+    return BT_IR__CONTINUE;
 }
 
-void song_print( generic_node_t * song, int spaces )
+bt_ir_t song_print(bt_node_t *node, volatile void *user_data)
 {
+    generic_node_t *song = (generic_node_t*) node->data;
+    int spaces = (int) user_data;
     printf(
 #ifdef INT32_STANDARD_INT_SIZE
            "%*.*s %*.*u %u) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
@@ -136,4 +106,5 @@ void song_print( generic_node_t * song, int spaces )
            song->d.gain.album_gain, song->d.gain.album_peak,
            song->d.gain.track_gain, song->d.gain.track_peak,
            MAX_FILE_NAME, MAX_FILE_NAME, ((song_node_t*)song)->file_location );
+    return BT_IR__CONTINUE;
 }

@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <linked-list/linked-list.h>
+#include <binary-tree-avl/binary-tree-avl.h>
 #include <media-interface/media-interface.h>
 
 #define MAX_ROOT_NAME            20
@@ -37,10 +37,13 @@ typedef struct {
 } gain_t;
 
 typedef enum {
-    GNT_ROOT,
-    GNT_ARTIST,
-    GNT_ALBUM,
-    GNT_SONG
+    GNT_GENERIC_CREATE_NODE = -20,
+    GNT_SONG_CREATE_NODE = -10,
+    GNT_SONG_SEARCH_NODE = -9,
+    GNT_ROOT = 0,
+    GNT_ARTIST = 1,
+    GNT_ALBUM = 2,
+    GNT_SONG = 3
 } generic_node_types_t;
 
 typedef struct generic_node {
@@ -51,11 +54,11 @@ typedef struct generic_node {
         char album[MAX_ALBUM_TITLE_W_NULL];
         char song[MAX_SONG_TITLE_W_NULL];
     } name;
-    ll_node_t node;
+    bt_node_t node;
     // Parent -- Could be group, artist, album
     struct generic_node * parent;
     // Children -- Could be artists, album, song
-    ll_list_t children;
+    bt_list_t children;
     union {
         index_song_node_t list;
         gain_t gain;

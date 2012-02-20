@@ -76,7 +76,7 @@ void create_database( ut_song_t *db, size_t size_db )
     int i;
     generic_node_t * group;
     song_node_t * so_n;
-    ll_node_t * node;
+    bt_node_t * node;
     media_metadata_t metadata;
     
     node = get_new_generic_node(GNT_ROOT, "root");
@@ -94,12 +94,6 @@ void create_database( ut_song_t *db, size_t size_db )
 
     index_root( &(rdn.root->node) );
 }
-
-/* Todo: Add 8-16 gb worth of song info */
-ut_song_t normal_db[] = {
-  {"Jack Johnson", "Brushfire Fairytales", "Inaudible Melodies", 2},
-  {"Jack Johnson", "Brushfire Fairytales", "Middle Man", 1},
-};
 
 void test_build_large_database( void )
 {
@@ -174,7 +168,7 @@ void test_previous_song( void )
     printf("Previous Album: ");
     print_song_info( so_n );
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
-    printf("Previous Artist: ");
+    printf("Previous Album: ");
     print_song_info( so_n );
     database_purge();
 }

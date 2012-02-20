@@ -3,6 +3,7 @@
 
 #include "database.h"
 #include "indexer.h"
+#include "next_song.h"
 
 
 typedef struct {
@@ -10,17 +11,19 @@ typedef struct {
     uint32_t identifier_in_list;
 } indexer_t;
 
-ll_ir_t index_generic( ll_node_t *node, volatile void *user_data );
+bt_ir_t index_generic( bt_node_t *node, volatile void *user_data );
 
 
-void index_root( ll_node_t * root )
+void index_root( bt_node_t * root )
 {
     indexer_t indexer = {.song_index=0, .identifier_in_list=1};
-    ll_iterate( &((generic_node_t*)root->data)->children, index_generic, NULL, &indexer);
-    ((generic_node_t*)root->data)->d.list.index_songs_stop = indexer.song_index -1;
+    generic_node_t *root_node = (generic_node_t*)root->data;
+    bt_iterate( &root_node->children, index_generic, NULL, &indexer);
+    root_node->d.list.index_songs_stop = indexer.song_index -1;
+    bt_set_compare( &root_node->children, compare_indexed_general );
 }
 
-ll_ir_t index_generic( ll_node_t *node, volatile void *user_data )
+bt_ir_t index_generic( bt_node_t *node, volatile void *user_data )
 {
     indexer_t *indexer = (indexer_t *)user_data;
     generic_node_t *gn = (generic_node_t *)node->data;
@@ -39,9 +42,14 @@ ll_ir_t index_generic( ll_node_t *node, volatile void *user_data )
         indexer->song_index++;
     } else {
         gn->d.list.index_songs_start = indexer->song_index;
-        ll_iterate(&(gn->children), index_generic, NULL, &indexed);
+        bt_iterate(&(gn->children), index_generic, NULL, &indexed);
         indexer->song_index = indexed.song_index;
         gn->d.list.index_songs_stop = indexer->song_index - 1;
+        if( GNT_ALBUM == gn->type ) {
+            bt_set_compare( &gn->children, compare_indexed_song );
+        } else {
+            bt_set_compare( &gn->children, compare_indexed_general );
+        }
     }
-    return LL_IR__CONTINUE;
+    return BT_IR__CONTINUE;
 }

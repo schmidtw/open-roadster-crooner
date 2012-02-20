@@ -2,7 +2,6 @@
 #define __INTERNAL_DATABASE_H__
 
 #include <stdbool.h>
-#include <linked-list/linked-list.h>
 #include "database.h"
 
 typedef struct {

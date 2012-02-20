@@ -23,7 +23,7 @@ print_test__SOURCES  = \
                        ../src/database_purge.c \
                        ../src/generic.c \
                        ../src/indexer.c \
-                       ../../linked-list/src/linked-list.c \
+                       ../../binary-tree-avl/src/binary-tree-avl.c \
                        ../../circular-buffer/src/circular-buffer.c \
                        ../src/next_song.c \
                        ../src/queued_next_song.c \

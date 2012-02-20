@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <media-interface/media-interface.h>
 #include <stdlib.h>
-#include <linked-list/linked-list.h>
+#include <binary-tree-avl/binary-tree-avl.h>
 
 #include "database.h"
 #include "internal_database.h"
@@ -66,7 +66,7 @@ bool put_songs_into_root( const char * RootDirectory );
  */
 bool populate_database( const char * RootDirectory )
 {
-    ll_node_t * root;
+    bt_node_t * root;
     
     database_purge();
     

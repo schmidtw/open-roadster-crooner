@@ -14,12 +14,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <linked-list/linked-list.h>
 #include "database.h"
 #include "internal_database.h"
 #include "mi_interface.h"
+#include "queued_next_song.h"
 
 root_database_node_t rdn;
 

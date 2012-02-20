@@ -1,13 +1,13 @@
 #include <stdbool.h>
 
-#include <linked-list/linked-list.h>
+#include <binary-tree-avl/binary-tree-avl.h>
 
 #include "add_song.h"
 #include "database.h"
 #include "generic.h"
 #include "song.h"
 
-static ll_ir_t scrubber(ll_node_t *node, volatile void *user_data);
+static bt_ir_t scrubber(bt_node_t *node, volatile void *user_data);
 
 song_node_t * add_song_to_root( generic_node_t * root,
         media_metadata_t * metadata,
@@ -16,24 +16,29 @@ song_node_t * add_song_to_root( generic_node_t * root,
 {
     generic_node_t * artist_n;
     generic_node_t * album_n;
+    generic_holder_t holder;
     song_node_t * song_n;
     bool artist_created = false;
     bool album_created = false;
     
     if( NULL != metadata ) {
-        artist_n = find_or_create_generic( root, generic_compare,
-                (void*)metadata->artist, &artist_created );
+        holder.type = GNT_GENERIC_CREATE_NODE;
+        holder.string = metadata->artist;
+        artist_n = find_or_create_generic( root,
+                (void*)&holder, &artist_created );
         if( NULL != artist_n ) {
-            album_n = find_or_create_generic( artist_n, generic_compare,
-                    (void*)metadata->album, &album_created );
+            holder.string = metadata->album;
+            album_n = find_or_create_generic( artist_n,
+                    (void*)&holder, &album_created );
             if( NULL != album_n ) {
                 bool song_created;
                 song_create_t sc;
+                sc.type = GNT_SONG_CREATE_NODE;
                 sc.metadata = metadata;
                 sc.play_fn = play_fn;
                 sc.file_location = file_location;
                 song_n = (song_node_t*)find_or_create_generic( album_n,
-                        song_compare, (void*)&sc, &song_created);
+                        (void*)&sc, &song_created);
                 if( NULL != song_n ) {
                     return song_n;
                 }
@@ -41,17 +46,22 @@ song_node_t * add_song_to_root( generic_node_t * root,
         }
     }
     if( true == artist_created ) {
-        ll_iterate( &artist_n->parent->children, scrubber, delete_generic, &artist_n->node );
+//        bt_remove( &artist_n->parent->children, &artist_n->node );
+        delete_generic( &artist_n->node, NULL );
     } else if( true == album_created ) {
-        ll_iterate( &album_n->parent->children, scrubber, delete_generic, &album_n->node );
+//        bt_remove( &album_n->parent->children, &album_n->node );
+        delete_generic(&album_n->node, NULL);
     }
+
     return NULL;
 }
 
-static ll_ir_t scrubber(ll_node_t *node, volatile void *user_data)
+static bt_ir_t scrubber(bt_node_t *node, volatile void *user_data)
 {
-    if( node == (ll_node_t *)user_data ) {
-        return LL_IR__DELETE_AND_STOP;
-    }
-    return LL_IR__CONTINUE;
+    /* TODO: Implement remove for the binary tree */
+//    if( node == (bt_node_t *)user_data ) {
+//        return LL_IR__DELETE_AND_STOP;
+//    }
+//    return LL_IR__CONTINUE;
+    return BT_IR__STOP;
 }

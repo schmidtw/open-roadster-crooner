@@ -16,101 +16,150 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <linked-list/linked-list.h>
+#include <binary-tree-avl/binary-tree-avl.h>
 #include "database.h"
 #include "w_malloc.h"
 #include "generic.h"
 #include "song.h"
 
+#define DOUBLE_COMPARE( x, y ) \
+    ((x)==(y)?0:               \
+      ((x)>(y)?1:-1))
+
+int8_t __generic_compare_to_generic_create( const generic_holder_t* holder, const generic_node_t *node );
+int8_t __generic_compare( const generic_node_t* node1, const generic_node_t *node2 );
+int8_t __song_compare_to_song_create( const song_create_t * sc, const song_node_t * sn );
+int8_t __song_compare( const song_node_t * sn1, const song_node_t * sn2 );
+int8_t __song_compare_gain( const double *album_gain_1,
+                            const double *album_peak_1,
+                            const double *track_gain_1,
+                            const double *track_peak_1,
+                            const double *album_gain_2,
+                            const double *album_peak_2,
+                            const double *track_gain_2,
+                            const double *track_peak_2 );
+
 generic_node_t * find_or_create_generic( generic_node_t * generic,
-        generic_compare_fn_t compare_fct,
         void * element,
         bool * created_node )
 {
     generic_node_t * generic_n;
-    ll_node_t * node_before_new_node = NULL;
-    ll_node_t * node;
-    int result;
+    bt_node_t * node;
 
     if(    ( NULL == element )
         || ( NULL == generic )
-        || ( NULL == compare_fct )
         || ( NULL == created_node ) ) {
         return NULL;
     }
     *created_node = false;
 
-    if(NULL == generic->children.head) {
-        *created_node = true;
-    } else {
-        node = generic->children.head;
-    }
-
-    while( false == *created_node ) {
-        generic_n = (generic_node_t *)node->data;
-        result = compare_fct(element, (void*)generic_n);
-        if( 0 == result ) {
-            return generic_n;
-        } else if ( 0 > result ) {
-            /* This is a new album which is to be created
-             */
-            *created_node = true;
-        } else {
-            node_before_new_node = node;
-            /* The album name we are looking for is after this node,
-             * if it exists.
-             */
-            if( NULL == node->next ) {
-                *created_node = true;
-            } else {
-                node = node->next;
-            }
-        }
-    }
-    /* The type of the newly created node will be be one greater
-     * than the parent.
-     */
-    node = get_new_generic_node( (generic->type+1) , element );
+    node = bt_find( &generic->children, element);
     if( NULL == node ) {
-        return NULL;
+        *created_node = true;
+        /* The type of the newly created node will be be one greater
+         * than the parent.
+         */
+        if( GNT_GENERIC_CREATE_NODE == *(generic_node_types_t*)element ) {
+            node = get_new_generic_node( (generic->type+1), (void*)((generic_holder_t*)element)->string );
+        } else {
+            node = get_new_generic_node( (generic->type+1), element );
+        }
+        if( NULL == node ) {
+            return NULL;
+        }
+        bt_add(&generic->children, node);
+        generic->d.list.size++;
     }
-    ll_insert_after(&generic->children, node, node_before_new_node);
-    generic->d.list.size++;
     generic_n = (generic_node_t *)node->data;
     generic_n->parent = generic;
 
     return generic_n;
 }
 
-int8_t generic_compare( const void * element1, const generic_node_t * element2 )
+int8_t generic_compare( const void * element1, const void * element2 )
 {
-    return ( strcasecmp((char*)element1, element2->name.album) );
+    if( GNT_GENERIC_CREATE_NODE == *(generic_node_types_t*)element1 ) {
+        return __generic_compare_to_generic_create( (generic_holder_t*) element1, (generic_node_t*)element2 );
+    } else if( GNT_GENERIC_CREATE_NODE == *(generic_node_types_t*)element2 ) {
+        return -(__generic_compare_to_generic_create( (generic_holder_t*) element2, (generic_node_t*)element1 ));
+    }
+    return __generic_compare( (generic_node_t*) element1, (generic_node_t*)element2 );
 }
 
-int8_t song_compare( const void * element1, const generic_node_t * element2 )
+int8_t __generic_compare_to_generic_create( const generic_holder_t* holder, const generic_node_t *node )
 {
-    song_create_t * sc1 = (song_create_t*)element1;
-    int32_t result = sc1->metadata->track_number - ((song_node_t*)element2)->track_number;
+    int rv = strcasecmp(holder->string, node->name.album);
+    return (rv==0?0:(rv<0?-1:1));
+}
+
+int8_t __generic_compare( const generic_node_t* node1, const generic_node_t *node2 )
+{
+    int rv = strcasecmp(node1->name.album, node2->name.album);
+    return (rv==0?0:(rv<0?-1:1));
+}
+
+int8_t song_compare( const void * element1, const void * element2 )
+{
+    if( GNT_SONG_CREATE_NODE == *(generic_node_types_t*)element1 ) {
+        return __song_compare_to_song_create( (song_create_t*)element1, (song_node_t*)element2 );
+    } else if( GNT_SONG_CREATE_NODE == *(generic_node_types_t*)element2 ) {
+        return -(__song_compare_to_song_create( (song_create_t*)element2, (song_node_t*)element1 ));
+    }
+    return __song_compare((song_node_t*)element1, (song_node_t*)element2);
+}
+
+int8_t __song_compare_to_song_create( const song_create_t * sc, const song_node_t * sn )
+{
+    int8_t result = DOUBLE_COMPARE(sc->metadata->track_number, sn->track_number);
     if( 0 == result ) {
-        result = strcasecmp(sc1->metadata->title, element2->name.song);
+        result = strcasecmp(sc->metadata->title, sn->d.name.song);
         if( 0 == result ) {
-            if(    ( sc1->metadata->album_gain != element2->d.gain.album_gain )
-                || ( sc1->metadata->album_peak != element2->d.gain.album_peak )
-                || ( sc1->metadata->track_gain != element2->d.gain.track_gain )
-                || ( sc1->metadata->track_peak != element2->d.gain.track_peak ) ) {
-                result = 1;
+            result = __song_compare_gain(
+                    &sc->metadata->album_gain, &sn->d.d.gain.album_gain,
+                    &sc->metadata->album_peak, &sn->d.d.gain.album_peak,
+                    &sc->metadata->track_gain, &sn->d.d.gain.track_gain,
+                    &sc->metadata->track_peak, &sn->d.d.gain.track_peak );
+        }
+    }
+    return result;
+}
+
+int8_t __song_compare( const song_node_t * sn1, const song_node_t * sn2 )
+{
+    int8_t result = DOUBLE_COMPARE(sn1->track_number, sn2->track_number);
+    if( 0 == result ) {
+        result = strcasecmp(sn1->d.name.song, sn2->d.name.song);
+        if( 0 == result ) {
+            result = __song_compare_gain(
+                    &sn1->d.d.gain.album_gain, &sn2->d.d.gain.album_gain,
+                    &sn1->d.d.gain.album_peak, &sn2->d.d.gain.album_peak,
+                    &sn1->d.d.gain.track_gain, &sn2->d.d.gain.track_gain,
+                    &sn1->d.d.gain.track_peak, &sn2->d.d.gain.track_peak );
+        }
+    }
+    return result;
+}
+
+int8_t __song_compare_gain( const double *album_gain_1,
+        const double *album_peak_1, const double *track_gain_1,
+        const double *track_peak_1, const double *album_gain_2,
+        const double *album_peak_2, const double *track_gain_2,
+        const double *track_peak_2 )
+{
+    int8_t result = DOUBLE_COMPARE(*album_gain_1, *album_gain_2);
+    if( 0 == result ) {
+        result = DOUBLE_COMPARE(*album_peak_1, *album_peak_2);
+        if( 0 == result ) {
+            result = DOUBLE_COMPARE(*track_gain_1, *track_gain_2 );
+            if( 0 == result ) {
+                result = DOUBLE_COMPARE(*track_peak_1, *track_peak_2 );
             }
         }
     }
-    if( 0 > result ) {
-        return -1;
-    } else if( 0 < result ) {
-        return 1;
-    }
-    return 0;
+    return result;
 }
 
-ll_node_t * get_new_generic_node( const generic_node_types_t type, const void * element )
+bt_node_t * get_new_generic_node( const generic_node_types_t type, const void * element )
 {
     generic_node_t * generic_n;
     size_t name_size;
@@ -129,9 +178,8 @@ ll_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
         return NULL;
     }
 
-    ll_init_node( &(generic_n->node), generic_n );
-
-    ll_init_list(&(generic_n->children));
+    bt_init_node( &(generic_n->node), generic_n );
+    bt_init_list( &(generic_n->children), generic_compare );
     generic_n->type = type;
 
     {
@@ -140,6 +188,7 @@ ll_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
             case GNT_ALBUM:
                 name_size = MAX_ALBUM_TITLE;
                 name_loc = generic_n->name.album;
+                bt_set_compare(&(generic_n->children), song_compare);
                 break;
             case GNT_ARTIST:
                 name_size = MAX_ARTIST_NAME;
@@ -185,13 +234,13 @@ ll_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
     return &(generic_n->node);
 }
 
-void delete_generic(ll_node_t *node, volatile void *user_data)
+void delete_generic(bt_node_t *node, volatile void *user_data)
 {
     generic_node_t *generic_n;
 
     generic_n = (generic_node_t *)node->data;
     if( GNT_SONG != generic_n->type ) {
-        ll_delete_list(&(generic_n->children), delete_generic, NULL);
+        bt_delete_list(&(generic_n->children), delete_generic, NULL);
     }
     if( NULL != generic_n->parent ) {
         generic_n->parent->d.list.size--;
