@@ -43,12 +43,11 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
  * @note be careful changing the behavior of this function.  The element being passed
  *       in is very closely tied to the type
  *
- * @TODO: this function needs to be refactored
- *
- *
  * @param type The node type to create
  * @param element pointer to the data which is to be copied into the
- *        allocated block
+ *        allocated block.  Song node type requires this element to be
+ *        a song_create_t element.  Root, artist, album types require
+ *        the element to be a NULL terminated char *
  * @return bt_node_t on success.  NULL on failure.
  */
 bt_node_t * get_new_generic_node( const generic_node_types_t type, const void * element );

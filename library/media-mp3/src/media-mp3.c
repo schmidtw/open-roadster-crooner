@@ -191,7 +191,7 @@ media_status_t media_mp3_get_metadata( const char *filename,
         rv = MI_ERROR_PARAMETER;
         goto error_0;
     }
-
+    bzero( metadata, sizeof(media_metadata_t) );
     get_mp3_metadata( fd, &entry );
 
     metadata->track_number = entry.tracknum;
@@ -199,31 +199,25 @@ media_status_t media_mp3_get_metadata( const char *filename,
 
     if( NULL != entry.title ) {
         strncpy( (char*) metadata->title, entry.title, MEDIA_TITLE_LENGTH );
-    } else {
-        metadata->title[0] = '\0';
     }
     metadata->title[MEDIA_TITLE_LENGTH] = '\0';
 
     if( NULL != entry.album ) {
         strncpy( (char*) metadata->album, entry.album, MEDIA_ALBUM_LENGTH );
-    } else {
-        metadata->album[0] = '\0';
     }
     metadata->album[MEDIA_ALBUM_LENGTH] = '\0';
 
     if( NULL != entry.artist ) {
         strncpy( (char*) metadata->artist, entry.artist, MEDIA_ARTIST_LENGTH  );
-    } else {
-        metadata->artist[0] = '\0';
     }
     metadata->artist[MEDIA_ARTIST_LENGTH] = '\0';
 
     /* Not supported for now. */
     metadata->reference_loudness = 0.0;
-    metadata->track_gain = entry.track_gain;
-    metadata->track_peak = entry.track_peak;
-    metadata->album_gain = entry.album_gain;
-    metadata->album_peak = entry.album_peak;
+    metadata->gain.track_gain = entry.track_gain;
+    metadata->gain.track_peak = entry.track_peak;
+    metadata->gain.album_gain = entry.album_gain;
+    metadata->gain.album_peak = entry.album_peak;
 
     close( fd );
 error_0:

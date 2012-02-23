@@ -521,13 +521,13 @@ static media_status_t file__metadata_vorbis_comment( int fd,
 {
     uint32_t list_size;
     
-    memset( metadata, 0, sizeof(media_metadata_t) );
+    bzero( metadata, sizeof(media_metadata_t) );
     metadata->track_number = -1;
     metadata->disc_number = -1;
-    metadata->track_gain = 0.0;
-    metadata->track_peak = 0.0;
-    metadata->album_gain = 0.0;
-    metadata->album_peak = 0.0;
+    metadata->gain.track_gain = 0.0;
+    metadata->gain.track_peak = 0.0;
+    metadata->gain.album_gain = 0.0;
+    metadata->gain.album_peak = 0.0;
 
     /* Skip the vendor information */
     {   uint32_t vendor_length;
@@ -604,25 +604,25 @@ static media_status_t file__metadata_vorbis_comment( int fd,
                 break;
 
             case FM__REPLAYGAIN_ALBUM_PEAK:
-                if( false == flac_get_double(fd, &comment_length, &metadata->album_peak) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->gain.album_peak) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
 
             case FM__REPLAYGAIN_ALBUM_GAIN:
-                if( false == flac_get_double(fd, &comment_length, &metadata->album_gain) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->gain.album_gain) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
 
             case FM__REPLAYGAIN_TRACK_PEAK:
-                if( false == flac_get_double(fd, &comment_length, &metadata->track_peak) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->gain.track_peak) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;
 
             case FM__REPLAYGAIN_TRACK_GAIN:
-                if( false == flac_get_double(fd, &comment_length, &metadata->track_gain) ) {
+                if( false == flac_get_double(fd, &comment_length, &metadata->gain.track_gain) ) {
                     return MI_ERROR_DECODE_ERROR;
                 }
                 break;

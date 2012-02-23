@@ -41,6 +41,13 @@ typedef enum {
 } media_status_t;
 
 typedef struct {
+    double track_gain;
+    double track_peak;
+    double album_gain;
+    double album_peak;
+} media_gain_t;
+
+typedef struct {
     int32_t track_number;
     int32_t disc_number;
     char title[MEDIA_TITLE_LENGTH + 1];
@@ -48,10 +55,7 @@ typedef struct {
     char artist[MEDIA_ARTIST_LENGTH + 1];
 
     double reference_loudness;
-    double track_gain;
-    double track_peak;
-    double album_gain;
-    double album_peak;
+    media_gain_t gain;
 } media_metadata_t;
 
 typedef void media_interface_t;

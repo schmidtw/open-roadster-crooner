@@ -28,13 +28,6 @@ typedef struct {
     uint32_t index_songs_stop;   // The index stop (last) of the songs which are children of this list
 } index_song_node_t;
 
-typedef struct {
-    double album_gain;
-    double album_peak;
-    double track_gain;
-    double track_peak;
-} gain_t;
-
 typedef enum {
     GNT_GENERIC_CREATE_NODE = -20,
     GNT_SONG_CREATE_NODE = -10,
@@ -55,8 +48,8 @@ typedef struct generic_node {
     } name;
     bt_node_t node;
     union {
-        uint32_t song_index;
-        index_song_node_t list;
+        uint32_t song_index; // Used when a song_node_t
+        index_song_node_t list; // Used when group/artist/album node
     } i;
     // Parent -- Could be group, artist, album
     struct generic_node * parent;
@@ -65,7 +58,7 @@ typedef struct generic_node {
 typedef struct {
     generic_node_t d;
     char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
-    gain_t gain;
+    media_gain_t gain;
 
     uint16_t track_number;
     media_command_fn_t command_fn;
