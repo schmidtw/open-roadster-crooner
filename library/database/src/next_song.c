@@ -60,7 +60,7 @@ static generic_node_t *__ns_get_tail( bt_list_t *list ) {
 }
 
 static db_status_t __get_next_item_from_list( generic_node_t ** node, bt_get_t next ) {
-    bt_node_t *next_node = bt_get(&(*node)->parent->children, &(*node)->node, next);
+    bt_node_t *next_node = bt_get(&(*node)->parent->i.list.children, &(*node)->node, next);
 
     if( NULL != next_node ) {
         (*node) = (generic_node_t*)next_node->data;
@@ -88,13 +88,13 @@ db_status_t next_song( song_node_t ** current_song,
     
     if(    ( false == rdn.initialized )
         || ( NULL == current_song )
-        || ( 0 == rdn.root->d.list.size ) )
+        || ( NULL == bt_get_head(&rdn.root->i.list.children) ) )
     {
         return DS_FAILURE;
     }
     
     if( NULL == *current_song ) {
-        generic_n = __ns_get_head(&rdn.root->children);
+        generic_n = __ns_get_head(&rdn.root->i.list.children);
         while(1) {
             if( NULL == generic_n ) {
                 return DS_FAILURE;
@@ -102,7 +102,7 @@ db_status_t next_song( song_node_t ** current_song,
             if( GNT_SONG == generic_n->type ) {
                 break;
             }
-            generic_n = __ns_get_head(&generic_n->children);
+            generic_n = __ns_get_head(&generic_n->i.list.children);
         }
         *current_song = (song_node_t *)generic_n;
         if( DT_NEXT == operation ) {
@@ -126,39 +126,39 @@ db_status_t next_song( song_node_t ** current_song,
         case DT_NEXT:
             rv = __get_next_item_from_list( &generic_n, BT_GET__NEXT );
             if( DS_END_OF_LIST == rv ) {
-                generic_n = __ns_get_head( &generic_n->parent->children );
+                generic_n = __ns_get_head( &generic_n->parent->i.list.children );
             }
             break;
         case DT_PREVIOUS:
             rv = __get_next_item_from_list( &generic_n, BT_GET__PREVIOUS );
             if( DS_END_OF_LIST == rv ) {
-                generic_n = __ns_get_tail( &generic_n->parent->children );
+                generic_n = __ns_get_tail( &generic_n->parent->i.list.children );
             }
             break;
         default:
             /* DT_RANDOM */
             rv = DS_SUCCESS;
             generic_n = (generic_node_t*)generic_n->parent;
-            if( NULL == generic_n->children.root ) {
+            if( NULL == generic_n->i.list.children.root ) {
                 rv = DS_FAILURE;
             } else {
                 generic_n = find_random_song_from_generic(
                         (generic_node_t *)generic_n,
-                        generic_n->d.list.index_songs_start,
-                        generic_n->d.list.index_songs_stop);
+                        generic_n->i.list.index_songs_start,
+                        generic_n->i.list.index_songs_stop);
             }
             break;
     }
     if( NULL != generic_n ) {
         switch( generic_n->type ) {
             case GNT_ROOT:
-                generic_n = __ns_get_head( &generic_n->children );
+                generic_n = __ns_get_head( &generic_n->i.list.children );
                 /* no break */
             case GNT_ARTIST:
-                generic_n = __ns_get_head( &generic_n->children );
+                generic_n = __ns_get_head( &generic_n->i.list.children );
                 /* no break */
             case GNT_ALBUM:
-                generic_n = __ns_get_head( &generic_n->children );
+                generic_n = __ns_get_head( &generic_n->i.list.children );
                 /* no break */
             case GNT_SONG:
                 *current_song = (song_node_t*)generic_n;
@@ -184,7 +184,7 @@ generic_node_t * find_random_song_from_generic( generic_node_t * generic,
     while(    ( NULL != generic_n )
            && ( GNT_SONG != generic_n->type ) )
     {
-        generic_n = __ns_find( &generic_n->children, &song_index );
+        generic_n = __ns_find( &generic_n->i.list.children, &song_index );
     }
     return generic_n;
 }
@@ -195,13 +195,13 @@ int8_t compare_indexed_song( void * data1, void * data2 ) {
     if( GNT_SONG_SEARCH_NODE == *(generic_node_types_t*)data1 ) {
         index1 = ((__song_index_t*)data1)->index;
     } else {
-        index1 = ((song_node_t*)data1)->index_songs_value;
+        index1 = ((song_node_t*)data1)->d.i.song_index;
     }
 
     if( GNT_SONG_SEARCH_NODE == *(generic_node_types_t*)data2 ) {
         index2 = ((__song_index_t*)data2)->index;
     } else {
-        index2 = ((song_node_t*)data2)->index_songs_value;
+        index2 = ((song_node_t*)data2)->d.i.song_index;
     }
 
     if( index1 < index2 ) {
@@ -215,9 +215,9 @@ int8_t compare_indexed_song( void * data1, void * data2 ) {
 
 int8_t __compare_indexed_general_song_search( __song_index_t* si, generic_node_t *node )
 {
-    if( si->index < node->d.list.index_songs_start ) {
+    if( si->index < node->i.list.index_songs_start ) {
         return -1;
-    } else if( si->index > node->d.list.index_songs_stop ) {
+    } else if( si->index > node->i.list.index_songs_stop ) {
         return 1;
     }
     return 0;
@@ -225,8 +225,8 @@ int8_t __compare_indexed_general_song_search( __song_index_t* si, generic_node_t
 
 int8_t __compare_indexed_general( generic_node_t *node1, generic_node_t *node2 )
 {
-    uint32_t range_1 = node1->d.list.index_songs_start;
-    uint32_t range_2 = node2->d.list.index_songs_start;
+    uint32_t range_1 = node1->i.list.index_songs_start;
+    uint32_t range_2 = node2->i.list.index_songs_start;
 
     if( range_1 < range_2 ) {
         return -1;

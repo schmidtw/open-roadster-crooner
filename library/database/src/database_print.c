@@ -43,9 +43,9 @@ void database_print( void )
 #else
                " root (%lu-%lu)\n",
 #endif
-               rdn.root->d.list.index_songs_start,
-               rdn.root->d.list.index_songs_stop);
-        bt_iterate( &rdn.root->children, artist_print, NULL, (void*)DISPLAY_OFFSET);
+               rdn.root->i.list.index_songs_start,
+               rdn.root->i.list.index_songs_stop);
+        bt_iterate( &rdn.root->i.list.children, artist_print, NULL, (void*)DISPLAY_OFFSET);
     }
 }
 
@@ -56,16 +56,15 @@ bt_ir_t artist_print(bt_node_t *node, void *user_data)
     
     printf(
 #ifdef INT32_STANDARD_INT_SIZE
-           "%*.*s %u-(%u-%u) %-*.*s\n",
+           "%*.*s (%u-%u) %-*.*s\n",
 #else
-           "%*.*s %lu-(%lu-%lu) %-*.*s\n",
+           "%*.*s (%lu-%lu) %-*.*s\n",
 #endif
            spaces, spaces, " ",
-           artist->d.list.index,
-           artist->d.list.index_songs_start,
-           artist->d.list.index_songs_stop,
+           artist->i.list.index_songs_start,
+           artist->i.list.index_songs_stop,
            MAX_DISPLAY_ARTIST_LEN, MAX_DISPLAY_ARTIST_LEN, artist->name.artist );
-    bt_iterate(&artist->children, album_print, NULL, (void*)(spaces + MAX_DISPLAY_ARTIST_LEN));
+    bt_iterate(&artist->i.list.children, album_print, NULL, (void*)(spaces + MAX_DISPLAY_ARTIST_LEN));
     return BT_IR__CONTINUE;
 }
 
@@ -76,22 +75,21 @@ bt_ir_t album_print(bt_node_t *node, void *user_data)
     
     printf(
 #ifdef INT32_STANDARD_INT_SIZE
-           "%*.*s %u-(%u-%u) %-*.*s\n",
+           "%*.*s (%u-%u) %-*.*s\n",
 #else
-           "%*.*s %lu-(%lu-%lu) %-*.*s\n",
+           "%*.*s (%lu-%lu) %-*.*s\n",
 #endif
            spaces, spaces, " ",
-           album->d.list.index,
-           album->d.list.index_songs_start,
-           album->d.list.index_songs_stop,
+           album->i.list.index_songs_start,
+           album->i.list.index_songs_stop,
            MAX_DISPLAY_ALBUM_LEN, MAX_DISPLAY_ALBUM_LEN, album->name.album );
-    bt_iterate(&album->children, song_print, NULL, (void*)(spaces + MAX_DISPLAY_ALBUM_LEN));
+    bt_iterate(&album->i.list.children, song_print, NULL, (void*)(spaces + MAX_DISPLAY_ALBUM_LEN));
     return BT_IR__CONTINUE;
 }
 
 bt_ir_t song_print(bt_node_t *node, void *user_data)
 {
-    generic_node_t *song = (generic_node_t*) node->data;
+    song_node_t *song = (generic_node_t*) node->data;
     int spaces = (int) user_data;
     printf(
 #ifdef INT32_STANDARD_INT_SIZE
@@ -101,10 +99,10 @@ bt_ir_t song_print(bt_node_t *node, void *user_data)
 #endif
            spaces, spaces, " ",
            MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, ((song_node_t*)song)->track_number,
-           ((song_node_t*)song)->index_songs_value,
-           MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->name.song,
-           song->d.gain.album_gain, song->d.gain.album_peak,
-           song->d.gain.track_gain, song->d.gain.track_peak,
+           ((song_node_t*)song)->d.i.song_index,
+           MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->d.name.song,
+           song->gain.album_gain, song->gain.album_peak,
+           song->gain.track_gain, song->gain.track_peak,
            MAX_FILE_NAME, MAX_FILE_NAME, ((song_node_t*)song)->file_location );
     return BT_IR__CONTINUE;
 }

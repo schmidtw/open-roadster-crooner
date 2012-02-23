@@ -53,7 +53,7 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
     }
     *created_node = false;
 
-    node = bt_find( &generic->children, element);
+    node = bt_find( &generic->i.list.children, element);
     if( NULL == node ) {
         *created_node = true;
         /* The type of the newly created node will be be one greater
@@ -67,8 +67,7 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
         if( NULL == node ) {
             return NULL;
         }
-        bt_add(&generic->children, node);
-        generic->d.list.size++;
+        bt_add(&generic->i.list.children, node);
     }
     generic_n = (generic_node_t *)node->data;
     generic_n->parent = generic;
@@ -115,10 +114,10 @@ int8_t __song_compare_to_song_create( const song_create_t * sc, const song_node_
         result = strcasecmp(sc->metadata->title, sn->d.name.song);
         if( 0 == result ) {
             result = __song_compare_gain(
-                    &sc->metadata->album_gain, &sn->d.d.gain.album_gain,
-                    &sc->metadata->album_peak, &sn->d.d.gain.album_peak,
-                    &sc->metadata->track_gain, &sn->d.d.gain.track_gain,
-                    &sc->metadata->track_peak, &sn->d.d.gain.track_peak );
+                    &sc->metadata->album_gain, &sn->gain.album_gain,
+                    &sc->metadata->album_peak, &sn->gain.album_peak,
+                    &sc->metadata->track_gain, &sn->gain.track_gain,
+                    &sc->metadata->track_peak, &sn->gain.track_peak );
         }
     }
     return result;
@@ -131,10 +130,10 @@ int8_t __song_compare( const song_node_t * sn1, const song_node_t * sn2 )
         result = strcasecmp(sn1->d.name.song, sn2->d.name.song);
         if( 0 == result ) {
             result = __song_compare_gain(
-                    &sn1->d.d.gain.album_gain, &sn2->d.d.gain.album_gain,
-                    &sn1->d.d.gain.album_peak, &sn2->d.d.gain.album_peak,
-                    &sn1->d.d.gain.track_gain, &sn2->d.d.gain.track_gain,
-                    &sn1->d.d.gain.track_peak, &sn2->d.d.gain.track_peak );
+                    &sn1->gain.album_gain, &sn2->gain.album_gain,
+                    &sn1->gain.album_peak, &sn2->gain.album_peak,
+                    &sn1->gain.track_gain, &sn2->gain.track_gain,
+                    &sn1->gain.track_peak, &sn2->gain.track_peak );
         }
     }
     return result;
@@ -179,7 +178,7 @@ bt_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
     }
 
     bt_init_node( &(generic_n->node), generic_n );
-    bt_init_list( &(generic_n->children), generic_compare );
+    bt_init_list( &(generic_n->i.list.children), generic_compare );
     generic_n->type = type;
 
     {
@@ -188,7 +187,7 @@ bt_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
             case GNT_ALBUM:
                 name_size = MAX_ALBUM_TITLE;
                 name_loc = generic_n->name.album;
-                bt_set_compare(&(generic_n->children), song_compare);
+                bt_set_compare(&(generic_n->i.list.children), song_compare);
                 break;
             case GNT_ARTIST:
                 name_size = MAX_ARTIST_NAME;
@@ -216,10 +215,10 @@ bt_node_t * get_new_generic_node( const generic_node_types_t type, const void * 
                 generic_n->name.song[MAX_SONG_TITLE] = '\0';
 
                 sn->track_number = meta->metadata->track_number;
-                sn->d.d.gain.album_gain = meta->metadata->album_gain;
-                sn->d.d.gain.album_peak = meta->metadata->album_peak;
-                sn->d.d.gain.track_gain = meta->metadata->track_gain;
-                sn->d.d.gain.track_peak = meta->metadata->track_peak;
+                sn->gain.album_gain = meta->metadata->album_gain;
+                sn->gain.album_peak = meta->metadata->album_peak;
+                sn->gain.track_gain = meta->metadata->track_gain;
+                sn->gain.track_peak = meta->metadata->track_peak;
                 sn->play_fn = meta->play_fn;
                 strcpy(sn->file_location, meta->file_location);
                 break;
@@ -240,10 +239,7 @@ void delete_generic(bt_node_t *node, void *user_data)
 
     generic_n = (generic_node_t *)node->data;
     if( GNT_SONG != generic_n->type ) {
-        bt_delete_list(&(generic_n->children), delete_generic, NULL);
-    }
-    if( NULL != generic_n->parent ) {
-        generic_n->parent->d.list.size--;
+        bt_delete_list(&(generic_n->i.list.children), delete_generic, NULL);
     }
     free(generic_n);
 }

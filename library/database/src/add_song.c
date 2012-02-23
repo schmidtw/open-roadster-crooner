@@ -44,9 +44,9 @@ song_node_t * add_song_to_root( generic_node_t * root,
         }
     }
     if( true == artist_created ) {
-        bt_remove( &artist_n->parent->children, (void*)artist_n, delete_generic, NULL );
+        bt_remove( &artist_n->parent->i.list.children, (void*)artist_n, delete_generic, NULL );
     } else if( true == album_created ) {
-        bt_remove( &album_n->parent->children, (void*)album_n, delete_generic, NULL );
+        bt_remove( &album_n->parent->i.list.children, (void*)album_n, delete_generic, NULL );
     }
 
     return NULL;

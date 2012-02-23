@@ -23,8 +23,7 @@
 #define MAX_SHORT_FILENAME_PATH_W_NULL     (MAX_SHORT_FILENAME_PATH + 1)
 
 typedef struct {
-    uint32_t size;  // The number of elements in this list
-    uint32_t index; // The index number of this element in this list
+    bt_list_t children;  // Could be artists, album, song
     uint32_t index_songs_start; // The index start of the songs which are children of this list
     uint32_t index_songs_stop;   // The index stop (last) of the songs which are children of this list
 } index_song_node_t;
@@ -55,21 +54,20 @@ typedef struct generic_node {
         char song[MAX_SONG_TITLE_W_NULL];
     } name;
     bt_node_t node;
+    union {
+        uint32_t song_index;
+        index_song_node_t list;
+    } i;
     // Parent -- Could be group, artist, album
     struct generic_node * parent;
-    // Children -- Could be artists, album, song
-    bt_list_t children;
-    union {
-        index_song_node_t list;
-        gain_t gain;
-    } d;
 } generic_node_t;
 
 typedef struct {
     generic_node_t d;
     char file_location[MAX_SHORT_FILENAME_PATH_W_NULL];
+    gain_t gain;
+
     uint16_t track_number;
-    uint32_t index_songs_value;
     media_command_fn_t command_fn;
     media_play_fn_t play_fn;
 } song_node_t;
