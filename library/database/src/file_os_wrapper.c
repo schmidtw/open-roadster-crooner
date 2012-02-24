@@ -39,16 +39,14 @@ file_return_value get_next_element_in_directory( file_info_t * f_info )
 
     old_errno = errno;
     out = readdir( cur_dir, &file_info );
-    if( (NULL == out) && (old_errno != errno) ) {
-        closedir( cur_dir );
-        cur_dir = NULL;
-        return FRV_ERROR;
-    }
-
     if( NULL == out ) {
         closedir( cur_dir );
         cur_dir = NULL;
-        return FRV_END_OF_ENTRIES;
+        if( old_errno != errno ) {
+            return FRV_ERROR;
+        } else {
+            return FRV_END_OF_ENTRIES;
+        }
     }
 
     /* The fatfs will have the null terminated character at the end of the
@@ -80,13 +78,12 @@ file_return_value seek_to_index_in_directory( long index )
 file_return_value get_index_in_directory( long *index )
 {
     int old_errno;
-    if(    (NULL == cur_dir)
-        || (NULL == index ) ) {
+    if( NULL == index ) {
         return FRV_ERROR;
     }
 
-    *index = telldir(cur_dir);
     old_errno = errno;
+    *index = telldir(cur_dir);
     if(    (-1 == *index)
         || (old_errno != errno) ) {
         return FRV_ERROR;

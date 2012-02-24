@@ -36,23 +36,23 @@ bool remove_last_dir_name( char * string, size_t *length )
         return false;
     }
     _D1("%s: %s, %u\n", "remove_last_dir_name", string, *length);
-    // We never worry about a trailing slash so subtract 1
-    *length -= 2;
-    i_src = string + *length;
+    /*
+     * We never worry about a trailing slash so subtract 1 plus 1
+     * because we are pointing to the NULL character
+     */
+    i_src = string + *length - 2;
 
     while( i_src >= string ) {
         if( '/' == *i_src ) {
             if( i_src == string ) {
-                *(i_src + 1) = '\0';
-                (*length)++;
-            } else {
-                *(i_src) = '\0';
+                i_src++;
             }
+            *length = i_src - string;
+            *(i_src) = '\0';
             _D1("%s: done %s, %u\n", "remove_last_dir_name", string, *length);
             return true;
         }
         i_src--;
-        (*length)--;
     }
     return false;
 }
