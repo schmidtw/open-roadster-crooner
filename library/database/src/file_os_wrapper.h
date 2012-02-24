@@ -18,5 +18,7 @@ typedef struct {
 
 file_return_value get_next_element_in_directory( file_info_t * f_info );
 file_return_value open_directory( char * path );
+file_return_value seek_to_index_in_directory( long index );
+file_return_value get_index_in_directory( long *index );
 
 #endif /* __FILE_OS_WRAPPER_H__ */

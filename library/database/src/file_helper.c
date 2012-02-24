@@ -20,60 +20,65 @@
 
 #include "file_helper.h"
 
-bool get_last_dir_name( char * dest, char * src )
+
+#define _D1(...)
+
+#if DEBUG > 0
+#undef  _D1
+#define _D1(...) printf( __VA_ARGS__ )
+#endif
+
+bool remove_last_dir_name( char * string, size_t *length )
 {
-    char *i_src = src;
-    char *i_dst = dest;
-    char *last_slash = NULL;
-
-    if(    (NULL == dest)
-        || (NULL == src) ) {
+    char *i_src;
+    if(    ( NULL == string )
+        || ( NULL == length ) ) {
         return false;
     }
+    _D1("%s: %s, %u\n", "remove_last_dir_name", string, *length);
+    // We never worry about a trailing slash so subtract 1
+    *length -= 2;
+    i_src = string + *length;
 
-    while( '\0' != *i_src ) {
-        if(    ( '/' == *i_src )
-            && ( '\0' != *(i_src+1) ) )
-        {
-            last_slash = i_src;
+    while( i_src >= string ) {
+        if( '/' == *i_src ) {
+            if( i_src == string ) {
+                *(i_src + 1) = '\0';
+                (*length)++;
+            } else {
+                *(i_src) = '\0';
+            }
+            _D1("%s: done %s, %u\n", "remove_last_dir_name", string, *length);
+            return true;
         }
-        i_src++;
+        i_src--;
+        (*length)--;
     }
-    if( NULL == last_slash ) {
-        return false;
-    }
-
-    i_src = last_slash + 1;
-    if( last_slash == src ) {
-        last_slash++;
-    }
-    while(    ( '\0' != *i_src )
-           && ( '/' != *i_src ) )
-    {
-        *i_dst++ = *i_src++;
-    }
-    *last_slash = '\0';
-    *i_dst = '\0';
-    return true;
+    return false;
 }
 
-
-void append_to_path( char * dest, const char * src )
+bool append_to_path( char * dest, size_t *dest_length, const char * src )
 {
     char *i_dst;
     bool add_trailing_slash = true;
     if(    (NULL == dest)
-        || (NULL == src) ) {
-        return;
+        || (NULL == src)
+        || (NULL == dest_length) ) {
+        return false;
     }
+    _D1("%s: %s, %u -- toappend %s\n", "append_to_path", dest, *dest_length, src);
 
-    i_dst = dest;
-    while( '\0' != *i_dst ) {
-        add_trailing_slash = ( '/' != *i_dst );
-        i_dst++;
+    i_dst = dest + *dest_length - 1;
+    if( '/' == *i_dst++ ) {
+        add_trailing_slash = false;
     }
     if( true == add_trailing_slash ) {
         *i_dst++ = '/';
+        (*dest_length)++;
     }
     strcpy( i_dst, src );
+    *dest_length += strlen(src);
+
+    _D1("%s: done %s, %u\n", "append_to_path", dest, *dest_length);
+    return true;
 }

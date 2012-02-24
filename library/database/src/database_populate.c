@@ -31,8 +31,13 @@
 #include "file_helper.h"
 
 #define DEBUG_DUMP_LIST 0
+#define PRINT_DB_INDEX_TIME 0
 
-bool iterate_to_dir_entry( const char * dir_name );
+#if ( 0 != PRINT_DB_INDEX_TIME )
+typedef uint32_t portTickType;
+extern portTickType xTaskGetTickCount(void);
+#endif
+
 static bool __put_songs_into_root( const char * RootDirectory );
 
 
@@ -71,6 +76,10 @@ bool populate_database( const char * RootDirectory )
     database_purge();
     
     if( NULL != RootDirectory ) {
+#if ( 0 != PRINT_DB_INDEX_TIME )
+        portTickType begin = xTaskGetTickCount();
+        portTickType end;
+#endif
         root = get_new_generic_node(GNT_ROOT, "root");
         if( NULL != root ) {
             rdn.root = (generic_node_t *)(root->data);
@@ -78,6 +87,10 @@ bool populate_database( const char * RootDirectory )
                 index_root(&(rdn.root->node));
 #if (0 != DEBUG_DUMP_LIST)
                 database_print();
+#endif
+#if ( 0 != PRINT_DB_INDEX_TIME )
+                end = xTaskGetTickCount();
+                printf("DB Time took: %u\n", end - begin);
 #endif
                 return true;
             }
@@ -89,14 +102,21 @@ bool populate_database( const char * RootDirectory )
 
 static bool __put_songs_into_root( const char * RootDirectory )
 {
-    char last_dir[MAX_SHORT_FILENAME_PATH_W_NULL];
     char full_path[MAX_SHORT_FILENAME_PATH_W_NULL];
+    size_t full_path_size;
+    long last_dir_next_read_loc[260];
+    int16_t last_dir_index = -1;
     
+    /* Song structures */
+    media_metadata_t metadata;
+    media_play_fn_t play_fn;
+
     if( NULL == RootDirectory ) {
         return false;
     }
     
     strcpy( full_path, RootDirectory );
+    full_path_size = strlen(full_path);
     if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
         return false;
     }
@@ -107,51 +127,45 @@ static bool __put_songs_into_root( const char * RootDirectory )
         if( FRV_END_OF_ENTRIES == rv ) {
             /* We don't have any more files in this directory.
              */
-            if( 0 == strcmp( full_path, RootDirectory ) ) {
+            if( -1 == last_dir_index ) {
                 /* This is the base directory which was passed in.  We
                  * don't want to search folders below this.
                  */
                 return true;
             }
-            if( false == get_last_dir_name( last_dir, full_path ) ) {
-                return false;
-            }
-            /* If we have a last_dir, then we should
-             * go up a directory and continue searching for files
-             * after this directory name
+            /* Go up a directory and continue searching for files
              */
             /* Open the parent directory */
-            if(    ( FRV_RETURN_GOOD != open_directory( full_path ) )
-                || ( false == iterate_to_dir_entry( last_dir ) ) ) {
+            if(    ( false == remove_last_dir_name( full_path, &full_path_size ) )
+                || ( FRV_RETURN_GOOD != open_directory( full_path ) )
+                || ( FRV_RETURN_GOOD !=
+                        seek_to_index_in_directory(last_dir_next_read_loc[last_dir_index--]) ) )
+            {
                 return false;
             }
         } else if( FRV_RETURN_GOOD == rv ) {
-            append_to_path(full_path, file_info.short_filename );
+            append_to_path(full_path, &full_path_size, file_info.short_filename );
             if( true == file_info.is_dir ) {
-                /* this is a directory, search for the group.  Once we have
-                 * the group, call a subroutine which will place all files
-                 * in this directory into the correct group.
+                /* Open the found directory for searching.
+                 * But first mark where we are in this directory
                  */
-
-                /* open the found directory for searching */
-                if( FRV_RETURN_GOOD != open_directory( full_path ) ) {
+                if(    ( FRV_RETURN_GOOD !=
+                             get_index_in_directory(&last_dir_next_read_loc[++last_dir_index]) )
+                    || ( FRV_RETURN_GOOD != open_directory( full_path ) ) )
+                {
                     return false;
                 }
+
             } else { /* This is a file */
-                media_status_t rv;
-                media_metadata_t metadata;
-                media_play_fn_t play_fn;
-                char junk_filename[MAX_SHORT_FILENAME_W_NULL];
-                /* Place this file into the miscellaneous group */
-                rv = mi_get_information( full_path, &metadata, &play_fn );
-                if( MI_RETURN_OK == rv ) {
+                if( MI_RETURN_OK ==
+                        mi_get_information(full_path, &metadata, &play_fn) ) {
                     if( 0 < metadata.disc_number ) {
                         metadata.track_number += 1000 * (metadata.disc_number - 1);
                     }
                     add_song_to_root( rdn.root, &metadata,
                             play_fn, full_path );
                 }
-                if( false == get_last_dir_name( junk_filename, full_path ) ) {
+                if( false == remove_last_dir_name( full_path, &full_path_size ) ) {
                     return false;
                 }
             }
@@ -161,20 +175,3 @@ static bool __put_songs_into_root( const char * RootDirectory )
         }
     }
 }
-
-bool iterate_to_dir_entry( const char * dir_name )
-{
-    file_info_t file_info;
-    /* Open directory elements until we get to the element which
-     * we are trying to find
-     */
-    while( FRV_RETURN_GOOD == get_next_element_in_directory( &file_info ) ) {
-        if( true == file_info.is_dir ) {
-            if( 0 == strcmp(file_info.short_filename, dir_name) ) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
