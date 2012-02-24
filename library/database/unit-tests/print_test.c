@@ -11,6 +11,28 @@
 #include "db_testing.h"
 #include "large_db.h"
 
+#define _D1(...)
+#define _DB_PRINT()
+
+#define _D2(...)
+#define _DB_PRINT2()
+
+#define DEBUG 0
+
+#if DEBUG > 0
+#undef  _D1
+#define _D1(...) printf( __VA_ARGS__ )
+#undef _DB_PRINT
+#define _DB_PRINT() database_print()
+#endif
+
+#if DEBUG > 1
+#undef  _D2
+#define _D2(...) printf( __VA_ARGS__ )
+#undef _DB_PRINT2
+#define _DB_PRINT() database_print()
+#endif
+
 void create_database( ut_song_t *db, size_t size_db );
 
 root_database_node_t rdn;
@@ -31,7 +53,7 @@ media_status_t fake_play(
 void setup_metadata( media_metadata_t * metadata, char * artist, char * album, char * song, uint32_t track_num )
 {
     if( NULL == metadata ) {
-        printf("The Metadata pointer must not be NULL\n");
+        _D1("The Metadata pointer must not be NULL\n");
     }
     CU_ASSERT_FATAL(NULL != metadata);
     bzero(metadata, sizeof(media_metadata_t));
@@ -99,16 +121,16 @@ void test_build_large_database( void )
 {
     database_purge();
     create_database(large_db, sizeof(large_db)/sizeof(ut_song_t));
-//    database_print();
+    _DB_PRINT2();
     database_purge();
 }
 
 void print_song_info( song_node_t * node )
 {
     if( NULL == node ) {
-        printf("Oops, the song is NULL\n");
+        CU_FAIL_FATAL("There is a NULL song node");
     } else {
-        printf( "%s -> %s -> %s -> %s\n",
+        _D1( "%s -> %s -> %s -> %s\n",
                 node->d.parent->parent->parent->name.root,
                 node->d.parent->parent->name.artist,
                 node->d.parent->name.album,
@@ -120,33 +142,33 @@ void test_simple_test( void )
 {
     database_purge();
     create_simple_database();
-    database_print();
+    _DB_PRINT();
     database_purge();
-    database_print();
+    _DB_PRINT();
 }
 
 void test_next_song( void )
 {
     song_node_t * so_n = NULL;
     create_simple_database();
-    printf("\n");
+    _D1("\n");
     CU_ASSERT( DS_FAILURE == next_song(NULL, DT_NEXT, DL_SONG) );
 
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_SONG) );
-    printf("First Song: ");
+    _D1("First Song: ");
     print_song_info( so_n );
     CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_NEXT, DL_SONG) );
-    printf("Next Song: ");
+    _D1("Next Song: ");
     print_song_info( so_n );
 
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_ARTIST) );
-    printf("Next Artist: ");
+    _D1("Next Artist: ");
     print_song_info( so_n );
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_NEXT, DL_SONG) );
-    printf("Next Song: ");
+    _D1("Next Song: ");
     print_song_info( so_n );
     CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_NEXT, DL_ALBUM) );
-    printf("Next Album: ");
+    _D1("Next Album: ");
     print_song_info( so_n );
     database_purge();
 }
@@ -155,20 +177,20 @@ void test_previous_song( void )
 {
     song_node_t * so_n = NULL;
     create_simple_database();
-    printf("\n");
+    _D1("\n");
     CU_ASSERT( DS_FAILURE == next_song(NULL, DT_PREVIOUS, DL_SONG) );
     
     CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_SONG) );
-    printf("Previous Song: ");
+    _D1("Previous Song: ");
     print_song_info( so_n );
     CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
-    printf("Previous Artist: ");
+    _D1("Previous Artist: ");
     print_song_info( so_n );
     CU_ASSERT( DS_END_OF_LIST == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
-    printf("Previous Album: ");
+    _D1("Previous Album: ");
     print_song_info( so_n );
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_PREVIOUS, DL_ALBUM) );
-    printf("Previous Album: ");
+    _D1("Previous Album: ");
     print_song_info( so_n );
     database_purge();
 }
@@ -178,18 +200,18 @@ void test_random_song( void )
     int ii;
     song_node_t * so_n = NULL;
     create_simple_database();
-    printf("\n");
+    _D1("\n");
     CU_ASSERT( DS_FAILURE == next_song(NULL, DT_RANDOM, DL_SONG) );
     srand(11);
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_SONG) );
-    printf("Random Song: ");
+    _D1("Random Song: ");
     print_song_info( so_n );
     CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_ALBUM) );
-    printf("Random Album: ");
+    _D1("Random Album: ");
     print_song_info( so_n );
     for( ii = 0; ii < 10; ii++ ) {
         CU_ASSERT( DS_SUCCESS == next_song(&so_n, DT_RANDOM, DL_ARTIST) );
-        printf("Random Artist: ");
+        _D1("Random Artist: ");
         print_song_info( so_n );
     }
 
@@ -202,7 +224,7 @@ void test_queued_song( void )
     song_node_t * backup1_n, *backup2_n, *backup3_n, *backup4_n, *backup5_n;
     queued_song_init();
     create_simple_database();
-    printf("\n");
+    _D1("\n");
     srand(11);
 
     CU_ASSERT( DS_FAILURE != queued_next_song(&so_n, DT_PREVIOUS, DL_ARTIST) );
