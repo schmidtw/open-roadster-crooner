@@ -504,21 +504,20 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
 {
     uint32_t tn = 1;
     uint8_t rv;
+    db_level_t level = DL_SONG;;
+
     switch( disc ) {
         case DM_SONG:
-            if( 0 == song->track_number ) {
-                return 1;
-            }
-            tn = song->track_number;
+            level = DL_SONG;
             break;
         case DM_ALBUM:
         {
-            tn = song->d.parent->d.list.index;
+            level = DL_ALBUM;
             break;
         }
         case DM_ARTIST:
         {
-            tn = song->d.parent->parent->d.list.index;
+            level = DL_ARTIST;
             break;
         }
         case DM_TEXT_DISPLAY:
@@ -529,6 +528,7 @@ static uint8_t __find_display_number( song_node_t *song, const uint8_t disc )
         default:
             break;
     }
+    tn = get_song_number(song, level);
     rv = (uint8_t)(tn % 100);
     if( rv == 0 ) { rv = 1; }
     return rv;

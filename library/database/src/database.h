@@ -25,7 +25,7 @@
 typedef struct {
     bt_list_t children;  // Could be artists, album, song
     uint32_t index_songs_start; // The index start of the songs which are children of this list
-    uint32_t index_songs_stop;   // The index stop (last) of the songs which are children of this list
+    uint32_t index_songs_stop;  // The index stop (last) of the songs which are children of this list
 } index_song_node_t;
 
 typedef enum {
@@ -47,12 +47,11 @@ typedef struct generic_node {
         char song[MAX_SONG_TITLE_W_NULL];
     } name;
     bt_node_t node;
-    union {
-        uint32_t song_index; // Used when a song_node_t
-        index_song_node_t list; // Used when group/artist/album node
-    } i;
+    index_song_node_t list; // Used when group/artist/album node
+
     // Parent -- Could be group, artist, album
     struct generic_node * parent;
+    uint32_t index; // The index number of this element in the list
 } generic_node_t;
 
 typedef struct {
@@ -134,6 +133,16 @@ bool init_database( media_interface_t *mi );
 db_status_t next_song( song_node_t ** current_song,
                        const db_traverse_t operation,
                        const db_level_t level );
+
+
+/**
+ * Get the song number associated with this song
+ *
+ * @param song pointer to the song structure
+ * @param level the index level which should be reported
+ */
+size_t get_song_number( song_node_t * song,
+                        const db_level_t level );
 
 /**
  * Using this function will keep a playlist queue such that

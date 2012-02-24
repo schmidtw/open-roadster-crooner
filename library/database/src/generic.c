@@ -47,7 +47,7 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
     }
     *created_node = false;
 
-    node = bt_find( &generic->i.list.children, element);
+    node = bt_find( &generic->list.children, element);
     if( NULL == node ) {
         *created_node = true;
         /* The type of the newly created node will be be one greater
@@ -61,7 +61,7 @@ generic_node_t * find_or_create_generic( generic_node_t * generic,
         if( NULL == node ) {
             return NULL;
         }
-        bt_add(&generic->i.list.children, node);
+        bt_add(&generic->list.children, node);
     }
     generic_n = (generic_node_t *)node->data;
     generic_n->parent = generic;
@@ -136,14 +136,14 @@ bool __init_generic_node( generic_node_t *node, const char *element ) {
     size_t name_size;
     char * name_loc;
 
-    bt_init_list( &(node->i.list.children), generic_compare );
+    bt_init_list( &(node->list.children), generic_compare );
     /* Artist and album share the same size */
     name_size = MAX_ALBUM_TITLE;
     /* Root, Artist, and Album share the same name location */
     name_loc = node->name.album;
     switch(node->type) {
         case GNT_ALBUM:
-            bt_set_compare(&(node->i.list.children), song_compare);
+            bt_set_compare(&(node->list.children), song_compare);
             break;
         case GNT_ROOT:
             name_size = MAX_ROOT_NAME;
@@ -211,7 +211,7 @@ void delete_generic(bt_node_t *node, void *user_data)
 
     generic_n = (generic_node_t *)node->data;
     if( GNT_SONG != generic_n->type ) {
-        bt_delete_list(&(generic_n->i.list.children), delete_generic, NULL);
+        bt_delete_list(&(generic_n->list.children), delete_generic, NULL);
     }
     free(generic_n);
 }
