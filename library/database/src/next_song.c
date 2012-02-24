@@ -78,7 +78,7 @@ static generic_node_t * __ns_find( bt_list_t *list, void * data ) {
     return NULL;
 }
 
-size_t get_song_number( song_node_t * song,
+uint32_t get_song_number( song_node_t * song,
                         const db_level_t level )
 {
     uint32_t rv = 1;

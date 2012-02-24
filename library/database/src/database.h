@@ -140,9 +140,11 @@ db_status_t next_song( song_node_t ** current_song,
  *
  * @param song pointer to the song structure
  * @param level the index level which should be reported
+ *
+ * @return track/index number
  */
-size_t get_song_number( song_node_t * song,
-                        const db_level_t level );
+uint32_t get_song_number( song_node_t * song,
+                          const db_level_t level );
 
 /**
  * Using this function will keep a playlist queue such that

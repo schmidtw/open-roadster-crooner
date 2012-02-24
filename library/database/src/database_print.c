@@ -91,20 +91,20 @@ bt_ir_t album_print(bt_node_t *node, void *user_data)
 
 bt_ir_t song_print(bt_node_t *node, void *user_data)
 {
-    song_node_t *song = (generic_node_t*) node->data;
+    song_node_t *song = (song_node_t*) node->data;
     int spaces = (int) user_data;
     printf(
 #ifdef INT32_STANDARD_INT_SIZE
            "%*.*s %*.*u %u) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
 #else
-           "%*.*s %*.*u %lu) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
+           "%*.*s %*.*lu %lu) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
 #endif
            spaces, spaces, " ",
            MAX_TRACK_DIGITS, MAX_TRACK_DIGITS, get_song_number(song, DL_SONG),
-           ((song_node_t*)song)->d.index,
+           song->d.index,
            MAX_DISPLAY_SONG_LEN, MAX_DISPLAY_SONG_LEN, song->d.name.song,
            song->gain.album_gain, song->gain.album_peak,
            song->gain.track_gain, song->gain.track_peak,
-           MAX_FILE_NAME, MAX_FILE_NAME, ((song_node_t*)song)->file_location );
+           MAX_FILE_NAME, MAX_FILE_NAME, song->file_location );
     return BT_IR__CONTINUE;
 }
