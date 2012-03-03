@@ -551,19 +551,22 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
     db_traverse_t direction;
     uint8_t disc_temp = disc;
     next_song_fct get_next_song_fct;
+    bool ignore_random_state = false;
 
     switch( cmd ) {
         case IRP_CMD__FAST_PLAY__FORWARD:
-            disc_temp = DM_SONG;
             direction = DT_NEXT;
+            disc_temp = DM_SONG;
+            ignore_random_state = true;
+            break;
+        case IRP_CMD__FAST_PLAY__REVERSE:
+            direction = DT_PREVIOUS;
+            disc_temp = DM_SONG;
+            ignore_random_state = true;
             break;
         case IRP_CMD__SEEK__NEXT:
         case IRP_CMD__SEEK__ALT_NEXT:
             direction = DT_NEXT;
-            break;
-        case IRP_CMD__FAST_PLAY__REVERSE:
-            disc_temp = DM_SONG;
-            direction = DT_PREVIOUS;
             break;
         case IRP_CMD__SEEK__PREV:
         case IRP_CMD__SEEK__ALT_PREV:
@@ -573,7 +576,8 @@ static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc )
             return false;
     }
     
-    if( is_random_enabled() ) {
+    if(    !ignore_random_state
+        && is_random_enabled() ) {
         get_next_song_fct = queued_next_song;
     } else {
         get_next_song_fct = next_song;
