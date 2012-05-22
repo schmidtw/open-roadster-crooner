@@ -121,7 +121,7 @@ int _file_fstat_r( struct _reent *reent, int fd, struct stat *st )
 {
     reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
-    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+    fprintf( stdout, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
     return -1;
 }
@@ -131,8 +131,14 @@ int _file_write_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
     reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
-    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+    fprintf( stdout, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
+    return -1;
+}
+
+__attribute__((weak))
+int _error_write_r( struct _reent *reent, int fd, void *buf, size_t len )
+{
     return -1;
 }
 
@@ -141,7 +147,7 @@ int _file_read_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
     reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
-    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+    fprintf( stdout, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
     return -1;
 }
@@ -151,7 +157,7 @@ off_t _file_lseek_r( struct _reent *reent, int fd, off_t offset, int whence )
 {
     reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
-    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+    fprintf( stdout, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
     return -1;
 }
@@ -161,7 +167,7 @@ int _file_close_r( struct _reent *reent, int fd )
 {
     reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
-    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+    fprintf( stdout, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
     return -1;
 }
@@ -171,7 +177,7 @@ int _file_isatty_r( struct _reent *reent, int fd )
 {
     reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
-    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+    fprintf( stdout, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
     return 0;
 }
@@ -181,7 +187,7 @@ int _open_r( struct _reent *reent, const char *name, int flags, int mode )
 {
     reent->_errno = EBADF;
 #ifdef SYSCALL_DEBUG
-    fprintf( stderr, "Error: Unimplemented syscall: %s\n", __func__ );
+    fprintf( stdout, "Error: Unimplemented syscall: %s\n", __func__ );
 #endif
     return -1;
 }
@@ -211,7 +217,7 @@ void _exit_r( struct _reent *reent, int code )
 {
 #ifdef SYSCALL_DEBUG
     /* Signal exit */
-    fprintf( stderr, "\004%d", code );
+    fprintf( stdout, "\004%d", code );
 #endif
 
     /* flush all pending writes */
@@ -299,10 +305,20 @@ int _isatty( int fd )
  * Low-level write command.
  * When newlib buffer is full or fflush is called, this will output
  * data to correct location.
- * 1 and 2 is stdout and stderr which goes to usart
+ * 1 (stdout) goes to the usart
+ * 2 (stderr) goes to the _error_write_r function, or usart if that fails
  */
 int _write_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
+    if( 2 == fd ) {
+        int rv;
+
+        rv = _error_write_r( reent, fd, buf, len );
+        if( -1 != rv ) {
+            return rv;
+        }
+    }
+
     if( (1 == fd) || (2 == fd) ) {
 #ifdef USE_INTERRUPT_DEBUG
         if( (CEM__APPLICATION == cpu_get_mode()) &&

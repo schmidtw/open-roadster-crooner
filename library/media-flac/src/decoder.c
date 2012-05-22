@@ -148,7 +148,7 @@ static int decode_residuals(FLACContext *s, int32_t* decoded, int pred_order)
 
     method_type = get_bits(&s->gb, 2);
     if (method_type > 1){
-        //fprintf(stderr,"illegal residual coding method %d\n", method_type);
+        //fprintf(stdout,"illegal residual coding method %d\n", method_type);
         return -3;
     }
     
@@ -163,7 +163,7 @@ static int decode_residuals(FLACContext *s, int32_t* decoded, int pred_order)
         tmp = get_bits(&s->gb, method_type == 0 ? 4 : 5);
         if (tmp == (method_type == 0 ? 15 : 31))
         {
-            //fprintf(stderr,"fixed len partition\n");
+            //fprintf(stdout,"fixed len partition\n");
             tmp = get_bits(&s->gb, 5);
             for (; i < samples; i++, sample++)
                 decoded[sample] = get_sbits(&s->gb, tmp);
@@ -247,13 +247,13 @@ static int decode_subframe_lpc(FLACContext *s, int32_t* slow_decoded, int pred_o
     coeff_prec = get_bits(&s->gb, 4) + 1;
     if (coeff_prec == 16)
     {
-        //fprintf(stderr,"invalid coeff precision\n");
+        //fprintf(stdout,"invalid coeff precision\n");
         return -6;
     }
     qlevel = get_sbits(&s->gb, 5);
     if (qlevel < 0) 
     {
-        //fprintf(stderr,"qlevel %d not supported, maybe buggy stream\n", qlevel);
+        //fprintf(stdout,"qlevel %d not supported, maybe buggy stream\n", qlevel);
         return -7;
     }
 
@@ -324,7 +324,7 @@ static inline int decode_subframe(FLACContext *s, int channel, int32_t* decoded)
 
     if (get_bits1(&s->gb))
     {
-        //fprintf(stderr,"invalid subframe padding\n");
+        //fprintf(stdout,"invalid subframe padding\n");
         return -9;
     }
     type = get_bits(&s->gb, 6);
@@ -349,38 +349,38 @@ static inline int decode_subframe(FLACContext *s, int channel, int32_t* decoded)
         while (!get_bits1(&s->gb))
             wasted++;
         s->curr_bps -= wasted;
-        //fprintf(stderr,"%d wasted bits\n", wasted);
+        //fprintf(stdout,"%d wasted bits\n", wasted);
     }
 #endif
 //FIXME use av_log2 for types
     if (type == 0)
     {
-        //fprintf(stderr,"coding type: constant\n");
+        //fprintf(stdout,"coding type: constant\n");
         tmp = get_sbits(&s->gb, s->curr_bps);
         for (i = 0; i < s->blocksize; i++)
             decoded[i] = tmp;
     }
     else if (type == 1)
     {
-        //fprintf(stderr,"coding type: verbatim\n");
+        //fprintf(stdout,"coding type: verbatim\n");
         for (i = 0; i < s->blocksize; i++)
             decoded[i] = get_sbits(&s->gb, s->curr_bps);
     }
     else if ((type >= 8) && (type <= 12))
     {
-        //fprintf(stderr,"coding type: fixed\n");
+        //fprintf(stdout,"coding type: fixed\n");
         if (decode_subframe_fixed(s, decoded, type & ~0x8) < 0)
             return -10;
     }
     else if (type >= 32)
     {
-        //fprintf(stderr,"coding type: lpc\n");
+        //fprintf(stdout,"coding type: lpc\n");
         if (decode_subframe_lpc(s, decoded, (type & ~0x20)+1) < 0)
             return -11;
     }
     else
     {
-        //fprintf(stderr,"Unknown coding type: %d\n",type);
+        //fprintf(stdout,"Unknown coding type: %d\n",type);
         return -12;
     }
         

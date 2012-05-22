@@ -909,7 +909,7 @@ mad_fixed_t III_requantize(unsigned int value, signed int exp)
     if (exp >= 5) {
       /* overflow */
 # if defined(DEBUG)
-      fprintf(stderr, "requantize overflow (%f * 2^%d)\n",
+      fprintf(stdout, "requantize overflow (%f * 2^%d)\n",
               mad_f_todouble(requantized), exp);
 # endif
       requantized = MAD_F_MAX;
@@ -1241,7 +1241,7 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 
     if (cachesz + bits_left < 0) {
 # if 0 && defined(DEBUG)
-      fprintf(stderr, "huffman count1 overrun (%d bits)\n",
+      fprintf(stdout, "huffman count1 overrun (%d bits)\n",
               -(cachesz + bits_left));
 # endif
 
@@ -1256,9 +1256,9 @@ enum mad_error III_huffdecode(struct mad_bitptr *ptr, mad_fixed_t xr[576],
 
 # if 0 && defined(DEBUG)
   if (bits_left < 0)
-    fprintf(stderr, "read %d bits too many\n", -bits_left);
+    fprintf(stdout, "read %d bits too many\n", -bits_left);
   else if (cachesz + bits_left > 0)
-    fprintf(stderr, "%d stuffing bits\n", cachesz + bits_left);
+    fprintf(stdout, "%d stuffing bits\n", cachesz + bits_left);
 # endif
 
   /* rzero */
@@ -2647,7 +2647,7 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
   }
 
 # if 0 && defined(DEBUG)
-  fprintf(stderr,
+  fprintf(stdout,
           "main_data_begin:%u, md_len:%u, frame_free:%u, "
           "data_bitlen:%u, anc_bitlen: %u\n",
           si.main_data_begin, md_len, frame_free,

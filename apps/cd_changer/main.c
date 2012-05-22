@@ -21,6 +21,7 @@
 #include <playback/playback.h>
 #include <ibus-phone-protocol/ibus-phone-protocol.h>
 #include <system-time/system-time.h>
+#include <system-log/system-log.h>
 
 #include "reboot-sys.h"
 #include "radio-interface.h"
@@ -30,6 +31,7 @@
 
 #define ENABLE_STATUS_TASK      0
 #define REPORT_ALL_MALLOC       0
+#define ENABLE_SYSLOG_TO_DISC   0
 
 #define ALLOW_USING_SLOW_MEMORY 1
 
@@ -66,10 +68,10 @@ void* pvPortMalloc( size_t size )
         ret = malloc( size );
         __sdram_use += size;
 #else
-        fprintf( stderr, "%s( %lu ) Failure - Needed: %lu Have: %ld - using malloc()\n",
+        fprintf( stdout, "%s( %lu ) Failure - Needed: %lu Have: %ld - using malloc()\n",
                  __func__, size, size, __sram_have );
 
-        fflush( stderr );
+        fflush( stdout );
 
         while( 1 ) { ; }
 #endif
@@ -127,7 +129,7 @@ static void __idle_task( void *params )
 {
     while( 1 ) {
         os_task_delay_ms( 5000 );
-        printf( "Still alive, SRAM Left: %ld, OS/Stack SDRAM Usage: %ld\n", __sram_have, __sdram_use );
+        fprintf( stderr, "Still alive, SRAM Left: %ld, OS/Stack SDRAM Usage: %ld\n", __sram_have, __sdram_use );
         os_task_get_run_time_stats( task_buffer );
         printf( "%s\n", task_buffer );
     }
@@ -171,7 +173,10 @@ int main( void )
     playback_init( 1 );
     init_database( mi_list );
     fstream_init( 2, malloc, free );
-    system_time_init(1);
+    system_time_init( 1 );
+#ifdef ENABLE_SYSLOG_TO_DISC   
+    system_log_init( 1, "/SYS-LOG.TXT" );
+#endif
 #ifdef SUPPORT_TEXT
     display_init( ibus_phone_display, 1000, 4000, 2000, 5000, 3, true);
 #endif

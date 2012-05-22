@@ -29,11 +29,12 @@ LIBRARIES = \
             dsp \
             led \
             system-time \
+            system-log \
             display \
             bsp \
             util
 
-ENABLE_DISPLAY = 1
+ENABLE_DISPLAY = 0
 
 ifdef ENABLE_DISPLAY
 LIBRARIES += display

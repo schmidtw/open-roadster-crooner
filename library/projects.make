@@ -21,5 +21,6 @@ LIBRARIES = \
             ibus-phone-protocol \
             ibus-debug-protocol \
             system-time \
+            system-log \
             database \
             display

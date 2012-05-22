@@ -73,9 +73,9 @@ static void __reboot_task( void *params )
         printf( "No reboots to report...\n" );
         goto done;
     }
-    fprintf( stderr, "Last Reboot Information:\n" );
-    fprintf( stderr, "========================================\n" );
-    reboot_output( stderr, last );
+    fprintf( stdout, "Last Reboot Information:\n" );
+    fprintf( stdout, "========================================\n" );
+    reboot_output( stdout, last );
 
     while( false == last_reset_reported ) {
         FILE *fp;

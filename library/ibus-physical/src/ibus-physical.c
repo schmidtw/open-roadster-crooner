@@ -42,7 +42,7 @@
 #define TX_DELAY            (10)
 
 #define IBUS_PHYSICAL_DEBUG     0
-#define IBUS_LOG_FLAG           0
+#define IBUS_LOG_FLAG           1
 #define IBUS_LOG_MSGS_PER_WRITE 5
 
 #define _D1(...)
@@ -383,37 +383,14 @@ static void __out( ibus_io_msg_t *msg )
 {
     struct timeval tv;
     struct timezone tz;
-    static FILE *__file = NULL;
-    static char tmp[255];
-    int offset;
     int i;
-    static int count = 0;
 
     gettimeofday( &tv, &tz );
-    offset = sprintf( tmp, "[%u.%06u] Status: %s Length: %u [%02x|%02x|%02x]",
+    fprintf( stderr, "IBUS: [%u.%06u] Status: %s Length: %3u [%02x|%02x|%02x]",
              (unsigned int) tv.tv_sec, (unsigned int) tv.tv_usec, (IBUS_IO_STATUS__OK == msg->status) ? "OK" : (IBUS_IO_STATUS__PARITY_ERROR == msg->status) ? "PE" : "BOR", (unsigned int) msg->size, msg->buffer[0], msg->buffer[1], msg->buffer[2] );
     for( i = 3; i < msg->size; i++ ) {
-        offset += sprintf( &tmp[offset], " %02x", msg->buffer[i] );
+        fprintf( stderr, " %02x", msg->buffer[i] );
     }
-    tmp[offset] = '\0';
-
-    puts( tmp );
-
-    tmp[offset++] = '\n';
-    tmp[offset] = '\0';
-
-    if( NULL == __file ) {
-        __file = fopen( "/ibus-log.txt", "a" );
-    }
-
-    if( NULL != __file ) {
-        fputs( tmp, __file );
-        count++;
-        if( IBUS_LOG_MSGS_PER_WRITE <= count ) {
-            fflush( __file );
-            fclose( __file );
-            __file = NULL;
-            count = 0;
-        }
-    }
+    fputc( '\n', stderr );
+    fflush( stderr );
 }
