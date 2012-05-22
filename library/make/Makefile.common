@@ -19,6 +19,7 @@ gen_dir      = objs
 empty_file   = .auto_gen_file
 gen_file     = $(gen_dir)/$(empty_file)
 QUIET  ?= @
+INCLUDE += -I/opt/avr32-include/
 
 inc_dir = $(BASE)/bins/include/$(TARGET)
 lib_dir = $(BASE)/bins/lib
