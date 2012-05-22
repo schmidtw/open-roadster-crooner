@@ -32,7 +32,10 @@ typedef enum {
 
     BSP_SPI_MODE_FAULT                  = 0x0200,
 
-    BSP_PDCA_QUEUE_FULL                 = 0x0400
+    BSP_PDCA_QUEUE_FULL                 = 0x0400,
+
+    BSP_FLASH_LOCKED_MEMORY_WRITE       = 0x0800,
+    BSP_FLASH_INTERNAL_ERROR            = 0x0801
 } bsp_status_t;
 
 #endif
