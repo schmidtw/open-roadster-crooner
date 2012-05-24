@@ -174,7 +174,7 @@ int main( void )
     init_database( mi_list );
     fstream_init( 2, malloc, free );
     system_time_init( 1 );
-#ifdef ENABLE_SYSLOG_TO_DISC   
+#if (1 == ENABLE_SYSLOG_TO_DISC)
     system_log_init( 1, "/SYS-LOG.TXT" );
 #endif
 #ifdef SUPPORT_TEXT
