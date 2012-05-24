@@ -2,6 +2,7 @@
 LIBRARIES = \
             mock \
             linked-list \
+            fillable-buffer \
             binary-tree-avl \
             circular-buffer \
             util \

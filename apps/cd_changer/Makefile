@@ -32,6 +32,7 @@ LIBRARIES = \
             system-log \
             display \
             bsp \
+            fillable-buffer \
             util
 
 ENABLE_DISPLAY = 0

@@ -21,8 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/reent.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include <freertos/os.h>
+#include <fillable-buffer/fillable-buffer.h>
 #include <memcard/memcard.h>
 
 #include "system-log.h"
@@ -30,8 +33,9 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
+#define LOG_DUMP_RATE           5000
 #define LOG_MSG_MAX             80
-#define LOG_MAX_MESSAGE_SIZE    10
+#define LOG_MAX_MESSAGE_SIZE    50
 #define LOG_STACK_DEPTH         100
 
 /*----------------------------------------------------------------------------*/
@@ -82,7 +86,10 @@ syslog_status_t system_log_init( const uint32_t priority, const char *filename )
 
 int _error_write_r( struct _reent *reent, int fd, void *buf, size_t len )
 {
-    size_t left;
+    uint8_t *b;
+    int sent;
+
+    b = (uint8_t *) buf;
 
     if( 0 == __enable ) {
         return -1;
@@ -92,56 +99,68 @@ int _error_write_r( struct _reent *reent, int fd, void *buf, size_t len )
         return -1;
     }
 
-    left = len;
-    while( left ) {
+    sent = 0;
+    while( 0 < len ) {
         size_t send;
         log_msg_t *msg;
 
         send = LOG_MAX_MESSAGE_SIZE;
-        if( left < LOG_MAX_MESSAGE_SIZE ) {
-            send = left;
+        if( len < LOG_MAX_MESSAGE_SIZE ) {
+            send = len;
         }
-        left -= send;
 
         os_queue_receive( __log_idle, &msg, WAIT_FOREVER );
-        memcpy( msg->buffer, buf, send );
-        buf += send;
+        memcpy( msg->buffer, &b[sent], send );
+        sent += send;
+        len -= send;
         msg->size = send;
         os_queue_send_to_back( __log_pending, &msg, WAIT_FOREVER );
     }
 
-    return len;
+    return sent;
 }
 
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
+
+static void __flush( void *data, const uint8_t *buf, const size_t size )
+{
+    if( MC_CARD__MOUNTED == mc_get_status() ) {
+        FILE *fp;
+        fp = fopen( (char*) data, "a" );
+        fwrite( buf, sizeof(uint8_t), size, fp );
+        fclose( fp );
+    }
+
+    fwrite( buf, sizeof(uint8_t), size, stdout );
+}
+
 static void __log_task( void *data )
 {
-    char *filename;
-
-    filename = (char *) data;   /* really a const, so don't change */
+    fillable_buffer_t fb;
+    static uint8_t buf[512];
+    struct timeval tv;
+    struct timezone tz;
+    uint32_t last;
 
     __enable = 1;
 
+    fb.buf = buf;
+    fb.size = sizeof(buf);
+    fb.offset = 0;
+    fb.data = data;
+    fb.flush = __flush;
+
+    last = 0;
+    memset( buf, 0, sizeof(buf) );
+
     while( 1 ) {
+        bool rv;
         log_msg_t *msg;
 
         os_queue_receive( __log_pending, &msg, WAIT_FOREVER );
-
-        if( MC_CARD__MOUNTED == mc_get_status() ) {
-            int i;
-            FILE *fp;
-
-            fp = fopen( filename, "a" );
-            for( i = 0; i < msg->size; i++ ) {
-                fputc( msg->buffer[i], fp );
-            }
-
-            //fflush( fp );
-            fclose( fp );
-        }
-
+        fillbuf_append( &fb, msg->buffer, msg->size );
         os_queue_send_to_back( __log_idle, &msg, WAIT_FOREVER );
     }
 }
