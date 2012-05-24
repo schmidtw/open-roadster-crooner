@@ -274,8 +274,6 @@ bool ibus_physical_send_message( const ibus_device_t src,
 
     ibus_msg->buffer[payload_length + 3] = (uint8_t) checksum;
 
-    _IBUS_LOG( ibus_msg );
-
     os_queue_send_to_back( __tx_pending, &ibus_msg, WAIT_FOREVER );
     os_semaphore_give( __wake_up_tx_task );
 
@@ -392,5 +390,4 @@ static void __out( ibus_io_msg_t *msg )
         fprintf( stderr, " %02x", msg->buffer[i] );
     }
     fputc( '\n', stderr );
-    fflush( stderr );
 }
