@@ -1,3 +1,8 @@
+machine_name := $(shell hostname)
+ifneq ($(machine_name),open-roadster-bm.357beelard)
+$(error May only be run on the open-roadster-bm build machine.)
+endif
+
 ifndef VERSION
 $(error "VERSION must be defined - format: 1.0.1")
 endif
@@ -19,7 +24,7 @@ SOURCES = \
           dfu-programmer/main.c \
           dfu-programmer/util.c
 
-all: object.c updater.exe updater
+all: machine-check object.c updater.exe updater
 	cp updater.exe crooner-firmware-$(VERSION).exe
 	zip firmware-$(VERSION)_zip crooner-firmware-$(VERSION).exe
 
@@ -34,12 +39,12 @@ updater.exe : $(objs_windows)
 	$(cc_windows) -static $(cflags) -m32 -o $@ $(objs_windows) -lusb
 
 %.o-win32: %.c
-	$(cc_windows) -c $< -o $@ -nostdinc $(cflags) -m32 $(includes) -I/usr/lib64/gcc/i686-pc-mingw32/4.5.0/include  -I/usr/i686-pc-mingw32/sys-root/mingw/include
+	$(cc_windows) -c $< -o $@ -nostdinc $(cflags) -m32 $(includes) -I/usr/lib/gcc/i686-pc-mingw32/4.4.2/include  -I/usr/i686-pc-mingw32/sys-root/mingw/include
 
 %.o-linux: %.c
 	$(cc_linux) -c $< -o $@ $(cflags) $(includes)
 
-object.c : cd_changer.hex
+object.c : ../../apps/cd_changer/cd_changer.hex
 	perl ./ihex2c.pl $< $@
 
 clean:
