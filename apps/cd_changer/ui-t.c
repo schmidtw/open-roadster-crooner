@@ -86,7 +86,7 @@ static void __process_command( irp_state_t *device_status,
                                const ri_msg_t *msg,
                                song_node_t **song,
                                void *user_data );
-static bool __get_next_disc_mode_element(disc_mode_t *val);
+static bool __is_valid_cd(uint8_t cd);
 static uint8_t __map_get( void );
 static uint8_t __find_display_number( song_node_t *song, const uint8_t disc );
 static bool __find_song( song_node_t **song, irp_cmd_t cmd, const uint8_t disc );
@@ -334,10 +334,12 @@ static void __process_command( irp_state_t *device_status,
             case IRP_CMD__CHANGE_DISC:
                 *device_status = IRP_STATE__LOADING_DISC;
                 ri_send_state( *device_status, *device_mode, disc_map, *current_disc, *current_track );
-                *current_disc = msg->d.ibus.disc;
-                *current_track = __find_display_number(*song, *current_disc);
+                if( __is_valid_cd(msg->d.ibus.disc) ) {
+                    *current_disc = msg->d.ibus.disc; //do
+                    *current_track = __find_display_number(*song, *current_disc);
+                    shouldSendText = DISPLAY_UPDATE;
+                }
                 *device_status = IRP_STATE__PLAYING;
-                shouldSendText = DISPLAY_UPDATE;
                 break;
 
             case IRP_CMD__GET_STATUS:   /* Never sent. */
@@ -430,37 +432,29 @@ static void __process_command( irp_state_t *device_status,
 }
 
 /**
- * Used to get the next element in the disc_mode_t enum
- * 
- * @param val pointer to current enum constant which will be
- *        updated to the next element
- * 
- * @return true if the the *val param was updated properly
- *         false if there are no more constants in the enum
- *         or the passed in value is not part of the enum
+ * Used to verify that a CD is part of the CD list which
+ * are active.
+ *
+ * @return true if the CD is in the active list, false otherwise
  */
-static bool __get_next_disc_mode_element(disc_mode_t *val)
+static bool __is_valid_cd(uint8_t cd)
 {
-    switch( *val ) {
+    disc_mode_t dm = (disc_mode_t) cd;
+    bool rv = true;
+    switch (dm) {
         case DM_ARTIST:
-            *val = DM_ALBUM;
-            break;
         case DM_ALBUM:
-            *val = DM_SONG;
-            break;
         case DM_SONG:
-            *val = DM_RANDOM;
-            break;
         case DM_RANDOM:
 #ifdef SUPPORT_TEXT
-            *val = DM_TEXT_DISPLAY;
-            break;
-#endif
         case DM_TEXT_DISPLAY:
+#endif
+            break;
         default:
-            return false;
+            rv = false;
+            break;
     }
-    return true;
+    return rv;
 }
 
 /**
@@ -480,11 +474,12 @@ static uint8_t __map_get( void )
     
     if( DS_SUCCESS == next_song( &song, DT_NEXT, DL_ARTIST) ) {
         /* Generate the map file from the enum disc_mode_t */
-        disc_mode_t dm = DM_ARTIST;
+        uint8_t dm = (uint8_t)DM_ARTIST;
         _D2("__map_get - found database\n");
-        do {
+        while( __is_valid_cd(dm) ) {
             map |= 1 << (dm-1);
-        } while( __get_next_disc_mode_element(&dm) );
+            dm++;
+        };
     }
     _D1("__map_get() - returning 0x%02x\n", map );
     return map;
