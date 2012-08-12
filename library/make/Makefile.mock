@@ -21,6 +21,7 @@ rmdir_mock = rm -rf
 sed_mock   = sed
 touch_mock = touch
 
+
 lib_extension_mock= .a
 include_base_mock = $(BASE)/bins/mock/include
 header_target_mock= $(include_base_mock)/$(TARGET)
@@ -49,7 +50,7 @@ finish_depends_mock = $(BASE)/tools/make_empty_dependencies.pl
 
 cflags_mock   = -g
 
-all_flags_mock = $(cflags_mock) $(CFLAGS_MOCK) -DFOSC0=12000000 -DBOARD=4
+all_flags_mock = $(cflags_mock) $(CFLAGS) -DFOSC0=12000000 -DBOARD=4
 
 libflags_mock = -rs
 
