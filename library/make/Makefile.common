@@ -8,6 +8,15 @@ ifndef BASE
 $(error "BASE must be defined.")
 endif
 
+ifneq ($(SKIP_STD_MOCK_IMPL),1)
+std_mock_impl ?= --add-std-impl
+endif
+
+ifdef EXTRA_HEADER
+extra_header = --extra-header=$(EXTRA_HEADER)
+endif
+
+this_dir = $(CURDIR)
 cc      = avr32-gcc
 ar      = avr32-ar
 objs    = $(addprefix $(gen_dir)/,$(filter %.o,$(SOURCES:.c=.o) $(SOURCES:.S=.o)))
@@ -133,5 +142,11 @@ $(inc_dir)/$(1) : $(1)
 	$(QUIET)cp $(1) $(dir $(inc_dir)/$(1))
 endef
 
+define MOCK_template
+mock :: $(1)
+	$(QUIET)$(BASE)/tools/mock_maker.pl --header=$(this_dir)/$(1) --output=$(this_dir)/../mock --library=$(TARGET) $(std_mock_impl) $(extra_header)
+endef
+
 $(foreach header,$(HEADERS),$(eval $(call INSTALL_template,$(header))))
 $(foreach start,$(bins_su),$(eval $(call STARTUP_template,$(start),$(patsubst $(lib_dir)%,$(gen_dir)%,$(start)))))
+$(foreach header,$(HEADERS),$(eval $(call MOCK_template,$(header))))

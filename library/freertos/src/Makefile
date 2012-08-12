@@ -13,6 +13,8 @@ SOURCES = \
     tasks.c \
     port.c
 
+EXTRA_HEADER = os-mock-extra.h
+
 LIBRARIES = \
             bsp
 

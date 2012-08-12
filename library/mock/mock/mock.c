@@ -46,13 +46,15 @@ void mock_test_assert( bool check )
     CU_ASSERT( check );
 }
 
-void set_use_standard_fct( mock_obj_t *obj, bool val )
+void set_use_standard_fct( mock_obj_t *obj )
 {
     if( NULL == obj ) {
         return;
     }
     internal_init( obj );
-    obj->call_std_fct = val;
+
+    obj->do_stuff_fct = NULL;
+    obj->call_std_fct = true;
 }
 
 void set_initialize_function( mock_obj_t *obj, initializer initial_fct )
@@ -64,16 +66,17 @@ void set_initialize_function( mock_obj_t *obj, initializer initial_fct )
     obj->init_fct = initial_fct;
 }
 
-void set_do_stuff_function( mock_obj_t *obj, int32_t *do_fct )
+void set_do_stuff_function( mock_obj_t *obj, void *do_fct )
 {
     if( NULL == obj ) {
         return;
     }
     internal_init( obj );
     obj->do_stuff_fct = do_fct;
+    obj->call_std_fct = false;
 }
 
-void set_is_expecting( mock_obj_t *obj, bool expecting )
+void set_is_expecting( mock_obj_t *obj, const bool expecting )
 {
     if( NULL == obj ) {
         return;
@@ -91,146 +94,22 @@ bool get_is_expecting( mock_obj_t *obj )
     return obj->is_expecting_call;
 }
 
-void set_return_pvoid( mock_obj_t *obj, void *rv)
+void set_return_value( mock_obj_t *obj, const uint64_t rv )
 {
     if( NULL == obj ) {
         return;
     }
     internal_init( obj );
-    obj->rv = ((int32_t) rv);
+    obj->do_stuff_fct = NULL;
+    obj->call_std_fct = false;
+    obj->rv = (uint64_t) rv;
 }
 
-void set_return_int16_t( mock_obj_t *obj, int16_t rv )
-{
-    if( NULL == obj ) {
-        return;
-    }
-    internal_init( obj );
-    obj->rv = ((int32_t) rv);
-}
-
-void set_return_uint16_t( mock_obj_t *obj, uint16_t rv )
-{
-    if( NULL == obj ) {
-        return;
-    }
-    internal_init( obj );
-    obj->rv = ((int32_t) rv);
-}
-
-void set_return_int32_t( mock_obj_t *obj, int32_t rv )
-{
-    if( NULL == obj ) {
-        return;
-    }
-    internal_init( obj );
-    obj->rv = rv;
-}
-
-void set_return_uint32_t( mock_obj_t *obj, uint32_t rv )
-{
-    if( NULL == obj ) {
-        return;
-    }
-    internal_init( obj );
-    obj->rv = ((int32_t) rv);
-}
-
-void set_return_bool( mock_obj_t *obj, bool rv )
-{
-    if( NULL == obj ) {
-        return;
-    }
-    internal_init( obj );
-    obj->rv  = ((int32_t) rv);
-}
-
-void set_return_size_t( mock_obj_t *obj, size_t rv )
-{
-    if( NULL == obj ) {
-        return;
-    }
-    internal_init( obj );
-    obj->rv = ((int32_t) rv);
-}
-
-void set_return_pchar( mock_obj_t *obj, char *rv )
-{
-    if( NULL == obj ) {
-        return;
-    }
-    internal_init( obj );
-    obj->rv = ((int32_t) rv);
-}
-
-void *get_return_pvoid( mock_obj_t *obj)
+uint64_t get_return_value( mock_obj_t *obj )
 {
     if( NULL == obj ) {
         return 0;
     }
     internal_init( obj );
-    return ((void *) obj->rv);
-}
-
-int16_t get_return_int16_t( mock_obj_t *obj )
-{
-    if( NULL == obj ) {
-        return 0;
-    }
-    internal_init( obj );
-    return ((int16_t) obj->rv);
-}
-
-uint16_t get_return_uint16_t( mock_obj_t *obj )
-{
-    if( NULL == obj ) {
-        return 0;
-    }
-    internal_init( obj );
-    return ((uint16_t) obj->rv);
-}
-
-int32_t get_return_int32_t( mock_obj_t *obj )
-{
-    if( NULL == obj ) {
-        return 0;
-    }
-    internal_init( obj );
-    return ((int32_t) obj->rv);
-}
-
-uint32_t get_return_uint32_t( mock_obj_t *obj )
-{
-    if( NULL == obj ) {
-        return 0;
-    }
-    internal_init( obj );
-    return ((uint32_t) obj->rv);
-}
-
-bool get_return_bool( mock_obj_t *obj )
-{
-    if( NULL == obj ) {
-        return false;
-    }
-    internal_init( obj );
-    return ((bool) obj->rv);
-}
-
-size_t get_return_size_t( mock_obj_t *obj )
-{
-    if( NULL == obj ) {
-        return 0;
-    }
-    internal_init( obj );
-    return ((size_t) obj->rv);
-}
-
-char *get_return_pchar( mock_obj_t *obj )
-{
-    if( NULL == obj ) {
-        return NULL;
-    }
-    internal_init( obj );
-    return ((char *) obj->rv);
+    return obj->rv;
 }
