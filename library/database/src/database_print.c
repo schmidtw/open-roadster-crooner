@@ -34,10 +34,10 @@
 void database_print( void )
 {
     
-    printf("==== Database ==========================\n");
+    fprintf(stderr, "==== Database ==========================\n");
     if( NULL != rdn.root )
     {
-        printf(
+        fprintf(stderr,
 #ifdef INT32_STANDARD_INT_SIZE
                " root (%u-%u)\n",
 #else
@@ -54,7 +54,7 @@ bt_ir_t artist_print(bt_node_t *node, void *user_data)
     generic_node_t *artist = (generic_node_t*)node->data;
     int spaces = (int) user_data;
     
-    printf(
+    fprintf(stderr,
 #ifdef INT32_STANDARD_INT_SIZE
            "%*.*s %u-(%u-%u) %-*.*s\n",
 #else
@@ -74,7 +74,7 @@ bt_ir_t album_print(bt_node_t *node, void *user_data)
     generic_node_t *album = (generic_node_t*)node->data;
     int spaces = (int) user_data;
     
-    printf(
+    fprintf(stderr,
 #ifdef INT32_STANDARD_INT_SIZE
            "%*.*s %u-(%u-%u) %-*.*s\n",
 #else
@@ -93,7 +93,7 @@ bt_ir_t song_print(bt_node_t *node, void *user_data)
 {
     song_node_t *song = (song_node_t*) node->data;
     int spaces = (int) user_data;
-    printf(
+    fprintf(stderr,
 #ifdef INT32_STANDARD_INT_SIZE
            "%*.*s %*.*u %u) %-*.*s  [% 3.3f:% 3.3f|% 3.3f:% 3.3f] -- %-*.*s\n",
 #else

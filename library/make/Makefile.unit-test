@@ -1,5 +1,4 @@
 ifndef BASE
-$(warning "BASE should be defined.  Defaulting to `../../..`")
 BASE = ../../..
 endif
 
@@ -10,7 +9,6 @@ genhtml = genhtml
 copy = cp
 mkdir = mkdir -p
 mv   = mv
-rename = rename
 rm   = rm -f
 rmdir= rm -rf
 touch = touch
@@ -18,7 +16,7 @@ touch = touch
 QUIET  ?= @
 
 cflags        = -Wall -g -fprofile-arcs -ftest-coverage -DUNIT_TEST
-ldflags       = -lcunit
+ldflags       = -lcunit -lpthread
 extension     = ut-o
 inc_suffix    = __INCLUDES
 cflags_suffix = __CFLAGS
@@ -65,7 +63,6 @@ define RUN_template
 $(1)_run : $(1)
 	./$(1)
 	$(QUIET)$(gcov) -l -p -o . $(1) *-$(1).c
-	$(QUIET)find . -maxdepth 1 -type f -exec $(rename) ..# gcov..# '{}' \;
 endef
 
 # $(1) = test name
@@ -75,7 +72,7 @@ $(1)_clean :
 	$(QUIET)$(rm) $(1).gcda $(1).gcno $(1).c.gcov $(1) $(addsuffix -$(1).*,$(basename $(notdir $($(1)$(source_suffix)))))
 	$(QUIET)$(rm) $(addsuffix .*.gcov,$(basename $(notdir $($(1)$(source_suffix)))))
 	$(QUIET)$(rm) lcov.out
-	$(QUIET)$(rm) gcov*
+	$(QUIET)$(rm) \.\.\#*.gcov
 	$(QUIET)$(rmdir) objs html
 endef
 

@@ -209,37 +209,37 @@ bsp_status_t gpio_set_options( const uint8_t pin,
 }
 
 /* See gpio.h for details. */
-__inline__ void gpio_set_pin( const uint8_t pin )
+void gpio_set_pin( const uint8_t pin )
 {
     AVR32_GPIO.port[pin >> 5].ovrs = 1 << (0x1f & pin);
 }
 
 /* See gpio.h for details. */
-__inline__ void gpio_clr_pin( const uint8_t pin )
+void gpio_clr_pin( const uint8_t pin )
 {
     AVR32_GPIO.port[pin >> 5].ovrc = 1 << (0x1f & pin);
 }
 
 /* See gpio.h for details. */
-__inline__ void gpio_tgl_pin( const uint8_t pin )
+void gpio_tgl_pin( const uint8_t pin )
 {
     AVR32_GPIO.port[pin >> 5].ovrt = 1 << (0x1f & pin);
 }
 
 /* See gpio.h for details. */
-__inline__ uint32_t gpio_read_pin( const uint8_t pin )
+uint32_t gpio_read_pin( const uint8_t pin )
 {
     return (((AVR32_GPIO.port[pin >> 5].pvr) >> (0x1f & pin)) & 1);
 }
 
 /* See gpio.h for details. */
-__inline__ uint32_t gpio_read_pin_output( const uint8_t pin )
+uint32_t gpio_read_pin_output( const uint8_t pin )
 {
     return (((AVR32_GPIO.port[pin >> 5].ovr) >> (0x1f & pin)) & 1);
 }
 
 /* See gpio.h for details. */
-__inline__ void gpio_clr_interrupt_flag( const uint8_t pin )
+void gpio_clr_interrupt_flag( const uint8_t pin )
 {
     AVR32_GPIO.port[pin >> 5].ifrc = 1 << (0x1f & pin);
 }

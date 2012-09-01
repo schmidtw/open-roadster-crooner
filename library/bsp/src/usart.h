@@ -124,7 +124,7 @@ bsp_status_t usart_init_rs232( volatile avr32_usart_t *usart,
  *      @retval true  Ready to transmit.
  *      @retval false Not ready to transmit or error.
  */
-inline bool usart_tx_ready( volatile avr32_usart_t *usart );
+bool usart_tx_ready( volatile avr32_usart_t *usart );
 
 /**
  *  Used to determine if the serial line is Clear To Send a character.
@@ -135,7 +135,7 @@ inline bool usart_tx_ready( volatile avr32_usart_t *usart );
  *      @retval true  Clear to send.
  *      @retval false Not Clear to send or error.
  */
-inline bool usart_is_cts( volatile avr32_usart_t *usart );
+bool usart_is_cts( volatile avr32_usart_t *usart );
 
 /**
  *  Used to write the character to the TX buffer if the hardware is

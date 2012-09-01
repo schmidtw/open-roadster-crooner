@@ -42,4 +42,6 @@ SOURCES = \
     pwm.c \
     wdt.c
 
+SKIP_STD_MOCK_IMPL = 1
+
 include ../../make/Makefile.common

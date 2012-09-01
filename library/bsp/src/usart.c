@@ -65,8 +65,7 @@ static void __usart_isr2( void );
 __attribute__ ((__interrupt__))
 static void __usart_isr3( void );
 #endif
-static inline void __usart_isr( const uint32_t index,
-                                volatile avr32_usart_t* usart );
+static void __usart_isr( const uint32_t index, volatile avr32_usart_t* usart );
 
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -261,8 +260,7 @@ bsp_status_t usart_init_rs232( volatile avr32_usart_t *usart,
 }
 
 /* See usart.h for details. */
-__attribute__ ((__always_inline__))
-inline bool usart_tx_ready( volatile avr32_usart_t *usart )
+bool usart_tx_ready( volatile avr32_usart_t *usart )
 {
     if( NULL != usart ) {
         return (0 != (AVR32_USART_CSR_TXRDY_MASK & usart->csr));
@@ -272,8 +270,7 @@ inline bool usart_tx_ready( volatile avr32_usart_t *usart )
 }
 
 /* See usart.h for details. */
-__attribute__ ((__always_inline__))
-inline bool usart_is_cts( volatile avr32_usart_t *usart )
+bool usart_is_cts( volatile avr32_usart_t *usart )
 {
     if( NULL != usart ) {
         return (0 == usart->CSR.cts);
@@ -325,8 +322,7 @@ static void __usart_isr3( void )
 }
 #endif
 
-static inline void __usart_isr( const uint32_t index,
-                                volatile avr32_usart_t* usart )
+static void __usart_isr( const uint32_t index, volatile avr32_usart_t* usart )
 {
     uint32_t csr_value;
     avr32_usart_csr_t *csr;

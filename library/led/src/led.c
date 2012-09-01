@@ -49,8 +49,14 @@ typedef struct {
 /*----------------------------------------------------------------------------*/
 static queue_handle_t __idle;
 static queue_handle_t __active;
+static semaphore_handle_t __exit;
 
 static led_msg_t __msgs[LED_MSG_MAX];
+
+static const led_state_t __destroy = { .red = 0,
+                                       .green = 0,
+                                       .blue = 0,
+                                       .duration = 0 };
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -71,17 +77,26 @@ led_status_t led_init( const uint32_t priority )
     bsp_status_t bsp_status;
 
     static const gpio_map_t map[] = {
-        { .pin = LED_PWM_RED_PIN,   .function = LED_PWM_RED_FUNCTION   },
-        { .pin = LED_PWM_GREEN_PIN, .function = LED_PWM_GREEN_FUNCTION },
-        { .pin = LED_PWM_BLUE_PIN,  .function = LED_PWM_BLUE_FUNCTION  }
+#if defined(LED_PWM_RED_PIN)
+        { .pin = LED_PWM_RED_PIN,   .function = LED_PWM_RED_FUNCTION   }
+#endif
+#if defined(LED_PWM_GREEN_PIN)
+        ,{ .pin = LED_PWM_GREEN_PIN, .function = LED_PWM_GREEN_FUNCTION }
+#endif
+#if defined(LED_PWM_BLUE_PIN)
+        ,{ .pin = LED_PWM_BLUE_PIN,  .function = LED_PWM_BLUE_FUNCTION  }
+#endif
     };
 
+    __exit = os_semaphore_create_binary();
     __idle = os_queue_create( LED_MSG_MAX, sizeof(led_msg_t*) );
     __active = os_queue_create( LED_MSG_MAX, sizeof(led_msg_t*) );
 
-    if( (NULL == __idle) || (NULL == __active) ) {
+    if( (NULL == __exit) || (NULL == __idle) || (NULL == __active) ) {
         goto failure;
     }
+
+    os_semaphore_take( __exit, NO_WAIT );
 
     for( i = 0; i < LED_MSG_MAX; i++ ) {
         led_msg_t *msg = &__msgs[i];
@@ -95,25 +110,39 @@ led_status_t led_init( const uint32_t priority )
     }
 
     /* Start in the off position, LEDs are active low. */
+#if defined(LED_PWM_RED_PIN)
     bsp_status = pwm_channel_init( LED_PWM_RED_CHANNEL, PWM__HIGH, PWM__LEFT,
                                    LED_CLOCK_FREQUENCY, 255, 255 );
     if( BSP_RETURN_OK != bsp_status ) {
         goto failure;
     }
+#endif
+#if defined(LED_PWM_GREEN_PIN)
     bsp_status = pwm_channel_init( LED_PWM_GREEN_CHANNEL, PWM__HIGH, PWM__LEFT,
                                    LED_CLOCK_FREQUENCY, 255, 255 );
     if( BSP_RETURN_OK != bsp_status ) {
         goto failure;
     }
+#endif
+#if defined(LED_PWM_BLUE_PIN)
     bsp_status = pwm_channel_init( LED_PWM_BLUE_CHANNEL, PWM__HIGH, PWM__LEFT,
                                    LED_CLOCK_FREQUENCY, 255, 255 );
     if( BSP_RETURN_OK != bsp_status ) {
         goto failure;
     }
+#endif
 
-    bsp_status = pwm_start( ((1 << LED_PWM_RED_CHANNEL) |
+    bsp_status = pwm_start( (
+#if defined(LED_PWM_RED_PIN)
+                             (1 << LED_PWM_RED_CHANNEL) |
+#endif
+#if defined(LED_PWM_GREEN_PIN)
                              (1 << LED_PWM_GREEN_CHANNEL) |
-                             (1 << LED_PWM_BLUE_CHANNEL)) );
+#endif
+#if defined(LED_PWM_BLUE_PIN)
+                             (1 << LED_PWM_BLUE_CHANNEL) |
+#endif
+                             0) );
     if( BSP_RETURN_OK != bsp_status ) {
         goto failure;
     }
@@ -128,7 +157,41 @@ led_status_t led_init( const uint32_t priority )
     return LED_RETURN_OK;
 
 failure:
+    if( NULL != __exit ) {
+        os_semaphore_delete( __exit );
+    }
+
+    if( NULL != __idle ) {
+        os_queue_delete( __idle );
+    }
+
+    if( NULL != __active ) {
+        os_queue_delete( __active );
+    }
+
     return LED_RESOURCE_ERROR;
+}
+
+/* See led.h for details. */
+void led_destroy( void )
+{
+    led_msg_t *in;
+
+    led_set_state( (led_state_t*) &__destroy, 1, false, NULL );
+
+    os_semaphore_take( __exit, WAIT_FOREVER );
+
+    os_queue_delete( __idle );
+
+    while( os_queue_receive(__active, &in, NO_WAIT) ) {
+        if( NULL != in->free_fn ) {
+            (*in->free_fn)( in->state );
+        }
+    }
+
+    os_queue_delete( __active );
+
+    os_semaphore_delete( __exit );
 }
 
 /* See led.h for details. */
@@ -159,6 +222,7 @@ led_status_t led_set_state( led_state_t *states,
 /*----------------------------------------------------------------------------*/
 static void __led_task( void *params )
 {
+    bool done;
     led_msg_t *current;
     uint32_t delay;
     int step;
@@ -166,12 +230,20 @@ static void __led_task( void *params )
     step = 0;
     current = NULL;
     delay = WAIT_FOREVER;
+    done = false;
 
-    while( 1 ) {
+    while( false == done ) {
         led_msg_t *in;
 
         if( true == os_queue_receive(__active, &in, delay) ) {
             /* We got a new command! */
+
+            /* Exit if we are told to do so. */
+            if( &__destroy == in->state ) {
+                done = true;
+                continue;
+            }
+
             if( NULL != current ) {
                 if( NULL != current->free_fn ) {
                     (*current->free_fn)( current->state );
@@ -205,6 +277,11 @@ static void __led_task( void *params )
             delay = WAIT_FOREVER;
         }
     }
+
+    /* Turn off the leds before leaving. */
+    __set_colors( 0, 0, 0 );
+
+    os_semaphore_give( __exit );
 }
 
 /**
@@ -221,7 +298,13 @@ static void __set_colors( const uint8_t red,
                           const uint8_t blue )
 {
     /* Invert because the LED is active low. */
+#if defined(LED_PWM_RED_PIN)
     pwm_change_duty_cycle( LED_PWM_RED_CHANNEL,   (255 - red)   );
+#endif
+#if defined(LED_PWM_GREEN_PIN)
     pwm_change_duty_cycle( LED_PWM_GREEN_CHANNEL, (255 - green) );
+#endif
+#if defined(LED_PWM_BLUE_PIN)
     pwm_change_duty_cycle( LED_PWM_BLUE_CHANNEL,  (255 - blue)  );
+#endif
 }

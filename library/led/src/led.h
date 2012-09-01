@@ -49,6 +49,11 @@ typedef struct {
 led_status_t led_init( const uint32_t priority );
 
 /**
+ *  Destroys the led subsystem.
+ */
+void led_destroy( void );
+
+/**
  *  Used to set the colors and any transitions that take place.
  *
  *  @param states the states to output - memory is owned by the subsystem

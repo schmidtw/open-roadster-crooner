@@ -8,6 +8,9 @@ ifndef BASE
 $(error "BASE must be defined.")
 endif
 
+this_makefile_dir := $(dir $(lastword $(MAKEFILE_LIST)))
+include $(this_makefile_dir)locations.mk
+
 QUIET  ?= @
 
 ar_mock    = ar

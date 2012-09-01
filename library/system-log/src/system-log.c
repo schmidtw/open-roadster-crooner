@@ -33,7 +33,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define LOG_DUMP_RATE           5000
+#define LOG_DUMP_RATE_S         5
 #define LOG_MSG_MAX             80
 #define LOG_MAX_MESSAGE_SIZE    50
 #define LOG_STACK_DEPTH         100
@@ -45,6 +45,11 @@ typedef struct {
     size_t size;
     uint8_t buffer[LOG_MAX_MESSAGE_SIZE];
 } log_msg_t;
+
+typedef struct {
+    char *filename;
+    uint32_t last;
+} log_task_data_t;
 
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
@@ -124,32 +129,61 @@ int _error_write_r( struct _reent *reent, int fd, void *buf, size_t len )
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
 
+/**
+ *  Returns the time since boot in seconds.
+ */
+static uint32_t __get_now( void )
+{
+    struct timeval tv;
+    struct timezone tz;
+
+    gettimeofday( &tv, &tz );
+
+    return tv.tv_sec;
+}
+
+/**
+ *  Flushes the data out to the desired file and the stdout
+ *
+ *  @param data our log_task_data_t structure
+ *  @param buf the buffer to send out
+ *  @param size the size of the buffer to dump
+ */
 static void __flush( void *data, const uint8_t *buf, const size_t size )
 {
+    log_task_data_t *task_data;
+
+    task_data = (log_task_data_t *) data;
+
     if( MC_CARD__MOUNTED == mc_get_status() ) {
         FILE *fp;
-        fp = fopen( (char*) data, "a" );
-        fwrite( buf, sizeof(uint8_t), size, fp );
-        fclose( fp );
+        fp = fopen( task_data->filename, "a" );
+        if( NULL != fp ) {
+            fwrite( buf, sizeof(uint8_t), size, fp );
+            fclose( fp );
+        }
     }
 
+    task_data->last = __get_now();
     fwrite( buf, sizeof(uint8_t), size, stdout );
 }
 
 static void __log_task( void *data )
 {
+    log_task_data_t task_data;
     fillable_buffer_t fb;
     static uint8_t buf[512];
-    struct timeval tv;
-    struct timezone tz;
     uint32_t last;
 
     __enable = 1;
 
+    task_data.filename = (char *) data;
+    task_data.last = __get_now();
+
     fb.buf = buf;
     fb.size = sizeof(buf);
     fb.offset = 0;
-    fb.data = data;
+    fb.data = &task_data;
     fb.flush = __flush;
 
     last = 0;
@@ -159,8 +193,16 @@ static void __log_task( void *data )
         bool rv;
         log_msg_t *msg;
 
-        os_queue_receive( __log_pending, &msg, WAIT_FOREVER );
-        fillbuf_append( &fb, msg->buffer, msg->size );
-        os_queue_send_to_back( __log_idle, &msg, WAIT_FOREVER );
+        rv = os_queue_receive( __log_pending, &msg, 1000 );
+        if( true == rv ) {
+            fillbuf_append( &fb, msg->buffer, msg->size );
+            os_queue_send_to_back( __log_idle, &msg, WAIT_FOREVER );
+        }
+
+        /* Force dump at LOG_DUMP_RATE_S seconds */
+        if( (task_data.last + LOG_DUMP_RATE_S) < __get_now() ) {
+            fillbuf_flush( &fb );
+            task_data.last = __get_now();
+        }
     }
 }

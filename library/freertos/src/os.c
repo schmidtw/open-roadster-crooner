@@ -205,6 +205,10 @@ semaphore_handle_t os_semaphore_create_binary( void )
     return (semaphore_handle_t) rv;
 }
 
+void os_semaphore_delete( semaphore_handle_t semaphore )
+{
+}
+
 bool os_semaphore_take( semaphore_handle_t semaphore, uint32_t ms )
 {
     return (pdFALSE == xSemaphoreTake((xSemaphoreHandle) semaphore, __ms_to_ticks(ms))) ? false : true;
@@ -239,6 +243,10 @@ mutex_handle_t os_mutex_create( void )
     return (mutex_handle_t) rv;
 }
 
+void os_mutex_delete( mutex_handle_t mutex )
+{
+}
+
 bool os_mutex_take( mutex_handle_t mutex, uint32_t ms )
 {
     return (pdFALSE == xSemaphoreTake((xSemaphoreHandle) mutex, ms)) ? false : true;
@@ -249,20 +257,6 @@ bool os_mutex_give( mutex_handle_t mutex )
     return (pdFALSE == xSemaphoreGive((xSemaphoreHandle) mutex)) ? false : true;
 }
 
-bool os_mutex_give_ISR( mutex_handle_t mutex, bool *hp_task_woke )
-{
-    long was_taken;
-    unsigned long rv;
-
-    was_taken = 0;
-    rv = xSemaphoreGiveFromISR( (xSemaphoreHandle) mutex, &was_taken );
-
-    if( NULL != hp_task_woke ) {
-        *hp_task_woke = (0 == was_taken) ? false : true;
-    }
-
-    return (pdFALSE == rv) ? false : true;
-}
 /*----------------------------------------------------------------------------*/
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/

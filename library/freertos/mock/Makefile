@@ -8,6 +8,6 @@ SOURCES = os-mock-impl.c \
           os-mock.c
 
 clean ::
-	rm -f os-mock.c os-mock.h
+	$(QUIET)rm -f os-mock.c os-mock.h
 
 include ../../make/Makefile.mock

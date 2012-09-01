@@ -101,7 +101,7 @@ bsp_status_t gpio_set_options( const uint8_t pin,
  *
  *  @param pin the pin to set
  */
-__inline__ void gpio_set_pin( const uint8_t pin );
+void gpio_set_pin( const uint8_t pin );
 
 /**
  *  Used to set a pin to the low/off/'0'/Gnd output state if
@@ -110,7 +110,7 @@ __inline__ void gpio_set_pin( const uint8_t pin );
  *
  *  @param pin the pin to clear
  */
-__inline__ void gpio_clr_pin( const uint8_t pin );
+void gpio_clr_pin( const uint8_t pin );
 
 /**
  *  Used to toggle a pin from '0' to '1' or '1' to '0' depending
@@ -120,7 +120,7 @@ __inline__ void gpio_clr_pin( const uint8_t pin );
  *
  *  @param pin the pin to toggle
  */
-__inline__ void gpio_tgl_pin( const uint8_t pin );
+void gpio_tgl_pin( const uint8_t pin );
 
 /**
  *  Used to read the input value from a pin.
@@ -130,7 +130,7 @@ __inline__ void gpio_tgl_pin( const uint8_t pin );
  *  @retval 0 if the pin input is low/off/'0'/Gnd or not in GPIO mode
  *  @retval 1 if the pin input is high/on/'1'/Vcc
  */
-__inline__ uint32_t gpio_read_pin( const uint8_t pin );
+uint32_t gpio_read_pin( const uint8_t pin );
 
 /**
  *  Used to read the output value from a pin.
@@ -140,14 +140,14 @@ __inline__ uint32_t gpio_read_pin( const uint8_t pin );
  *  @retval 0 if the pin output is low/off/'0'/Gnd or not in GPIO mode
  *  @retval 1 if the pin output is high/on/'1'/Vcc
  */
-__inline__ uint32_t gpio_read_pin_output( const uint8_t pin );
+uint32_t gpio_read_pin_output( const uint8_t pin );
 
 /**
  *  Used to clear the interrupt flag of a gpio pin.
  *
  *  @param pin the pin who's interrupt is to be cleared
  */
-__inline__ void gpio_clr_interrupt_flag( const uint8_t pin );
+void gpio_clr_interrupt_flag( const uint8_t pin );
 
 /**
  *  Used to return a pin to it's initial reset state of:

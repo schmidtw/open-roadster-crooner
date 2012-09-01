@@ -119,44 +119,44 @@ extern uint32_t reboot_calculate_checksum( reboot_trace_t *trace );
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
 /* See intc.h for details. */
-inline void disable_global_interrupts( void )
+void disable_global_interrupts( void )
 {
     asm( "ssrf %0" :  : "i" (AVR32_SR_GM_OFFSET) );
 }
 
 /* See intc.h for details. */
-inline void enable_global_interrupts( void )
+void enable_global_interrupts( void )
 {
     asm( "csrf %0" :  : "i" (AVR32_SR_GM_OFFSET) );
 }
 
 /* See intc.h for details. */
-inline bool are_global_interrupts_enabled( void )
+bool are_global_interrupts_enabled( void )
 {
     return (bool) (!(__builtin_mfsr(AVR32_SR) & AVR32_SR_GM_MASK));
 }
 
 /* See intc.h for details. */
-inline void disable_global_exceptions( void )
+void disable_global_exceptions( void )
 {
     asm( "ssrf %0" :  : "i" (AVR32_SR_EM_OFFSET) );
 }
 
 /* See intc.h for details. */
-inline void enable_global_exceptions( void )
+void enable_global_exceptions( void )
 {
     asm( "csrf %0" :  : "i" (AVR32_SR_EM_OFFSET) );
 }
 
 /* See intc.h for details. */
-inline bool are_global_exceptions_enabled( void )
+bool are_global_exceptions_enabled( void )
 {
     return (bool) (!(__builtin_mfsr(AVR32_SR) & AVR32_SR_EM_MASK));
 }
 
 
 /* See intc.h for details. */
-inline bool interrupts_save_and_disable( void )
+bool interrupts_save_and_disable( void )
 {
     if( true == are_global_interrupts_enabled() ) {
         disable_global_interrupts();
@@ -166,7 +166,7 @@ inline bool interrupts_save_and_disable( void )
 }
 
 /* See intc.h for details. */
-inline void interrupts_restore( const bool state )
+void interrupts_restore( const bool state )
 {
     if( true == state ) {
         enable_global_interrupts();

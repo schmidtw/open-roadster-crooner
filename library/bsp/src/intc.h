@@ -99,19 +99,19 @@ typedef void (*intc_handler_t)( void );
 /**
  *  Used to disable global interrupts.
  */
-inline void disable_global_interrupts( void );
+void disable_global_interrupts( void );
 
 /**
  *  Used to enable global interrupts.
  */
-inline void enable_global_interrupts( void );
+void enable_global_interrupts( void );
 
 /**
  *  Used to determine if global interrupts are enabled.
  *
  *  @return true of enabled, false otherwise
  */
-inline bool are_global_interrupts_enabled( void );
+bool are_global_interrupts_enabled( void );
 
 /**
  *  Used to set the global interrupts to off & return the
@@ -120,31 +120,31 @@ inline bool are_global_interrupts_enabled( void );
  *  @return true if the interrupts were previously enabled,
  *          false othewise
  */
-inline bool interrupts_save_and_disable( void );
+bool interrupts_save_and_disable( void );
 
 /**
  *  Used to set the global interrupts to the previous state.
  *
  *  @param state the previous state of the interrupts to restore
  */
-inline void interrupts_restore( const bool state );
+void interrupts_restore( const bool state );
 
 /**
  *  Used to disable global exceptions.
  */
-inline void disable_global_exceptions( void );
+void disable_global_exceptions( void );
 
 /**
  *  Used to enable global exceptions.
  */
-inline void enable_global_exceptions( void );
+void enable_global_exceptions( void );
 
 /**
  *  Used to determine if global exceptions are enabled.
  *
  *  @return true of enabled, false otherwise
  */
-inline bool are_global_exceptions_enabled( void );
+bool are_global_exceptions_enabled( void );
 
 /**
  *  Used to register an interrupt handler.

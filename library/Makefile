@@ -7,14 +7,14 @@ endif
 QUIET   = @
 build_dirs   = src mock ut
 
-targets_src  = all clean cleanall install docs listings
+targets_src  = all clean docs listings
 paths_src    = src
 
 targets_ut   = all clean unit-test
 paths_ut     = unit-tests
 
 paths_mock   = mock
-targets_mock = all clean cleanall install
+targets_mock = all clean
 
 
 # 1 - target -- all clean
@@ -24,10 +24,10 @@ target_deps = $(addprefix $(1)-,$(addsuffix /$(2),$(LIBRARIES)))
 all_deps = $(foreach dir,$(build_dirs),$(foreach target,$(targets_$(dir)),$(call target_deps,$(target),$(paths_$(dir)))))
 all_targets = $(sort $(foreach dir,$(build_dirs),$(targets_$(dir))))
 
-.DEFAULT_GOAL : install
+.DEFAULT_GOAL : all
 .PHONY : $(all_targets) $(all_deps)
 
-install ::
+all ::
 #	@echo "all_deps -- $(all_deps)"
 
 # 1 - library name
@@ -67,9 +67,6 @@ $(foreach dir,$(build_dirs),$(foreach target,$(targets_$(dir)),$(eval $(call TAR
 $(foreach dir,$(build_dirs),$(foreach target,$(targets_$(dir)),$(eval $(call create_targets,$(target),$(dir)))))
 
 clean ::
-	$(QUIET)rm -rf html lcov.out
-
-cleanall ::
 	$(QUIET)rm -rf ../bins html lcov.out
 
 coverage ::

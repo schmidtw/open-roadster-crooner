@@ -17,6 +17,9 @@ extra_header = --extra-header=$(EXTRA_HEADER)
 endif
 
 this_dir = $(CURDIR)
+this_makefile_dir := $(dir $(lastword $(MAKEFILE_LIST)))
+include $(this_makefile_dir)locations.mk
+
 cc      = avr32-gcc
 ar      = avr32-ar
 objs    = $(addprefix $(gen_dir)/,$(filter %.o,$(SOURCES:.c=.o) $(SOURCES:.S=.o)))
@@ -28,7 +31,11 @@ gen_dir      = objs
 empty_file   = .auto_gen_file
 gen_file     = $(gen_dir)/$(empty_file)
 QUIET  ?= @
-INCLUDE += -I/opt/avr32-include/
+
+#Include our published headers by default
+INCLUDE += -I$(BASE)/bins/include
+INCLUDE += -I$(AVR32_INCLUDE)
+INCLUDE += -I$(AVR32_COMPILER_INCLUDE)
 
 inc_dir = $(BASE)/bins/include/$(TARGET)
 lib_dir = $(BASE)/bins/lib
@@ -78,12 +85,9 @@ arflags = \
     crs
 
 .PHONY: all
-all :: $(lib_temp_location) $(startup)
+all ::  mock $(lib_dir)/$(lib_name) $(header_targets) $(bins_su) $(lib_temp_location) $(startup)
 
 listings: all $(lists)
-
-.PHONY: install
-install :: $(lib_dir)/$(lib_name) $(header_targets) $(bins_su)
 
 ifneq "$(MAKECMDGOALS)" "clean"
   -include $(deps)
@@ -118,18 +122,17 @@ $(gen_dir)/%.o : %.S $(gen_file) $(makefile_dependency)
 	$(QUIET)perl $(fillout_dependency_file) $(@:%.o=%.d)
 	$(QUIET)$(cc) $(cflags) $(CFLAGS) $(INCLUDE) -o $@ $<
 
+CLEANUP_MOCKS =
+
 .PHONY: clean
 clean ::
-	$(QUIET)rm -rf $(gen_dir)
-
-.PHONY: cleanall
-cleanall :: clean
-	$(QUIET)rm -rf $(inc_dir) $(addprefix $(lib_dir)/,$(lib_name))
+	$(QUIET)rm -rf $(gen_dir) $(inc_dir) $(addprefix $(lib_dir)/,$(lib_name))
+	$(QUIET)rm -f $(CLEANUP_MOCKS)
 
 .PHONY: docs
 docs ::
 	$(QUIET)doxygen $(DOC_FILE)
-	
+
 #function STARTUP_template destination of startup, object location of startup
 define STARTUP_template
 $(1) : $(2)
@@ -145,6 +148,9 @@ endef
 define MOCK_template
 mock :: $(1)
 	$(QUIET)$(BASE)/tools/mock_maker.pl --header=$(this_dir)/$(1) --output=$(this_dir)/../mock --library=$(TARGET) $(std_mock_impl) $(extra_header)
+
+CLEANUP_MOCKS += $(this_dir)/../mock/$(basename $(1))-mock.c
+CLEANUP_MOCKS += $(this_dir)/../mock/$(basename $(1))-mock.h
 endef
 
 $(foreach header,$(HEADERS),$(eval $(call INSTALL_template,$(header))))

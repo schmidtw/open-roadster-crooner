@@ -30,7 +30,7 @@
 #include "generic.h"
 #include "file_helper.h"
 
-#define DEBUG_DUMP_LIST 0
+#define DEBUG_DUMP_LIST 1
 #define PRINT_DB_INDEX_TIME 0
 
 #if ( 0 != PRINT_DB_INDEX_TIME )
