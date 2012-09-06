@@ -2,7 +2,7 @@ this_computer = $(shell uname -a)
 
 TRENT_COMPUTER_NAMES = flexo
 RAUL_COMPUTER_NAMES = 
-WES_COMPUTER_NAMES = clouseau.357beelard cato.357beelard
+WES_COMPUTER_NAMES = clouseau.357beelard cato.357beelard open-roadster-bm.357beelard
 STEVE_COMPUTER_NAMES =
 
 
