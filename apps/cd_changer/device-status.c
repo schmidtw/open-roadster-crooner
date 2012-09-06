@@ -93,6 +93,7 @@ static const led_state_t __card_unusable[] = {
     { .red = 0x0f, .green = 0x00, .blue = 0x00, .duration = 31  }
 };
 
+#if 0
 /* Green fading */
 static const led_state_t __normal[] = {
     { .red = 0x00, .green = 0x00, .blue = 0x00, .duration = 250 },
@@ -116,6 +117,32 @@ static const led_state_t __normal[] = {
     { .red = 0x00, .green = 0x4f, .blue = 0x00, .duration = 31  },
     { .red = 0x00, .green = 0x31, .blue = 0x00, .duration = 31  },
     { .red = 0x00, .green = 0x13, .blue = 0x00, .duration = 31  }
+};
+#endif
+
+/* Purple fading */
+static const led_state_t __normal[] = {
+    { .red = 0x00, .blue = 0x00, .green= 0x00, .duration = 250 },
+
+    { .red = 0x13, .blue = 0x13, .green= 0x00, .duration = 31  },
+    { .red = 0x31, .blue = 0x31, .green= 0x00, .duration = 31  },
+    { .red = 0x4f, .blue = 0x4f, .green= 0x00, .duration = 31  },
+    { .red = 0x6e, .blue = 0x6e, .green= 0x00, .duration = 31  },
+    { .red = 0x8d, .blue = 0x8d, .green= 0x00, .duration = 31  },
+    { .red = 0xac, .blue = 0xac, .green= 0x00, .duration = 31  },
+    { .red = 0xca, .blue = 0xca, .green= 0x00, .duration = 31  },
+    { .red = 0xe9, .blue = 0xe9, .green= 0x00, .duration = 31  },
+
+    { .red = 0xff, .blue = 0xff, .green= 0x00, .duration = 500 },
+
+    { .red = 0xe9, .blue = 0xe9, .green= 0x00, .duration = 31  },
+    { .red = 0xca, .blue = 0xca, .green= 0x00, .duration = 31  },
+    { .red = 0xac, .blue = 0xac, .green= 0x00, .duration = 31  },
+    { .red = 0x8d, .blue = 0x8d, .green= 0x00, .duration = 31  },
+    { .red = 0x6e, .blue = 0x6e, .green= 0x00, .duration = 31  },
+    { .red = 0x4f, .blue = 0x4f, .green= 0x00, .duration = 31  },
+    { .red = 0x31, .blue = 0x31, .green= 0x00, .duration = 31  },
+    { .red = 0x13, .blue = 0x13, .green= 0x00, .duration = 31  }
 };
 
 static mutex_handle_t __mutex;

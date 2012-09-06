@@ -31,11 +31,11 @@
 
 #define ENABLE_STATUS_TASK      0
 #define REPORT_ALL_MALLOC       0
-#define ENABLE_SYSLOG_TO_DISC   0
+#define ENABLE_SYSLOG_TO_DISC   1
 
 #define ALLOW_USING_SLOW_MEMORY 1
 
-const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Crooner-1.0.16";
+const char firmware_label[] __attribute__ ((section (".firmware_label"))) = "Crooner-1.z.16";
 
 static int32_t __sram_offset = 0;
 static int32_t __sram_have = -1;
